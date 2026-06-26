@@ -1,0 +1,6 @@
+{
+  "name": "Wollo University Online Examination System",
+  "description": "A premium, high-fidelity online examination portal for Wollo University students to manage, prepare, and take their academic exams in a focused, low-stress environment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
