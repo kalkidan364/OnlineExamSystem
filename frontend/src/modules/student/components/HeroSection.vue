@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { StudentProfile } from '../../types'
+import type { StudentProfile } from '../types'
 
 defineProps<{
   profile: StudentProfile

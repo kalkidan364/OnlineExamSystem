@@ -66,5 +66,10 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/Settings.vue')
       }
     ]
+  },
+  {
+    path: '/student',
+    name: 'StudentDashboard',
+    component: () => import('../modules/student/views/Dashboard.vue')
   }
 ]

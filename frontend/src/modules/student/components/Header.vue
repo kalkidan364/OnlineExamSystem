@@ -1,6 +1,7 @@
 <script setup lang="ts">
+const windowRef = window;
 import { ref, onMounted, onUnmounted } from 'vue'
-import type { StudentProfile, Announcement } from '../../types'
+import type { StudentProfile, Announcement } from '../types'
 
 const props = defineProps<{
   profile: StudentProfile
@@ -103,7 +104,7 @@ onUnmounted(() => {
             <span>Verified IP</span>
           </div>
           <button
-            @click="() => alert('To log out or switch student sessions, use your general dashboard settings.')"
+            @click="() => windowRef.alert('To log out or switch student sessions, use your general dashboard settings.')"
             class="rounded-xl p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
             title="Logout from Exam Portal"
           >

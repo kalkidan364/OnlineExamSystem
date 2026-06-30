@@ -1,4 +1,4 @@
-import { StudentProfile, ActiveExam, UpcomingExam, RecentResult, Announcement, CalendarEvent } from '../types';
+import type { StudentProfile, ActiveExam, UpcomingExam, RecentResult, Announcement, CalendarEvent } from '../types';
 
 export const initialStudentProfile: StudentProfile = {
   name: "Kalkidan Mengistu",
