@@ -2,7 +2,84 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\InstructorDashboardController;
+use App\Http\Controllers\Api\V1\InstructorExamController;
+use App\Http\Controllers\Api\V1\InstructorQuestionBankController;
+use App\Http\Controllers\Api\V1\InstructorStudentController;
+use App\Http\Controllers\Api\V1\InstructorReportController;
+use App\Http\Controllers\Api\V1\StudentExamController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+/*
+|--------------------------------------------------------------------------
+| API Routes — Wollo University Online Exam System
+|--------------------------------------------------------------------------
+|
+| All routes are prefixed with /api (configured in bootstrap/app.php)
+| and versioned under /v1.
+|
+*/
+
+// ------------------------------------------------------------------
+// Public routes (no auth required)
+// ------------------------------------------------------------------
+Route::prefix('v1')->group(function () {
+
+    // Auth
+    Route::post('/login',  [\App\Http\Controllers\Api\V1\AuthController::class, 'login']);
+    Route::post('/register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register']);
+
+});
+
+// ------------------------------------------------------------------
+// Protected routes (Sanctum token required)
+// ------------------------------------------------------------------
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+
+    // Current user info
+    Route::get('/user', fn(Request $request) => $request->user());
+
+    // Auth — logout
+    Route::post('/logout', [\App\Http\Controllers\Api\V1\AuthController::class, 'logout']);
+
+    // ------------------------------------------------------------------
+    // Instructor Routes
+    // ------------------------------------------------------------------
+    Route::prefix('instructor')->group(function () {
+
+        // Dashboard stats & lists
+        Route::get('/dashboard-stats', [InstructorDashboardController::class, 'stats']);
+        Route::get('/recent-exams',    [InstructorDashboardController::class, 'recentExams']);
+        Route::get('/upcoming-exams',  [InstructorDashboardController::class, 'upcomingExams']);
+
+        // Exam Management
+        Route::apiResource('exams', InstructorExamController::class);
+
+        // Question Banks Management
+        Route::apiResource('question-banks', InstructorQuestionBankController::class);
+        Route::post('question-banks/{question_bank}/questions', [InstructorQuestionBankController::class, 'storeQuestion']);
+        Route::post('question-banks/{question_bank}/import', [InstructorQuestionBankController::class, 'importQuestions']);
+        Route::put('questions/{question}', [InstructorQuestionBankController::class, 'updateQuestion']);
+        Route::delete('questions/{question}', [InstructorQuestionBankController::class, 'destroyQuestion']);
+
+        // Students Management
+        Route::get('/students', [InstructorStudentController::class, 'index']);
+
+        // Reports & Results Management
+        Route::get('/reports', [InstructorReportController::class, 'index']);
+
+    });
+
+    // ------------------------------------------------------------------
+    // Student Routes
+    // ------------------------------------------------------------------
+    Route::prefix('student')->group(function () {
+
+        Route::get('/dashboard', [StudentExamController::class, 'dashboard']);
+        Route::get('/exams',     [StudentExamController::class, 'index']);
+        Route::post('/exams/{exam}/start',  [StudentExamController::class, 'start']);
+        Route::post('/exams/{exam}/submit', [StudentExamController::class, 'submit']);
+        Route::get('/results',   [StudentExamController::class, 'results']);
+
+    });
+
+});

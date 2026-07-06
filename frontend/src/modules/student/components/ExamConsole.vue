@@ -67,8 +67,8 @@ const formatTime = (secs: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
-const handleSelectOption = (option: string) => {
-  answers.value[activeQuestion.value.id] = option
+const handleSelectOption = (index: number) => {
+  answers.value[activeQuestion.value.id] = String.fromCharCode(65 + index)
 }
 
 const toggleFlag = () => {
@@ -77,7 +77,7 @@ const toggleFlag = () => {
 
 const isQuestionAnswered = (qId: number) => {
   const ans = answers.value[qId]
-  return ans !== undefined && ans.trim() !== ''
+  return ans !== undefined && ans !== null && String(ans).trim() !== ''
 }
 
 const triggerAutoSubmit = () => {
@@ -254,82 +254,93 @@ const confirmCancel = () => {
       <div class="xl:col-span-6 space-y-6 flex flex-col justify-between">
         
         <div class="rounded-xl border border-slate-800 bg-slate-950 p-6 md:p-8 space-y-6 min-h-[480px]">
-          <!-- Question Header meta -->
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
-            <div class="space-y-1">
-              <span class="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-bold">
-                Section A: Core Evaluation
-              </span>
-              <h3 class="text-base font-black text-white">
-                Question {{ currentIndex + 1 }} of {{ questions.length }}
-              </h3>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="rounded bg-slate-800 px-2 py-1 text-[10px] font-mono text-slate-300 border border-slate-700">
-                Value: 10 Marks
-              </span>
-              <button
-                @click="toggleFlag"
-                :class="[
-                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all border',
-                  flagged[activeQuestion.id]
-                    ? 'bg-amber-500/10 border-amber-500 text-amber-400'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300'
-                ]"
-              >
-                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
-                <span>{{ flagged[activeQuestion.id] ? 'Flagged' : 'Flag Question' }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- The Question Statement -->
-          <div class="space-y-4">
-            <p class="text-base font-medium leading-relaxed text-slate-100 font-sans">
-              {{ activeQuestion.text }}
-            </p>
-          </div>
-
-          <!-- Answer Controls: Pick Option vs free text -->
-          <div class="mt-8 space-y-3">
-            <template v-if="activeQuestion.type === 'multiple-choice' && activeQuestion.options">
-              <button
-                v-for="(option, index) in activeQuestion.options"
-                :key="index"
-                @click="handleSelectOption(option)"
-                :class="[
-                  'flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all text-xs font-medium font-sans',
-                  answers[activeQuestion.id] === option
-                    ? 'bg-indigo-600/15 border-indigo-500 text-indigo-200'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
-                ]"
-              >
-                <span :class="[
-                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs font-bold font-mono',
-                  answers[activeQuestion.id] === option
-                    ? 'bg-indigo-600 border-indigo-400 text-white'
-                    : 'bg-slate-950 border-slate-700 text-slate-400'
-                ]">
-                  {{ String.fromCharCode(65 + index) }}
+          <template v-if="activeQuestion">
+            <!-- Question Header meta -->
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div class="space-y-1">
+                <span class="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-bold">
+                  Section A: Core Evaluation
                 </span>
-                <span class="leading-relaxed pt-0.5">{{ option }}</span>
-              </button>
-            </template>
-            <template v-else>
-              <div class="space-y-2">
-                <p class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Write your analytical response below:</p>
-                <textarea
-                  rows="8"
-                  v-model="answers[activeQuestion.id]"
-                  placeholder="Provide a clear, detailed, and mathematically grounded response. Your input is saved automatically on each keystroke..."
-                  class="w-full rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs font-sans text-slate-100 placeholder-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-hidden"
-                ></textarea>
-                <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold font-mono px-1">
-                  <span>Markdown formatting is supported</span>
-                  <span>Characters count: {{ (answers[activeQuestion.id] || '').length }}/1500 maximum</span>
-                </div>
+                <h3 class="text-base font-black text-white">
+                  Question {{ currentIndex + 1 }} of {{ questions.length }}
+                </h3>
               </div>
-            </template>
+              <div class="flex items-center gap-2">
+                <span class="rounded bg-slate-800 px-2 py-1 text-[10px] font-mono text-slate-300 border border-slate-700">
+                  Value: 10 Marks
+                </span>
+                <button
+                  @click="toggleFlag"
+                  :class="[
+                    'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all border',
+                    flagged[activeQuestion.id]
+                      ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300'
+                  ]"
+                >
+                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+                  <span>{{ flagged[activeQuestion.id] ? 'Flagged' : 'Flag Question' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- The Question Statement -->
+            <div class="space-y-4">
+              <p class="text-base font-medium leading-relaxed text-slate-100 font-sans">
+                {{ activeQuestion.text }}
+              </p>
+            </div>
+
+            <!-- Answer Controls: Pick Option vs free text -->
+            <div class="mt-8 space-y-3">
+              <template v-if="activeQuestion.type === 'multiple-choice' && activeQuestion.options">
+                <button
+                  v-for="(option, index) in activeQuestion.options"
+                  :key="index"
+                  @click="handleSelectOption(index)"
+                  :class="[
+                    'flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all text-xs font-medium font-sans',
+                    answers[activeQuestion.id] === String.fromCharCode(65 + index)
+                      ? 'bg-indigo-600/15 border-indigo-500 text-indigo-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+                  ]"
+                >
+                  <span :class="[
+                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs font-bold font-mono',
+                    answers[activeQuestion.id] === String.fromCharCode(65 + index)
+                      ? 'bg-indigo-600 border-indigo-400 text-white'
+                      : 'bg-slate-950 border-slate-700 text-slate-400'
+                  ]">
+                    {{ String.fromCharCode(65 + index) }}
+                  </span>
+                  <span class="leading-relaxed pt-0.5">{{ option }}</span>
+                </button>
+              </template>
+              <template v-else>
+                <div class="space-y-2">
+                  <p class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Write your analytical response below:</p>
+                  <textarea
+                    rows="8"
+                    v-model="answers[activeQuestion.id]"
+                    placeholder="Provide a clear, detailed, and mathematically grounded response. Your input is saved automatically on each keystroke..."
+                    class="w-full rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs font-sans text-slate-100 placeholder-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-hidden"
+                  ></textarea>
+                  <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold font-mono px-1">
+                    <span>Markdown formatting is supported</span>
+                    <span>Characters count: {{ (answers[activeQuestion.id] || '').length }}/1500 maximum</span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div v-else class="flex flex-col items-center justify-center text-center h-full space-y-4 py-20">
+             <div class="rounded-full bg-slate-900 p-4 border border-slate-800">
+               <svg class="h-8 w-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+             </div>
+             <div>
+               <h3 class="text-xl font-bold text-white">No Questions Found</h3>
+               <p class="text-slate-400 mt-2 max-w-md mx-auto">This exam does not contain any questions. It may have been published prematurely. Please contact your instructor.</p>
+             </div>
           </div>
         </div>
 
@@ -450,9 +461,10 @@ const confirmCancel = () => {
             <span class="text-white font-bold">{{ questions.length }}</span>
           </div>
           <div class="flex justify-between text-slate-400">
-            <span>Answered Questions:</span>
+            <span>Questions Attempted:</span>
             <span class="text-emerald-400 font-bold">
-              {{ questions.filter((q: any) => isQuestionAnswered(q.id)).length }} of {{ questions.length }}
+              {{ questions.filter((q: any) => isQuestionAnswered(q.id)).length }} 
+              <span v-if="questions.filter((q: any) => isQuestionAnswered(q.id)).length === questions.length">(All)</span>
             </span>
           </div>
           <div class="flex justify-between text-slate-400">
@@ -469,8 +481,8 @@ const confirmCancel = () => {
           </div>
         </div>
 
-        <div class="rounded-lg bg-indigo-950/40 border border-indigo-900/30 p-3 text-[11px] text-indigo-400 font-sans mt-5">
-          💡 Your responses are graded immediately on submission. Results are posted directly to your senate clearance profile.
+        <div class="rounded-lg bg-amber-950/40 border border-amber-900/30 p-3 text-[11px] text-amber-400 font-sans mt-5 font-bold">
+          ⚠️ This is a pre-submission checklist. Your exam has NOT been graded yet. Your score will be calculated AFTER you click "Confirm Final Submit".
         </div>
 
         <div class="mt-6 flex gap-3">

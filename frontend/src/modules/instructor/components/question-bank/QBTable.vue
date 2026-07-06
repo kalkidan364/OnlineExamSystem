@@ -1,21 +1,51 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useInstructorQbStore } from '../../store/instructorQbStore'
+
+const qbStore = useInstructorQbStore()
+const router = useRouter()
 
 const searchQuery = ref('')
-const selectedCourse = ref('All Courses')
 const selectedType = ref('All Types')
 const selectedStatus = ref('All Statuses')
 
-const banks = [
-  { id: 1, title: 'Database Systems Questions', subtitle: 'All database related questions', course: 'Database Systems', total: 78, types: { mcq: 60, sa: 12, essay: 6 }, date: 'May 20, 2025', status: 'Active' },
-  { id: 2, title: 'Web Programming Questions', subtitle: 'HTML, CSS, JavaScript, PHP', course: 'Web Programming', total: 95, types: { mcq: 72, sa: 15, essay: 8 }, date: 'May 18, 2025', status: 'Active' },
-  { id: 3, title: 'Data Structures Questions', subtitle: 'All data Structures topics', course: 'Data Structures', total: 92, types: { mcq: 70, sa: 14, essay: 8 }, date: 'May 15, 2025', status: 'Active' },
-  { id: 4, title: 'Operating Systems Questions', subtitle: 'OS concepts and principles', course: 'Operating Systems', total: 65, types: { mcq: 48, sa: 10, essay: 7 }, date: 'May 12, 2025', status: 'Active' },
-  { id: 5, title: 'Software Engineering Questions', subtitle: 'SE concepts and practices', course: 'Software Engineering', total: 88, types: { mcq: 66, sa: 13, essay: 9 }, date: 'May 10, 2025', status: 'Active' },
-  { id: 6, title: 'Computer Networks Questions', subtitle: 'Networking fundamentals', course: 'Computer Networks', total: 74, types: { mcq: 56, sa: 11, essay: 7 }, date: 'May 08, 2025', status: 'Inactive' },
-  { id: 7, title: 'Theory of Computation', subtitle: 'Automata, Regex, CFL, etc.', course: 'Theory of Computation', total: 58, types: { mcq: 42, sa: 9, essay: 7 }, date: 'May 05, 2025', status: 'Inactive' },
-  { id: 8, title: 'AI Fundamentals Questions', subtitle: 'Artificial Intelligence basics', course: 'Artificial Intelligence', total: 59, types: { mcq: 45, sa: 8, essay: 6 }, date: 'May 01, 2025', status: 'Active' },
-]
+// Format ISO date strings
+const formatDate = (iso: string | null) => {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: '2-digit', year: 'numeric'
+  })
+}
+
+const filteredBanks = computed(() => {
+  let result = qbStore.banks
+
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(b => b.title.toLowerCase().includes(q) || (b.description && b.description.toLowerCase().includes(q)))
+  }
+
+  if (selectedStatus.value !== 'All Statuses') {
+    result = result.filter(b => b.status.toLowerCase() === selectedStatus.value.toLowerCase())
+  }
+
+  return result
+})
+
+const handleView = (bank: any) => {
+  router.push(`/instructor/question-banks/${bank.id}`)
+}
+
+const handleEdit = (bank: any) => {
+  alert(`Editing question bank: ${bank.title}\n(Edit modal coming soon)`)
+}
+
+const handleDelete = async (id: number) => {
+  if (confirm("Are you sure you want to delete this question bank? This action cannot be undone.")) {
+    await qbStore.deleteQuestionBank(id)
+  }
+}
 </script>
 
 <template>
@@ -38,12 +68,6 @@ const banks = [
       </div>
       
       <div class="flex gap-3">
-        <select v-model="selectedCourse" class="border border-slate-200 rounded-xl text-sm px-3 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed]">
-          <option>All Courses</option>
-          <option>Database Systems</option>
-          <option>Web Programming</option>
-        </select>
-        
         <select v-model="selectedType" class="border border-slate-200 rounded-xl text-sm px-3 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed]">
           <option>All Types</option>
           <option>MCQ</option>
@@ -52,8 +76,8 @@ const banks = [
         
         <select v-model="selectedStatus" class="border border-slate-200 rounded-xl text-sm px-3 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed]">
           <option>All Statuses</option>
-          <option>Active</option>
-          <option>Inactive</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
         </select>
         
         <button class="flex items-center gap-2 px-4 py-2 border border-indigo-100 text-[#5138ed] text-sm font-semibold rounded-xl hover:bg-indigo-50 transition-colors">
@@ -78,7 +102,24 @@ const banks = [
           </tr>
         </thead>
         <tbody>
-          <tr v-for="bank in banks" :key="bank.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
+          <!-- Loading state -->
+          <tr v-if="qbStore.isLoading">
+            <td colspan="7" class="py-8 text-center text-slate-500">
+              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 inline text-[#5138ed]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Loading question banks...
+            </td>
+          </tr>
+          
+          <!-- Empty State -->
+          <tr v-else-if="filteredBanks.length === 0">
+             <td colspan="7" class="py-8 text-center text-slate-500 font-medium">No question banks found.</td>
+          </tr>
+
+          <!-- Data Rows -->
+          <tr v-else v-for="bank in filteredBanks" :key="bank.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
             <td class="py-4 pr-4">
               <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 text-[#5138ed]">
@@ -86,12 +127,17 @@ const banks = [
                 </div>
                 <div class="flex flex-col">
                   <span class="text-[13px] font-bold text-slate-700">{{ bank.title }}</span>
-                  <span class="text-[11px] text-slate-400">{{ bank.subtitle }}</span>
+                  <span class="text-[11px] text-slate-400">{{ bank.description || 'No description' }}</span>
                 </div>
               </div>
             </td>
-            <td class="py-4 px-4 text-[13px] text-slate-600 font-medium">{{ bank.course }}</td>
-            <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ bank.total }}</td>
+            <td class="py-4 px-4">
+              <div class="flex flex-col">
+                <span class="text-[13px] font-medium text-slate-600">{{ bank.course_name }}</span>
+                <span class="text-[11px] text-slate-400">{{ bank.course_code }}</span>
+              </div>
+            </td>
+            <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ bank.total_questions }}</td>
             <td class="py-4 px-4">
               <div class="flex items-center gap-1.5">
                 <span class="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-600 rounded">MCQ {{ bank.types.mcq }}</span>
@@ -99,7 +145,7 @@ const banks = [
                 <span class="px-2 py-0.5 text-[10px] font-bold bg-orange-50 text-orange-600 rounded">Essay {{ bank.types.essay }}</span>
               </div>
             </td>
-            <td class="py-4 px-4 text-[13px] text-slate-500 font-medium">{{ bank.date }}</td>
+            <td class="py-4 px-4 text-[13px] text-slate-500 font-medium">{{ formatDate(bank.updated_at) }}</td>
             <td class="py-4 px-4 text-center">
               <span 
                 class="px-2.5 py-1 text-[11px] font-bold rounded-md"
@@ -110,14 +156,14 @@ const banks = [
             </td>
             <td class="py-4 pl-4 text-center">
               <div class="flex items-center justify-center gap-1">
-                <button class="p-1.5 text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors">
+                <button @click="handleView(bank)" class="p-1.5 text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="View Questions">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </button>
-                <button class="p-1.5 text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors">
+                <button @click="handleEdit(bank)" class="p-1.5 text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Bank">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                 </button>
-                <button class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                <button @click="handleDelete(bank.id)" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Bank">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
               </div>
             </td>

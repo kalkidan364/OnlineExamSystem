@@ -14,7 +14,7 @@ export const initialStudentProfile: StudentProfile = {
 };
 
 export const sampleActiveExam: ActiveExam = {
-  id: "SWE-412",
+  id: 1,
   courseCode: "SWE-412",
   courseName: "Distributed Systems & Cloud Architecture",
   examTitle: "Final Theory Examination",
@@ -89,7 +89,7 @@ export const sampleActiveExam: ActiveExam = {
 
 export const sampleUpcomingExams: UpcomingExam[] = [
   {
-    id: "SWE-414",
+    id: 2,
     courseCode: "SWE-414",
     courseName: "Software Quality Assurance & Testing",
     instructor: "Abebech Kassa (M.Sc.)",
@@ -102,7 +102,7 @@ export const sampleUpcomingExams: UpcomingExam[] = [
     status: "Ready"
   },
   {
-    id: "SWE-418",
+    id: 3,
     courseCode: "SWE-418",
     courseName: "Mobile Application Development",
     instructor: "Solomon Tekle (Ph.D.)",
@@ -115,7 +115,7 @@ export const sampleUpcomingExams: UpcomingExam[] = [
     status: "Pending"
   },
   {
-    id: "SWE-422",
+    id: 4,
     courseCode: "SWE-422",
     courseName: "Compiler Design & Construction",
     instructor: "Dr. Birhanu Belay",
@@ -131,8 +131,8 @@ export const sampleUpcomingExams: UpcomingExam[] = [
 
 export const sampleRecentResults: RecentResult[] = [
   {
-    id: "SWE-314",
-    courseCode: "SWE-314",
+    id: 5,
+    courseCode: "SWE-401",
     courseName: "Advanced Database Systems",
     examTitle: "Final Term Exam",
     score: 92,
@@ -166,8 +166,8 @@ export const sampleRecentResults: RecentResult[] = [
     ]
   },
   {
-    id: "SWE-318",
-    courseCode: "SWE-318",
+    id: 6,
+    courseCode: "SWE-312",
     courseName: "Human-Computer Interaction",
     examTitle: "Practical Project Evaluation",
     score: 45,
@@ -194,7 +194,7 @@ export const sampleRecentResults: RecentResult[] = [
     ]
   },
   {
-    id: "SWE-320",
+    id: 7,
     courseCode: "SWE-320",
     courseName: "Formal Methods in Software Eng.",
     examTitle: "Mid-Term Theory Paper",

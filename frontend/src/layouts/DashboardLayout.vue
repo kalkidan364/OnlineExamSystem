@@ -19,7 +19,19 @@ import Header from './components/Header.vue'
       <main class="flex-1 p-8">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <Suspense>
+              <template #default>
+                <component :is="Component" />
+              </template>
+              <template #fallback>
+                <div class="flex items-center justify-center min-h-[60vh]">
+                  <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 rounded-full border-4 border-[#5138ed]/20 border-t-[#5138ed] animate-spin"></div>
+                    <p class="text-[13px] font-semibold text-slate-400">Loading page...</p>
+                  </div>
+                </div>
+              </template>
+            </Suspense>
           </transition>
         </router-view>
       </main>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Doughnut } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -10,17 +11,23 @@ import {
 
 ChartJS.register(Title, Tooltip, Legend, ArcElement)
 
-const chartData = {
-  labels: ['MCQ Questions', 'Short Answer', 'Essay Questions'],
-  datasets: [
-    {
-      backgroundColor: ['#5138ed', '#10b981', '#f97316'],
-      data: [652, 124, 80],
-      borderWidth: 0,
-      hoverOffset: 4
-    }
-  ]
-}
+const props = defineProps<{
+  stats: any
+}>()
+
+const chartData = computed(() => {
+  return {
+    labels: ['MCQ Questions', 'Short Answer', 'Essay Questions'],
+    datasets: [
+      {
+        backgroundColor: ['#5138ed', '#10b981', '#f97316'],
+        data: [props.stats.mcq_questions, props.stats.sa_questions, props.stats.essay_questions],
+        borderWidth: 0,
+        hoverOffset: 4
+      }
+    ]
+  }
+})
 
 const chartOptions = {
   responsive: true,
@@ -56,7 +63,7 @@ const chartOptions = {
         
         <!-- Center Text -->
         <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span class="text-3xl font-extrabold text-slate-800">856</span>
+          <span class="text-3xl font-extrabold text-slate-800">{{ stats.total_questions }}</span>
           <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Total Questions</span>
         </div>
       </div>
@@ -67,7 +74,7 @@ const chartOptions = {
           <div class="w-2.5 h-2.5 rounded-full bg-[#5138ed] mt-1 flex-shrink-0"></div>
           <div class="flex flex-col">
             <span class="text-[13px] font-bold text-slate-700">MCQ Questions</span>
-            <span class="text-[12px] text-slate-500">652 (76.2%)</span>
+            <span class="text-[12px] text-slate-500">{{ stats.mcq_questions }} ({{ stats.total_questions ? Math.round((stats.mcq_questions / stats.total_questions) * 100) : 0 }}%)</span>
           </div>
         </div>
         
@@ -75,7 +82,7 @@ const chartOptions = {
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1 flex-shrink-0"></div>
           <div class="flex flex-col">
             <span class="text-[13px] font-bold text-slate-700">Short Answer</span>
-            <span class="text-[12px] text-slate-500">124 (14.5%)</span>
+            <span class="text-[12px] text-slate-500">{{ stats.sa_questions }} ({{ stats.total_questions ? Math.round((stats.sa_questions / stats.total_questions) * 100) : 0 }}%)</span>
           </div>
         </div>
 
@@ -83,7 +90,7 @@ const chartOptions = {
           <div class="w-2.5 h-2.5 rounded-full bg-orange-500 mt-1 flex-shrink-0"></div>
           <div class="flex flex-col">
             <span class="text-[13px] font-bold text-slate-700">Essay Questions</span>
-            <span class="text-[12px] text-slate-500">80 (9.3%)</span>
+            <span class="text-[12px] text-slate-500">{{ stats.essay_questions }} ({{ stats.total_questions ? Math.round((stats.essay_questions / stats.total_questions) * 100) : 0 }}%)</span>
           </div>
         </div>
       </div>

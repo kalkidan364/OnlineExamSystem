@@ -1,5 +1,12 @@
 <script setup lang="ts">
-const emit = defineEmits(['cancel', 'next'])
+import { useCreateExamStore } from '../../store/createExamStore'
+
+const props = defineProps<{
+  isSaving?: boolean
+}>()
+
+const emit = defineEmits(['cancel', 'next', 'save-draft'])
+const formStore = useCreateExamStore()
 </script>
 
 <template>
@@ -21,31 +28,24 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="grid grid-cols-2 gap-6 mb-6">
           <div>
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">Exam Duration <span class="text-rose-500">*</span></label>
+            <label class="block text-[12px] font-bold text-slate-700 mb-2">Exam Duration (minutes) <span class="text-rose-500">*</span></label>
             <div class="flex items-center gap-2">
-              <input type="text" value="01" class="w-16 border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-center text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <span class="text-slate-400 font-bold">:</span>
-              <input type="text" value="30" class="w-16 border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-center text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <select class="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_0.75rem_center]">
-                <option>Hours</option>
-                <option>Minutes</option>
-              </select>
+              <input v-model="formStore.durationMinutes" type="number" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-center text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
             </div>
             <p class="text-[10px] text-slate-400 mt-2 font-medium">Set the total duration for the exam</p>
           </div>
           <div>
             <label class="block text-[12px] font-bold text-slate-700 mb-2">Passing Marks <span class="text-rose-500">*</span></label>
             <div class="relative">
-              <input type="number" value="60" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[13px] text-slate-400 font-bold">%</span>
+              <input v-model="formStore.passingMarks" type="number" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
             </div>
-            <p class="text-[10px] text-slate-400 mt-2 font-medium">Minimum percentage required to pass</p>
+            <p class="text-[10px] text-slate-400 mt-2 font-medium">Out of {{ formStore.totalMarks }} total marks</p>
           </div>
         </div>
 
         <div>
           <label class="block text-[12px] font-bold text-slate-700 mb-2">Maximum Attempts</label>
-          <select class="w-[200px] border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]">
+          <select v-model="formStore.maxAttempts" class="w-[200px] border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]">
             <option>1</option>
             <option>2</option>
             <option>Unlimited</option>
@@ -65,39 +65,26 @@ const emit = defineEmits(['cancel', 'next'])
           <div>
             <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Date <span class="text-rose-500">*</span></label>
             <div class="relative">
-              <input type="text" value="05/25/2025" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <svg class="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              <input v-model="formStore.scheduledDate" type="date" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
             </div>
           </div>
           <div>
             <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Time <span class="text-rose-500">*</span></label>
             <div class="relative">
-              <input type="text" value="09:00 AM" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <svg class="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <input v-model="formStore.scheduledTime" type="time" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-6 mb-6">
-          <div>
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">End Date <span class="text-rose-500">*</span></label>
-            <div class="relative">
-              <input type="text" value="05/25/2025" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <svg class="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-            </div>
-          </div>
-          <div>
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">End Time <span class="text-rose-500">*</span></label>
-            <div class="relative">
-              <input type="text" value="10:30 AM" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <svg class="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </div>
+          <div class="col-span-2">
+             <p class="text-[10px] text-slate-400 mt-2 font-medium">End time is calculated based on duration.</p>
           </div>
         </div>
 
         <div>
           <label class="block text-[12px] font-bold text-slate-700 mb-2">Time Zone</label>
-          <select class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]">
+          <select v-model="formStore.timeZone" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]">
             <option>(UTC+03:00) Addis Ababa, Nairobi</option>
           </select>
           <p class="text-[10px] text-slate-400 mt-2 font-medium">Exam time will follow this time zone</p>
@@ -116,7 +103,7 @@ const emit = defineEmits(['cancel', 'next'])
       <div class="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="shuffleQuestions" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.shuffleQuestions" name="toggle" id="shuffleQuestions" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="shuffleQuestions" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -127,7 +114,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="showReview" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.showReviewScreen" name="toggle" id="showReview" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="showReview" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -138,7 +125,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="shuffleAnswers" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.shuffleAnswers" name="toggle" id="shuffleAnswers" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="shuffleAnswers" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -149,7 +136,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="allowBacktracking" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.allowBacktracking" name="toggle" id="allowBacktracking" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="allowBacktracking" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -160,7 +147,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="oneQuestion" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+            <input type="checkbox" v-model="formStore.showOneQuestionAtATime" name="toggle" id="oneQuestion" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
             <label for="oneQuestion" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer"></label>
           </div>
           <div>
@@ -171,7 +158,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="autoSubmit" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.autoSubmitOnTimeFinish" name="toggle" id="autoSubmit" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="autoSubmit" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -192,7 +179,7 @@ const emit = defineEmits(['cancel', 'next'])
       <div class="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="fullscreen" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.enableFullscreenMode" name="toggle" id="fullscreen" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="fullscreen" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -203,7 +190,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="tabMonitoring" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.enableBrowserTabMonitoring" name="toggle" id="tabMonitoring" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="tabMonitoring" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -214,7 +201,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="disableRightClick" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.disableRightClick" name="toggle" id="disableRightClick" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="disableRightClick" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -225,7 +212,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="allowCalculator" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+            <input type="checkbox" v-model="formStore.allowCalculator" name="toggle" id="allowCalculator" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
             <label for="allowCalculator" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer"></label>
           </div>
           <div>
@@ -236,7 +223,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="disableCopyPaste" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
+            <input type="checkbox" v-model="formStore.disableCopyPaste" name="toggle" id="disableCopyPaste" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-[#5138ed] appearance-none cursor-pointer transition-transform duration-200 ease-in-out translate-x-5"/>
             <label for="disableCopyPaste" class="toggle-label block overflow-hidden h-5 rounded-full bg-[#5138ed] cursor-pointer"></label>
           </div>
           <div>
@@ -247,7 +234,7 @@ const emit = defineEmits(['cancel', 'next'])
 
         <div class="flex gap-3">
           <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in mt-0.5">
-            <input type="checkbox" name="toggle" id="webcamMonitoring" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+            <input type="checkbox" v-model="formStore.webcamMonitoring" name="toggle" id="webcamMonitoring" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
             <label for="webcamMonitoring" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer"></label>
           </div>
           <div>

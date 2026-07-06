@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { useInstructorStudentStore } from '../../store/instructorStudentStore'
+
+const studentStore = useInstructorStudentStore()
+</script>
+
 <template>
   <div class="mb-6">
     
@@ -32,8 +38,9 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Total Students</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">320</span>
-          <span class="text-[9px] text-slate-400 font-medium">Across all courses</span>
+          <div v-if="studentStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ studentStore.stats.total_students }}</span>
+          <span class="text-[9px] text-slate-400 font-medium">In your course</span>
         </div>
       </div>
 
@@ -44,8 +51,9 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Active Students</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">298</span>
-          <span class="text-[9px] text-slate-400 font-medium">93.1% active</span>
+          <div v-if="studentStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ studentStore.stats.active_students }}</span>
+          <span class="text-[9px] text-slate-400 font-medium">{{ studentStore.stats.total_students > 0 ? Math.round((studentStore.stats.active_students / studentStore.stats.total_students) * 100) : 0 }}% active</span>
         </div>
       </div>
 
@@ -56,7 +64,7 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">New This Month</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">18</span>
+          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">—</span>
           <span class="text-[9px] text-slate-400 font-medium">Joined this month</span>
         </div>
       </div>
@@ -68,7 +76,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Average Score</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">72.4%</span>
+          <div v-if="studentStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ studentStore.stats.average_score }}%</span>
           <span class="text-[9px] text-slate-400 font-medium">Overall average</span>
         </div>
       </div>
@@ -80,7 +89,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Top Performers</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">46</span>
+          <div v-if="studentStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ studentStore.stats.top_performers }}</span>
           <span class="text-[9px] text-slate-400 font-medium">Above 85% average</span>
         </div>
       </div>

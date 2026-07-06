@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { useInstructorReportStore } from '../../store/instructorReportStore'
+
+const reportStore = useInstructorReportStore()
+</script>
+
 <template>
   <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
     
@@ -8,7 +14,8 @@
       </div>
       <div>
         <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Total Exams</span>
-        <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">18</span>
+        <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+        <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.total_exams }}</span>
         <div class="flex items-center gap-1">
           <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
           <span class="text-[9px] font-bold text-emerald-500">12.5%</span>
@@ -24,7 +31,8 @@
       </div>
       <div>
         <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Total Students</span>
-        <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">856</span>
+        <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+        <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.total_students }}</span>
         <div class="flex items-center gap-1">
           <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
           <span class="text-[9px] font-bold text-emerald-500">8.3%</span>
@@ -40,7 +48,8 @@
       </div>
       <div>
         <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Average Score</span>
-        <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">74.6%</span>
+        <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+        <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.average_score }}%</span>
         <div class="flex items-center gap-1">
           <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
           <span class="text-[9px] font-bold text-emerald-500">5.7%</span>
@@ -56,7 +65,8 @@
       </div>
       <div>
         <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Pass Rate</span>
-        <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">68.4%</span>
+        <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+        <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.pass_rate }}%</span>
         <div class="flex items-center gap-1">
           <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
           <span class="text-[9px] font-bold text-emerald-500">6.4%</span>
@@ -72,7 +82,8 @@
       </div>
       <div>
         <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Fail Rate</span>
-        <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">31.6%</span>
+        <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+        <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.fail_rate }}%</span>
         <div class="flex items-center gap-1">
           <svg class="w-3 h-3 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
           <span class="text-[9px] font-bold text-rose-500">-6.4%</span>

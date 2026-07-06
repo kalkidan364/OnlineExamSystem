@@ -22,7 +22,7 @@ export interface Question {
 }
 
 export interface ActiveExam {
-  id: string;
+  id: number;
   courseCode: string;
   courseName: string;
   examTitle: string;
@@ -36,7 +36,7 @@ export interface ActiveExam {
 }
 
 export interface UpcomingExam {
-  id: string;
+  id: number;
   courseCode: string;
   courseName: string;
   instructor: string;
@@ -50,7 +50,7 @@ export interface UpcomingExam {
 }
 
 export interface RecentResult {
-  id: string;
+  id: number;
   courseCode: string;
   courseName: string;
   examTitle: string;

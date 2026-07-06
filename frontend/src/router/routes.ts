@@ -26,6 +26,21 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/QuestionBanks.vue')
       },
       {
+        path: 'question-banks/:id',
+        name: 'QuestionBankDetails',
+        component: () => import('../modules/instructor/pages/QuestionBankDetails.vue')
+      },
+      {
+        path: 'question-banks/:id/create-question',
+        name: 'CreateQuestion',
+        component: () => import('../modules/instructor/pages/CreateQuestion.vue')
+      },
+      {
+        path: 'question-banks/:id/edit-question/:questionId',
+        name: 'EditQuestion',
+        component: () => import('../modules/instructor/pages/CreateQuestion.vue')
+      },
+      {
         path: 'exams',
         name: 'Exams',
         component: () => import('../modules/instructor/pages/Exams.vue')

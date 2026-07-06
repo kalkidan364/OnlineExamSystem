@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -14,37 +14,53 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
+        'role',
+        'course_code',  // The ONE course this instructor teaches
+        'course_name',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /** Exams created by this instructor — always filtered to their one course */
+    public function exams(): HasMany
+    {
+        return $this->hasMany(Exam::class);
+    }
+
+    /** Question banks owned by this instructor */
+    public function questionBanks(): HasMany
+    {
+        return $this->hasMany(QuestionBank::class);
+    }
+
+    /** Exam attempts by this user (student role) */
+    public function examAttempts(): HasMany
+    {
+        return $this->hasMany(ExamAttempt::class);
+    }
+
+    public function isInstructor(): bool
+    {
+        return $this->role === 'instructor';
+    }
+
+    public function isStudent(): bool
+    {
+        return $this->role === 'student';
     }
 }

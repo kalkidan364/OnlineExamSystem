@@ -6,7 +6,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'start-exam', examId: string): void
+  (e: 'start-exam', examId: number): void
   (e: 'view-details', exam: UpcomingExam): void
 }>()
 </script>

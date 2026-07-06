@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import { useInstructorReportStore } from '../../store/instructorReportStore'
+
+const reportStore = useInstructorReportStore()
+</script>
+
 <template>
   <div class="mb-6">
     <!-- 5 Stat Cards -->
@@ -10,7 +16,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Total Exams</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">18</span>
+          <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.total_exams }}</span>
           <span class="text-[9px] text-slate-400 font-medium">All completed exams</span>
         </div>
       </div>
@@ -22,7 +29,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Total Students</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">856</span>
+          <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.total_students }}</span>
           <span class="text-[9px] text-slate-400 font-medium">Students participated</span>
         </div>
       </div>
@@ -34,7 +42,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Average Score</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">74.6%</span>
+          <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.average_score }}%</span>
           <span class="text-[9px] text-slate-400 font-medium">Across all exams</span>
         </div>
       </div>
@@ -46,7 +55,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Pass Rate</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">68.4%</span>
+          <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.pass_rate }}%</span>
           <span class="text-[9px] text-slate-400 font-medium">Students passed</span>
         </div>
       </div>
@@ -58,7 +68,8 @@
         </div>
         <div>
           <span class="block text-[10px] font-bold text-slate-500 mb-0.5">Top Score</span>
-          <span class="block text-[20px] font-black text-slate-800 leading-none mb-1">96.0%</span>
+          <div v-if="reportStore.isLoading" class="h-5 w-10 bg-slate-100 animate-pulse rounded"></div>
+          <span v-else class="block text-[20px] font-black text-slate-800 leading-none mb-1">{{ reportStore.stats.top_score }}%</span>
           <span class="text-[9px] text-slate-400 font-medium">Highest score</span>
         </div>
       </div>
