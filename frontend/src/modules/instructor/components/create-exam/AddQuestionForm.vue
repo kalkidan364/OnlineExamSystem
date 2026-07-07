@@ -81,14 +81,30 @@ const nextMatchId = ref(4)
 const matchingQuestionText = ref('')
 const matchingColumnA = ref('Column A (Premise)')
 const matchingColumnB = ref('Column B (Response)')
+const matchingHint = ref('')
 
 const addMatchingPair = () => {
+  if (matchingPairs.value.length >= 20) return
   matchingPairs.value.push({ id: nextMatchId.value++, left: '', right: '' })
 }
 const removeMatchingPair = (index: number) => {
   if (matchingPairs.value.length <= 2) return
   matchingPairs.value.splice(index, 1)
 }
+
+const matchingValidationErrors = computed(() => {
+  if (questionType.value !== 'matching') return []
+  const errors: string[] = []
+  const filledPairs = matchingPairs.value.filter(p => p.left.trim() || p.right.trim())
+  if (filledPairs.length < 2) errors.push('Add at least 2 matching pairs.')
+  if (matchingPairs.value.some(p => !p.left.trim() && p.right.trim())) errors.push('Some Column A items are empty.')
+  if (matchingPairs.value.some(p => p.left.trim() && !p.right.trim())) errors.push('Some Column B items are empty.')
+  const lefts = matchingPairs.value.map(p => p.left.trim()).filter(Boolean)
+  const rights = matchingPairs.value.map(p => p.right.trim()).filter(Boolean)
+  if (lefts.length !== new Set(lefts).size) errors.push('Duplicate values found in Column A.')
+  if (rights.length !== new Set(rights).size) errors.push('Duplicate values found in Column B.')
+  return errors
+})
 
 // ── Helpers ──
 const getLetter = (index: number) => String.fromCharCode(65 + index)
@@ -104,7 +120,10 @@ const correctMcqOption = computed(() => {
 // ── Add Question to Exam ──
 const addQuestionToExam = () => {
   if (questionType.value !== 'matching' && !questionText.value.trim()) return
-  if (questionType.value === 'matching' && !matchingQuestionText.value.trim()) return
+  if (questionType.value === 'matching') {
+    if (!matchingQuestionText.value.trim()) return
+    if (matchingValidationErrors.value.length > 0) return
+  }
 
   let questionData: any = {
     text: questionType.value === 'matching' ? matchingQuestionText.value : questionText.value,
@@ -142,11 +161,13 @@ const addQuestionToExam = () => {
       questionData.correct_answer = ''
       break
     case 'matching':
-      questionData.pairs = matchingPairs.value.map(p => ({ left: p.left, right: p.right }))
-      questionData.options = matchingPairs.value.map(p => ({ left: p.left, right: p.right, columnA: matchingColumnA.value, columnB: matchingColumnB.value }))
-      questionData.correct_answer = matchingPairs.value.map((p, i) => `${i + 1}-${p.right}`).join(',')
+      const validPairs = matchingPairs.value.filter(p => p.left.trim() && p.right.trim())
+      questionData.pairs = validPairs.map(p => ({ left: p.left.trim(), right: p.right.trim() }))
+      questionData.options = validPairs.map(p => ({ left: p.left.trim(), right: p.right.trim(), columnA: matchingColumnA.value, columnB: matchingColumnB.value }))
+      questionData.correct_answer = validPairs.map((p, i) => `${i + 1}-${p.right.trim()}`).join(',')
       questionData.columnA = matchingColumnA.value
       questionData.columnB = matchingColumnB.value
+      questionData.instruction = questionInstruction.value + (matchingHint.value.trim() ? '\n💡 ' + matchingHint.value.trim() : '')
       break
   }
 
@@ -186,10 +207,18 @@ const resetForm = () => {
   matchingQuestionText.value = ''
   matchingColumnA.value = 'Column A (Premise)'
   matchingColumnB.value = 'Column B (Response)'
+  matchingHint.value = ''
 }
 
 const handleNext = () => {
-  if (questionText.value.trim()) addQuestionToExam()
+  const hasText = questionType.value === 'matching' ? matchingQuestionText.value.trim() : questionText.value.trim()
+  if (hasText) {
+    if (questionType.value === 'matching' && matchingValidationErrors.value.length > 0) {
+      alert('Please fix validation errors in matching pairs before proceeding.')
+      return
+    }
+    addQuestionToExam()
+  }
   emit('next')
 }
 
@@ -369,22 +398,10 @@ const selectExamForQuestions = (examId: number) => {
       <p class="text-[11px] text-slate-400 mt-2 font-medium">Brief, clear and unambiguous question text</p>
     </div>
 
-    <!-- Question Text for Matching — plain textarea, no rich editor -->
-    <div class="mb-8" v-if="questionType === 'matching'">
-      <label class="block text-[13px] font-bold text-slate-700 mb-2">
-        Question Text <span class="text-rose-500">*</span>
-      </label>
-      <textarea
-        v-model="matchingQuestionText"
-        rows="3"
-        placeholder="e.g. Match each country with its capital city."
-        class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none"
-      ></textarea>
-      <p class="text-[11px] text-slate-400 mt-2 font-medium">Write the question stem that explains the matching task to students.</p>
-    </div>
+    <!-- Question Text for Matching handled inside Matching Pairs card below -->
 
-    <!-- Instruction -->
-    <div class="mb-8">
+    <!-- Instruction (hidden for matching — handled inside activity details card) -->
+    <div class="mb-8" v-if="questionType !== 'matching'">
       <label class="block text-[13px] font-bold text-slate-700 mb-2">
         Question Instruction
         <span class="text-[11px] text-slate-400 font-medium ml-2">(Optional — shown to students above the question)</span>
@@ -534,62 +551,178 @@ const selectExamForQuestions = (examId: number) => {
       </div>
     </div>
 
-    <!-- ── Matching ── -->
-    <div v-else-if="questionType === 'matching'">
-      <label class="block text-[13px] font-bold text-slate-700 mb-4">Matching Pairs <span class="text-rose-500">*</span></label>
-
-      <!-- Editable Column Headers -->
-      <div class="grid grid-cols-[auto_1fr_auto_1fr_auto] gap-3 items-center mb-3">
-        <div></div>
-        <div>
-          <input
-            type="text"
-            v-model="matchingColumnA"
-            class="w-full border border-indigo-200 bg-indigo-50 rounded-xl px-3 py-2 text-[11px] font-bold text-[#5138ed] uppercase tracking-wide focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
-            placeholder="Column A name..."
-          >
-        </div>
-        <div></div>
-        <div>
-          <input
-            type="text"
-            v-model="matchingColumnB"
-            class="w-full border border-teal-200 bg-teal-50 rounded-xl px-3 py-2 text-[11px] font-bold text-teal-700 uppercase tracking-wide focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-            placeholder="Column B name..."
-          >
-        </div>
-        <div></div>
-      </div>
-
-      <!-- Pairs -->
-      <div class="grid grid-cols-[auto_1fr_auto_1fr_auto] gap-3 items-center">
-        <template v-for="(pair, index) in matchingPairs" :key="pair.id">
-          <span class="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[12px] shrink-0">{{ index + 1 }}</span>
-          <input
-            type="text"
-            v-model="pair.left"
-            :placeholder="'Enter ' + matchingColumnA + ' item ' + (index + 1) + '...'"
-            class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
-          >
-          <div class="flex items-center justify-center">
-            <svg class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+    <!-- ── Matching (Premium Two-Panel Design) ── -->
+    <div v-else-if="questionType === 'matching'" class="flex flex-col lg:flex-row gap-8">
+      
+      <!-- LEFT COLUMN: Editor -->
+      <div class="flex-1 space-y-6">
+        
+        <!-- Activity Details Card -->
+        <div class="border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 class="text-[13px] font-bold text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              Matching Activity Details
+            </h3>
           </div>
-          <input
-            type="text"
-            v-model="pair.right"
-            :placeholder="'Enter ' + matchingColumnB + ' item ' + (index + 1) + '...'"
-            class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
-          >
-          <button @click="removeMatchingPair(index)" class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-          </button>
-        </template>
+          <div class="p-5 space-y-5">
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Activity Title <span class="text-rose-500">*</span></label>
+              <input type="text" v-model="matchingQuestionText" placeholder="e.g. Match each SQL command with its function." class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+            </div>
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Student Instructions <span class="text-slate-400 font-normal">(Optional)</span></label>
+              <textarea v-model="questionInstruction" rows="2" placeholder="e.g. Match every item in Column A with the correct item in Column B." class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none"></textarea>
+            </div>
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Optional Hint <span class="text-slate-400 font-normal">(Shown below instructions)</span></label>
+              <input type="text" v-model="matchingHint" placeholder="e.g. Each answer can only be used once." class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+            </div>
+          </div>
+        </div>
+
+        <!-- Matching Pairs Card -->
+        <div class="border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 class="text-[13px] font-bold text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+              Matching Pairs
+            </h3>
+            <span class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1 rounded-md">{{ matchingPairs.length }} / 20 Pairs</span>
+          </div>
+          
+          <div class="p-5">
+            <!-- Validation Errors -->
+            <div v-if="matchingValidationErrors.length > 0" class="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-100 space-y-1">
+              <p v-for="err in matchingValidationErrors" :key="err" class="text-[11px] font-semibold text-rose-600 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+                {{ err }}
+              </p>
+            </div>
+
+            <!-- Editable Column Headers -->
+            <div class="grid grid-cols-[30px_1fr_24px_1fr_36px] gap-3 items-center mb-4 pr-1">
+              <div></div>
+              <div>
+                <input type="text" v-model="matchingColumnA" class="w-full border border-indigo-200 bg-indigo-50 rounded-lg px-3 py-1.5 text-[10px] font-black text-[#5138ed] uppercase tracking-wider focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] text-center" placeholder="COLUMN A">
+              </div>
+              <div></div>
+              <div>
+                <input type="text" v-model="matchingColumnB" class="w-full border border-teal-200 bg-teal-50 rounded-lg px-3 py-1.5 text-[10px] font-black text-teal-700 uppercase tracking-wider focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-center" placeholder="COLUMN B">
+              </div>
+              <div></div>
+            </div>
+
+            <!-- Pairs -->
+            <div class="space-y-3">
+              <div v-for="(pair, index) in matchingPairs" :key="pair.id" class="grid grid-cols-[30px_1fr_24px_1fr_36px] gap-3 items-center group">
+                <!-- Drag Handle & Number -->
+                <div class="flex items-center justify-between w-full">
+                  <svg class="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>
+                  <span class="w-5 h-5 flex items-center justify-center rounded bg-slate-100 text-slate-500 font-bold text-[10px] shrink-0">{{ index + 1 }}</span>
+                </div>
+                
+                <!-- Left Input -->
+                <input type="text" v-model="pair.left" :placeholder="'Premise ' + (index + 1)" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+                
+                <!-- Arrow -->
+                <div class="flex items-center justify-center">
+                  <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </div>
+                
+                <!-- Right Input -->
+                <input type="text" v-model="pair.right" :placeholder="'Response ' + (index + 1)" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                
+                <!-- Delete -->
+                <button @click="removeMatchingPair(index)" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Add Button -->
+            <button @click="addMatchingPair" :disabled="matchingPairs.length >= 20" class="mt-5 w-full py-3 flex items-center justify-center gap-2 border border-dashed border-slate-300 rounded-xl text-[#5138ed] font-bold text-[12px] hover:border-[#5138ed] hover:bg-indigo-50/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              Add Matching Pair
+            </button>
+          </div>
+        </div>
       </div>
-      <button @click="addMatchingPair" class="mt-4 flex items-center gap-2 text-[#5138ed] font-bold text-[13px] hover:text-indigo-700 transition-colors">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-        Add Pair
-      </button>
-      <p class="text-[11px] text-slate-400 mt-2 font-medium">Students will match items from {{ matchingColumnA }} to the correct item in {{ matchingColumnB }}.</p>
+
+      <!-- RIGHT COLUMN: Live Preview -->
+      <div class="w-full lg:w-[420px] shrink-0 relative">
+        <div class="sticky top-6">
+          <div class="border border-slate-200 rounded-2xl bg-slate-50 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-120px)] max-h-[800px]">
+            <div class="px-5 py-4 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+              <h3 class="text-[13px] font-bold text-slate-700 flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                Student View Preview
+              </h3>
+              <span class="flex h-2 w-2 relative">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            </div>
+            
+            <!-- Preview Content (resembles ExamConsole.vue) -->
+            <div class="p-6 overflow-y-auto flex-1 bg-white">
+              
+              <!-- Instructions -->
+              <div class="mb-5" v-if="questionInstruction || matchingHint">
+                <div class="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100/50 space-y-2">
+                  <div class="flex items-start gap-2.5">
+                    <svg class="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p class="text-[12px] text-slate-600 font-medium leading-relaxed whitespace-pre-wrap">{{ questionInstruction || 'Instructions will appear here...' }}</p>
+                  </div>
+                  <div v-if="matchingHint" class="flex items-start gap-2.5 ml-6">
+                    <span class="text-[11px] text-indigo-400">💡</span>
+                    <p class="text-[12px] text-indigo-600/80 font-medium leading-relaxed">{{ matchingHint }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Question Text -->
+              <div class="text-[15px] text-slate-800 font-medium leading-relaxed mb-6 font-serif">
+                {{ matchingQuestionText || 'Question text will appear here...' }}
+              </div>
+
+              <!-- Matching Interactive Area -->
+              <div class="space-y-4">
+                <!-- Headers -->
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="px-4 py-2 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-center">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                      {{ matchingColumnA || 'Column A' }}
+                    </span>
+                  </div>
+                  <div class="px-4 py-2 rounded-xl bg-teal-600/10 border border-teal-500/20 text-center">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-teal-600">
+                      {{ matchingColumnB || 'Column B' }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Preview Rows -->
+                <div v-for="(pair, idx) in matchingPairs" :key="idx" class="grid grid-cols-2 gap-4 items-center opacity-90">
+                  <div class="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50/50 px-3 py-2 text-[12px] font-semibold text-slate-700 shadow-sm">
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-[#5138ed] text-[9px] font-black text-white">{{ idx + 1 }}</span>
+                    <span class="truncate">{{ pair.left || '...' }}</span>
+                  </div>
+                  <div class="relative">
+                    <select class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 appearance-none pr-8 shadow-sm">
+                      <option value="" disabled selected>— Select match —</option>
+                      <option v-for="(opt, oIdx) in matchingPairs.filter(p => p.right.trim())" :key="oIdx" :value="oIdx">
+                        {{ opt.right }}
+                      </option>
+                    </select>
+                    <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>
