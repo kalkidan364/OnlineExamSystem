@@ -169,6 +169,7 @@ class InstructorQuestionBankController extends Controller
 
         $validated = $request->validate([
             'type'           => 'required|string',
+            'instruction'    => 'nullable|string',
             'difficulty'     => 'nullable|string',
             'chapter'        => 'nullable|string',
             'topic'          => 'nullable|string',
@@ -243,6 +244,7 @@ class InstructorQuestionBankController extends Controller
 
         $validated = $request->validate([
             'type'           => 'required|string',
+            'instruction'    => 'nullable|string',
             'difficulty'     => 'nullable|string',
             'chapter'        => 'nullable|string',
             'topic'          => 'nullable|string',

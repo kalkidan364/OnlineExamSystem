@@ -14,8 +14,12 @@ export interface StudentProfile {
 export interface Question {
   id: number;
   text: string;
+  instruction?: string;
   options?: string[];
-  type: 'multiple-choice' | 'text';
+  pairs?: { left: string, right: string }[];
+  columnA?: string;
+  columnB?: string;
+  type: 'multiple-choice' | 'text' | 'true_false' | 'multiple_true_false' | 'fill_blank' | 'matching' | string;
   correctAnswer?: string;
   selectedAnswer?: string;
   flagged?: boolean;
@@ -32,6 +36,7 @@ export interface ActiveExam {
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
+  settings?: Record<string, any>;
   questions: Question[];
 }
 

@@ -99,7 +99,7 @@ export const useStudentExamStore = defineStore('studentExam', () => {
       const data = response.data.data
 
       // Build ActiveExam with real questions
-      const examData: ActiveExam = {
+      const examData: any = {
         id: examId,
         courseCode: data.course_code,
         courseName: data.course_name,
@@ -110,11 +110,19 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         durationMinutes: data.duration_minutes,
         totalQuestions: data.questions.length,
         totalMarks: data.total_marks,
+        settings: data.settings || {},
         questions: data.questions.map((q: any) => ({
           id: q.id,
           text: q.text,
-          type: q.type as 'multiple-choice' | 'text',
-          options: (q.options || []).map((o: any) => typeof o === 'string' ? o : (o.text || '')),
+          instruction: q.instruction || null,
+          type: q.type,
+          options: (q.options || []).map((o: any) => {
+            if (!o) return ''
+            return typeof o === 'string' ? o : (o.text || '')
+          }),
+          pairs: q.pairs || null,
+          columnA: q.columnA || null,
+          columnB: q.columnB || null,
         })),
       }
 

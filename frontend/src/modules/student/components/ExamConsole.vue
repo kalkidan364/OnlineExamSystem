@@ -14,10 +14,14 @@ const emit = defineEmits<{
 const questions = ref<Question[]>(props.exam.questions)
 const currentIndex = ref<number>(0)
 const answers = ref<Record<number, string>>({})
+const matchingAnswers = ref<Record<number, Record<number, string>>>({}) // for matching questions: qId -> {pairIndex -> selectedRight}
 const flagged = ref<Record<number, boolean>>({})
 const secondsRemaining = ref<number>(props.exam.durationMinutes * 60)
 const showConfirmSubmit = ref<boolean>(false)
 const tabSwitches = ref<number>(0)
+
+// Exam settings
+const settings = ref<Record<string, any>>((props.exam as any).settings || {})
 
 const activeQuestion = computed(() => questions.value[currentIndex.value])
 
@@ -60,6 +64,38 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
+// --- Security Settings Enforcement ---
+const handleRightClick = (e: MouseEvent) => {
+  if (settings.value.disableRightClick || settings.value.disable_right_click) {
+    e.preventDefault()
+    return false
+  }
+}
+
+const handleCopy = (e: ClipboardEvent) => {
+  if (settings.value.disableCopyPaste || settings.value.disable_copy_paste) {
+    e.preventDefault()
+  }
+}
+
+const handlePaste = (e: ClipboardEvent) => {
+  if (settings.value.disableCopyPaste || settings.value.disable_copy_paste) {
+    e.preventDefault()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('contextmenu', handleRightClick)
+  document.addEventListener('copy', handleCopy as EventListener)
+  document.addEventListener('paste', handlePaste as EventListener)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('contextmenu', handleRightClick)
+  document.removeEventListener('copy', handleCopy as EventListener)
+  document.removeEventListener('paste', handlePaste as EventListener)
+})
+
 const formatTime = (secs: number) => {
   const hours = Math.floor(secs / 3600)
   const minutes = Math.floor((secs % 3600) / 60)
@@ -69,6 +105,22 @@ const formatTime = (secs: number) => {
 
 const handleSelectOption = (index: number) => {
   answers.value[activeQuestion.value.id] = String.fromCharCode(65 + index)
+}
+
+const handleTrueFalse = (value: 'A' | 'B') => {
+  answers.value[activeQuestion.value.id] = value
+}
+
+const handleMatchingAnswer = (qId: number, pairIndex: number, rightValue: string) => {
+  if (!matchingAnswers.value[qId]) matchingAnswers.value[qId] = {}
+  matchingAnswers.value[qId][pairIndex] = rightValue
+  // Serialize matching answers as "0:RightA,1:RightB,..." for submission
+  const q = questions.value.find(q => q.id === qId)
+  if (q && (q as any).pairs) {
+    answers.value[qId] = (q as any).pairs
+      .map((_: any, i: number) => `${i}:${matchingAnswers.value[qId]?.[i] || ''}`)
+      .join(',')
+  }
 }
 
 const toggleFlag = () => {
@@ -285,14 +337,20 @@ const confirmCancel = () => {
             </div>
 
             <!-- The Question Statement -->
-            <div class="space-y-4">
-              <p class="text-base font-medium leading-relaxed text-slate-100 font-sans">
-                {{ activeQuestion.text }}
+            <div class="space-y-1">
+              <!-- Instruction badge -->
+              <p v-if="(activeQuestion as any).instruction" class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                {{ (activeQuestion as any).instruction }}
               </p>
+              <div class="text-base font-medium leading-relaxed text-slate-100 font-sans prose prose-invert prose-p:my-2 prose-ul:my-2" v-html="activeQuestion.text">
+              </div>
             </div>
 
-            <!-- Answer Controls: Pick Option vs free text -->
+            <!-- Answer Controls -->
             <div class="mt-8 space-y-3">
+
+              <!-- ── Multiple Choice ── -->
               <template v-if="activeQuestion.type === 'multiple-choice' && activeQuestion.options">
                 <button
                   v-for="(option, index) in activeQuestion.options"
@@ -313,26 +371,122 @@ const confirmCancel = () => {
                   ]">
                     {{ String.fromCharCode(65 + index) }}
                   </span>
-                  <span class="leading-relaxed pt-0.5">{{ option }}</span>
+                  <span class="leading-relaxed pt-0.5">{{ typeof option === 'object' ? (option as any).text || (option as any).label : option }}</span>
                 </button>
               </template>
-              <template v-else>
+
+              <!-- ── True / False ── -->
+              <template v-else-if="activeQuestion.type === 'true_false'">
+                <button
+                  @click="handleTrueFalse('A')"
+                  :class="[
+                    'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-all text-xs font-bold font-sans',
+                    answers[activeQuestion.id] === 'A'
+                      ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-emerald-700'
+                  ]"
+                >
+                  <span :class="['flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs font-bold', answers[activeQuestion.id] === 'A' ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-slate-950 border-slate-700 text-slate-400']">A</span>
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                  True
+                </button>
+                <button
+                  @click="handleTrueFalse('B')"
+                  :class="[
+                    'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-all text-xs font-bold font-sans',
+                    answers[activeQuestion.id] === 'B'
+                      ? 'bg-rose-500/15 border-rose-500 text-rose-300'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-rose-700'
+                  ]"
+                >
+                  <span :class="['flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs font-bold', answers[activeQuestion.id] === 'B' ? 'bg-rose-600 border-rose-400 text-white' : 'bg-slate-950 border-slate-700 text-slate-400']">B</span>
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  False
+                </button>
+              </template>
+
+              <!-- ── Fill in the Blank ── -->
+              <template v-else-if="activeQuestion.type === 'fill_blank'">
                 <div class="space-y-2">
-                  <p class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Write your analytical response below:</p>
-                  <textarea
-                    rows="8"
+                  <p class="text-xs text-purple-400 font-bold uppercase tracking-wider mb-3">Type the missing word or phrase below:</p>
+                  <input
+                    type="text"
                     v-model="answers[activeQuestion.id]"
-                    placeholder="Provide a clear, detailed, and mathematically grounded response. Your input is saved automatically on each keystroke..."
-                    class="w-full rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs font-sans text-slate-100 placeholder-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-hidden"
-                  ></textarea>
-                  <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold font-mono px-1">
-                    <span>Markdown formatting is supported</span>
-                    <span>Characters count: {{ (answers[activeQuestion.id] || '').length }}/1500 maximum</span>
+                    placeholder="Enter your answer here..."
+                    class="w-full rounded-xl border border-slate-700 bg-slate-900 px-5 py-4 text-sm font-sans text-slate-100 placeholder-slate-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 focus:outline-none transition-colors"
+                  />
+                  <p class="text-[10px] text-slate-500 font-mono px-1">Answer is auto-saved as you type.</p>
+                </div>
+              </template>
+
+              <!-- ── Matching ── -->
+              <template v-else-if="activeQuestion.type === 'matching' && (activeQuestion as any).pairs">
+                <div class="space-y-4">
+                  <!-- Column Headers -->
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="px-4 py-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-center">
+                      <span class="text-xs font-black uppercase tracking-widest text-indigo-300">
+                        {{ (activeQuestion as any).columnA || 'Column A' }}
+                      </span>
+                    </div>
+                    <div class="px-4 py-2 rounded-xl bg-teal-600/20 border border-teal-500/40 text-center">
+                      <span class="text-xs font-black uppercase tracking-widest text-teal-300">
+                        {{ (activeQuestion as any).columnB || 'Column B' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Matching Rows -->
+                  <div
+                    v-for="(pair, pIdx) in (activeQuestion as any).pairs"
+                    :key="pIdx"
+                    class="grid grid-cols-2 gap-4 items-center"
+                  >
+                    <!-- Left side — Column A item -->
+                    <div class="flex items-center gap-3 rounded-xl border border-indigo-800/60 bg-indigo-950/30 px-4 py-3 text-xs font-semibold text-indigo-200">
+                      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-700 text-[10px] font-black text-white">{{ Number(pIdx) + 1 }}</span>
+                      {{ pair.left }}
+                    </div>
+                    <!-- Right side — Column B dropdown -->
+                    <div class="relative">
+                      <select
+                        :value="matchingAnswers[activeQuestion.id]?.[Number(pIdx)] || ''"
+                        @change="handleMatchingAnswer(activeQuestion.id, Number(pIdx), ($event.target as HTMLSelectElement).value)"
+                        class="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-xs font-medium text-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none transition-colors appearance-none pr-8"
+                      >
+                        <option value="" disabled>— Select {{ (activeQuestion as any).columnB || 'match' }} —</option>
+                        <option
+                          v-for="(p, rIdx) in (activeQuestion as any).pairs"
+                          :key="rIdx"
+                          :value="p.right"
+                        >{{ p.right }}</option>
+                      </select>
+                      <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
                   </div>
                 </div>
               </template>
+
+              <!-- ── Short Answer / Essay / Default ── -->
+              <template v-else>
+                <div class="space-y-2">
+                  <p class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Write your response below:</p>
+                  <textarea
+                    :rows="activeQuestion.type === 'short_answer' ? 4 : 8"
+                    v-model="answers[activeQuestion.id]"
+                    :placeholder="activeQuestion.type === 'short_answer' ? 'Write a concise, clear answer...' : 'Provide a detailed, well-structured response...'"
+                    class="w-full rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs font-sans text-slate-100 placeholder-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  ></textarea>
+                  <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold font-mono px-1">
+                    <span>Answer saved automatically</span>
+                    <span>Characters: {{ (answers[activeQuestion.id] || '').length }}/1500</span>
+                  </div>
+                </div>
+              </template>
+
             </div>
           </template>
+
           <div v-else class="flex flex-col items-center justify-center text-center h-full space-y-4 py-20">
              <div class="rounded-full bg-slate-900 p-4 border border-slate-800">
                <svg class="h-8 w-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>

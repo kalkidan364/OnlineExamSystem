@@ -17,6 +17,7 @@ const formStore = useCreateExamStore()
 
 const questionType = ref('mcq')
 const questionText = ref('')
+const questionInstruction = ref('')
 const questionMarks = ref(5)
 const difficulty = ref('medium')
 
@@ -77,6 +78,9 @@ const matchingPairs = ref([
   { id: 3, left: '', right: '' },
 ])
 const nextMatchId = ref(4)
+const matchingQuestionText = ref('')
+const matchingColumnA = ref('Column A (Premise)')
+const matchingColumnB = ref('Column B (Response)')
 
 const addMatchingPair = () => {
   matchingPairs.value.push({ id: nextMatchId.value++, left: '', right: '' })
@@ -99,10 +103,12 @@ const correctMcqOption = computed(() => {
 
 // ── Add Question to Exam ──
 const addQuestionToExam = () => {
-  if (!questionText.value.trim()) return
+  if (questionType.value !== 'matching' && !questionText.value.trim()) return
+  if (questionType.value === 'matching' && !matchingQuestionText.value.trim()) return
 
   let questionData: any = {
-    text: questionText.value,
+    text: questionType.value === 'matching' ? matchingQuestionText.value : questionText.value,
+    instruction: questionInstruction.value,
     type: questionType.value,
     marks: questionMarks.value,
     difficulty: difficulty.value,
@@ -137,7 +143,10 @@ const addQuestionToExam = () => {
       break
     case 'matching':
       questionData.pairs = matchingPairs.value.map(p => ({ left: p.left, right: p.right }))
+      questionData.options = matchingPairs.value.map(p => ({ left: p.left, right: p.right, columnA: matchingColumnA.value, columnB: matchingColumnB.value }))
       questionData.correct_answer = matchingPairs.value.map((p, i) => `${i + 1}-${p.right}`).join(',')
+      questionData.columnA = matchingColumnA.value
+      questionData.columnB = matchingColumnB.value
       break
   }
 
@@ -148,6 +157,7 @@ const addQuestionToExam = () => {
 
 const resetForm = () => {
   questionText.value = ''
+  questionInstruction.value = ''
   questionMarks.value = 5
   mcqOptions.value = [
     { id: 1, text: '', isCorrect: true },
@@ -173,6 +183,9 @@ const resetForm = () => {
     { id: 3, left: '', right: '' },
   ]
   nextMatchId.value = 4
+  matchingQuestionText.value = ''
+  matchingColumnA.value = 'Column A (Premise)'
+  matchingColumnB.value = 'Column B (Response)'
 }
 
 const handleNext = () => {
@@ -343,8 +356,8 @@ const selectExamForQuestions = (examId: number) => {
 
     </div>
 
-    <!-- Question Text -->
-    <div class="mb-8">
+    <!-- Question Text (for all types except matching which has its own plain text field) -->
+    <div class="mb-8" v-if="questionType !== 'matching'">
       <label class="block text-[13px] font-bold text-slate-700 mb-2">
         Question Text <span class="text-rose-500">*</span>
         <span v-if="questionType === 'fill_blank'" class="text-[11px] text-indigo-500 font-medium ml-2">Use ___ (underscores) to mark the blank</span>
@@ -354,6 +367,35 @@ const selectExamForQuestions = (examId: number) => {
         :placeholder="questionType === 'fill_blank' ? 'e.g. The capital of Ethiopia is ___.': 'Type or paste your question here...'" 
       />
       <p class="text-[11px] text-slate-400 mt-2 font-medium">Brief, clear and unambiguous question text</p>
+    </div>
+
+    <!-- Question Text for Matching — plain textarea, no rich editor -->
+    <div class="mb-8" v-if="questionType === 'matching'">
+      <label class="block text-[13px] font-bold text-slate-700 mb-2">
+        Question Text <span class="text-rose-500">*</span>
+      </label>
+      <textarea
+        v-model="matchingQuestionText"
+        rows="3"
+        placeholder="e.g. Match each country with its capital city."
+        class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none"
+      ></textarea>
+      <p class="text-[11px] text-slate-400 mt-2 font-medium">Write the question stem that explains the matching task to students.</p>
+    </div>
+
+    <!-- Instruction -->
+    <div class="mb-8">
+      <label class="block text-[13px] font-bold text-slate-700 mb-2">
+        Question Instruction
+        <span class="text-[11px] text-slate-400 font-medium ml-2">(Optional — shown to students above the question)</span>
+      </label>
+      <textarea
+        v-model="questionInstruction"
+        rows="2"
+        placeholder="e.g. Choose the correct answer. / Select True or False. / Match each term with its definition."
+        class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none"
+      ></textarea>
+      <p class="text-[11px] text-slate-400 mt-1.5 font-medium">This instruction will be displayed to students above the question text.</p>
     </div>
 
     <!-- ═══════════════════════════════════════════════ -->
@@ -495,22 +537,49 @@ const selectExamForQuestions = (examId: number) => {
     <!-- ── Matching ── -->
     <div v-else-if="questionType === 'matching'">
       <label class="block text-[13px] font-bold text-slate-700 mb-4">Matching Pairs <span class="text-rose-500">*</span></label>
-      <div class="grid grid-cols-[auto_1fr_auto_1fr_auto] gap-3 items-center">
-        <!-- Header -->
-        <div></div>
-        <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide pb-2">Column A (Premise)</div>
-        <div></div>
-        <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide pb-2">Column B (Response)</div>
-        <div></div>
 
-        <!-- Pairs -->
+      <!-- Editable Column Headers -->
+      <div class="grid grid-cols-[auto_1fr_auto_1fr_auto] gap-3 items-center mb-3">
+        <div></div>
+        <div>
+          <input
+            type="text"
+            v-model="matchingColumnA"
+            class="w-full border border-indigo-200 bg-indigo-50 rounded-xl px-3 py-2 text-[11px] font-bold text-[#5138ed] uppercase tracking-wide focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
+            placeholder="Column A name..."
+          >
+        </div>
+        <div></div>
+        <div>
+          <input
+            type="text"
+            v-model="matchingColumnB"
+            class="w-full border border-teal-200 bg-teal-50 rounded-xl px-3 py-2 text-[11px] font-bold text-teal-700 uppercase tracking-wide focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+            placeholder="Column B name..."
+          >
+        </div>
+        <div></div>
+      </div>
+
+      <!-- Pairs -->
+      <div class="grid grid-cols-[auto_1fr_auto_1fr_auto] gap-3 items-center">
         <template v-for="(pair, index) in matchingPairs" :key="pair.id">
           <span class="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[12px] shrink-0">{{ index + 1 }}</span>
-          <input type="text" v-model="pair.left" placeholder="Enter premise..." class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+          <input
+            type="text"
+            v-model="pair.left"
+            :placeholder="'Enter ' + matchingColumnA + ' item ' + (index + 1) + '...'"
+            class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
+          >
           <div class="flex items-center justify-center">
             <svg class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
           </div>
-          <input type="text" v-model="pair.right" placeholder="Enter matching response..." class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+          <input
+            type="text"
+            v-model="pair.right"
+            :placeholder="'Enter ' + matchingColumnB + ' item ' + (index + 1) + '...'"
+            class="border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"
+          >
           <button @click="removeMatchingPair(index)" class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
           </button>
@@ -520,7 +589,7 @@ const selectExamForQuestions = (examId: number) => {
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
         Add Pair
       </button>
-      <p class="text-[11px] text-slate-400 mt-2 font-medium">Students will match items from Column A to the correct item in Column B.</p>
+      <p class="text-[11px] text-slate-400 mt-2 font-medium">Students will match items from {{ matchingColumnA }} to the correct item in {{ matchingColumnB }}.</p>
     </div>
 
   </div>

@@ -92,6 +92,7 @@ class InstructorExamController extends Controller
             foreach ($request->input('questions') as $q) {
                 $exam->questions()->create([
                     'type'           => $q['type'] ?? 'multiple_choice',
+                    'instruction'    => $q['instruction'] ?? null,
                     'text'           => $q['text'] ?? 'Untitled Question',
                     'options'        => collect($q['options'] ?? [])->map(function ($opt) { return is_string($opt) ? ['text' => $opt] : $opt; })->toArray(),
                     'correct_answer' => $q['correct_answer'] ?? null,

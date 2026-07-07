@@ -11,6 +11,14 @@ const examStore = useInstructorExamStore()
 
 const isSubmitting = ref(false)
 const showQuestionsFullscreen = ref(false)
+const isEditModeFullscreen = ref(false)
+
+const getLetter = (index: number | string) => String.fromCharCode(65 + Number(index))
+
+const openQuestionsModal = (editMode = false) => {
+  isEditModeFullscreen.value = editMode
+  showQuestionsFullscreen.value = true
+}
 
 const handlePublish = async () => {
   isSubmitting.value = true
@@ -106,10 +114,10 @@ const handlePublish = async () => {
           </div>
           <div class="flex items-center gap-3">
             <!-- Fullscreen Icon -->
-            <button @click="showQuestionsFullscreen = true" title="View all questions" class="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-colors">
+            <button @click="openQuestionsModal(false)" title="View all questions" class="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
             </button>
-            <button @click="emit('edit-step', 2)" class="flex items-center gap-1.5 text-[12px] font-bold text-[#5138ed] hover:text-indigo-700 transition-colors">
+            <button @click="openQuestionsModal(true)" class="flex items-center gap-1.5 text-[12px] font-bold text-[#5138ed] hover:text-indigo-700 transition-colors">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
               Edit
             </button>
@@ -375,97 +383,182 @@ const handlePublish = async () => {
             </div>
 
             <div v-for="(q, idx) in formStore.questions" :key="idx" class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
-              <!-- Question Header -->
-              <div class="flex items-start gap-4 mb-4">
-                <div class="w-7 h-7 rounded-lg bg-[#5138ed] text-white text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">{{ idx + 1 }}</div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 mb-2 flex-wrap">
-                    <!-- Type badge -->
+              
+              <template v-if="isEditModeFullscreen">
+                <!-- Edit Mode -->
+                <div class="flex flex-col gap-4">
+                  <!-- Header: Number & Type & Marks -->
+                  <div class="flex items-center gap-3">
+                    <div class="w-7 h-7 rounded-lg bg-[#5138ed] text-white text-[11px] font-black flex items-center justify-center shrink-0">{{ idx + 1 }}</div>
                     <span v-if="q.type === 'mcq' || q.type === 'multiple_choice'" class="px-2 py-0.5 rounded-md bg-indigo-50 text-[#5138ed] text-[10px] font-bold uppercase tracking-wide">MCQ</span>
                     <span v-else-if="q.type === 'true_false' || q.type === 'true/false'" class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wide">True / False</span>
                     <span v-else-if="q.type === 'short_answer'" class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wide">Short Answer</span>
                     <span v-else-if="q.type === 'essay'" class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-500 text-[10px] font-bold uppercase tracking-wide">Essay</span>
                     <span v-else class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">{{ q.type }}</span>
-                    <!-- Marks badge -->
-                    <span class="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-bold border border-slate-100">{{ q.marks || q.points || 1 }} mark{{ (q.marks || q.points || 1) > 1 ? 's' : '' }}</span>
+                    
+                    <div class="flex items-center gap-1.5 ml-auto">
+                      <label class="text-[11px] font-bold text-slate-500">Marks:</label>
+                      <input type="number" v-model.number="q.marks" class="w-16 px-2 py-1 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-800 focus:outline-none focus:border-[#5138ed]" min="1" />
+                    </div>
                   </div>
-                  <p class="text-[14px] font-semibold text-slate-800 leading-snug">{{ q.text || q.question }}</p>
-                </div>
-              </div>
 
-              <!-- MCQ Options -->
-              <div v-if="(q.type === 'mcq' || q.type === 'multiple_choice') && (q.options || q.choices)" class="ml-11 space-y-2">
-                <div v-for="(opt, oIdx) in (q.options || q.choices)" :key="oIdx"
-                  :class="[
-                    'flex items-center gap-3 px-4 py-2.5 rounded-xl border text-[13px] font-medium transition-colors',
-                    (opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index)
+                  <!-- Instruction Input -->
+                  <div class="ml-10">
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Instruction (Optional)</label>
+                    <input type="text" v-model="q.instruction" class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none focus:border-[#5138ed]" placeholder="e.g. Choose the correct answer..." />
+                  </div>
+
+                  <!-- Question Text Input -->
+                  <div class="ml-10">
+                    <textarea v-model="q.text" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] font-medium text-slate-800 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none" placeholder="Enter question text..."></textarea>
+                  </div>
+
+                  <!-- MCQ Options Input -->
+                  <div v-if="(q.type === 'mcq' || q.type === 'multiple_choice') && (q.options || q.choices)" class="ml-10 space-y-2">
+                    <div v-for="(_, oIdx) in (q.options || q.choices)" :key="oIdx" class="flex items-center gap-3">
+                      <input type="radio" :name="'correct_' + idx" :value="getLetter(oIdx)" @change="q.correct_answer = getLetter(oIdx)" :checked="q.correct_answer === getLetter(oIdx) || q.correctAnswer === getLetter(oIdx)" class="w-4 h-4 text-[#5138ed] focus:ring-[#5138ed] cursor-pointer" title="Mark as correct answer" />
+                      <input type="text" v-model="q.options[oIdx]" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] transition-colors" placeholder="Option text..." />
+                    </div>
+                  </div>
+
+                  <!-- True/False Options Input -->
+                  <div v-else-if="q.type === 'true_false' || q.type === 'true/false'" class="ml-10 flex gap-6">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" :name="'correct_' + idx" value="A" @change="q.correct_answer = 'A'" :checked="q.correct_answer === 'A' || q.correctAnswer === 'A' || q.correct_answer === true || q.correctAnswer === true || q.correct_answer === 'true' || q.correctAnswer === 'true'" class="w-4 h-4 text-[#5138ed] focus:ring-[#5138ed]" />
+                      <span class="text-[13px] font-medium text-slate-700">True</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" :name="'correct_' + idx" value="B" @change="q.correct_answer = 'B'" :checked="q.correct_answer === 'B' || q.correctAnswer === 'B' || q.correct_answer === false || q.correctAnswer === false || q.correct_answer === 'false' || q.correctAnswer === 'false'" class="w-4 h-4 text-[#5138ed] focus:ring-[#5138ed]" />
+                      <span class="text-[13px] font-medium text-slate-700">False</span>
+                    </label>
+                  </div>
+
+                  <!-- Sample Answer Input -->
+                  <div v-else-if="q.type === 'short_answer' || q.type === 'essay'" class="ml-10">
+                    <label class="block text-[11px] font-bold text-slate-500 mb-1">Sample Answer (Optional)</label>
+                    <input type="text" v-model="q.sample_answer" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" placeholder="Enter a sample answer..." />
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <!-- View Mode -->
+                <!-- Question Header -->
+                <div class="flex items-start gap-4 mb-4">
+                  <div class="w-7 h-7 rounded-lg bg-[#5138ed] text-white text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">{{ idx + 1 }}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
+                      <!-- Type badge -->
+                      <span v-if="q.type === 'mcq' || q.type === 'multiple_choice'" class="px-2 py-0.5 rounded-md bg-indigo-50 text-[#5138ed] text-[10px] font-bold uppercase tracking-wide">MCQ</span>
+                      <span v-else-if="q.type === 'true_false' || q.type === 'true/false'" class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wide">True / False</span>
+                      <span v-else-if="q.type === 'short_answer'" class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wide">Short Answer</span>
+                      <span v-else-if="q.type === 'essay'" class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-500 text-[10px] font-bold uppercase tracking-wide">Essay</span>
+                      <span v-else-if="q.type === 'fill_blank'" class="px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 text-[10px] font-bold uppercase tracking-wide">Fill in the Blank</span>
+                      <span v-else-if="q.type === 'matching'" class="px-2 py-0.5 rounded-md bg-teal-50 text-teal-600 text-[10px] font-bold uppercase tracking-wide">Matching</span>
+                      <span v-else class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">{{ q.type }}</span>
+                      <!-- Marks badge -->
+                      <span class="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-bold border border-slate-100">{{ q.marks || q.points || 1 }} mark{{ (q.marks || q.points || 1) > 1 ? 's' : '' }}</span>
+                    </div>
+                    <!-- Instruction -->
+                    <p v-if="q.instruction" class="text-[11px] font-semibold text-indigo-500 mb-1 italic">📋 {{ q.instruction }}</p>
+                    <p class="text-[14px] font-semibold text-slate-800 leading-snug">{{ q.text || q.question }}</p>
+                  </div>
+                </div>
+
+                <!-- MCQ Options -->
+                <div v-if="(q.type === 'mcq' || q.type === 'multiple_choice') && (q.options || q.choices)" class="ml-11 space-y-2">
+                  <div v-for="(opt, oIdx) in (q.options || q.choices)" :key="oIdx"
+                    :class="[
+                      'flex items-center gap-3 px-4 py-2.5 rounded-xl border text-[13px] font-medium transition-colors',
+                      (opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index || getLetter(oIdx) === q.correct_answer || getLetter(oIdx) === q.correctAnswer)
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-slate-50 border-slate-100 text-slate-600'
+                    ]"
+                  >
+                    <div :class="[
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0',
+                      (opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index || getLetter(oIdx) === q.correct_answer || getLetter(oIdx) === q.correctAnswer)
+                        ? 'border-emerald-500 bg-emerald-500'
+                        : 'border-slate-300 bg-white'
+                    ]">
+                      <svg v-if="opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index || getLetter(oIdx) === q.correct_answer || getLetter(oIdx) === q.correctAnswer" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <span>{{ typeof opt === 'object' ? (opt.text || opt.label || opt.value) : opt }}</span>
+                    <span v-if="opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index || getLetter(oIdx) === q.correct_answer || getLetter(oIdx) === q.correctAnswer" class="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">Correct</span>
+                  </div>
+                </div>
+
+                <!-- True / False Options -->
+                <div v-else-if="q.type === 'true_false' || q.type === 'true/false'" class="ml-11 flex gap-3">
+                  <div :class="[
+                    'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium flex-1 justify-center',
+                    (q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true' || q.correct_answer === 'A' || q.correctAnswer === 'A')
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                       : 'bg-slate-50 border-slate-100 text-slate-600'
-                  ]"
-                >
-                  <div :class="[
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0',
-                    (opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index)
-                      ? 'border-emerald-500 bg-emerald-500'
-                      : 'border-slate-300 bg-white'
                   ]">
-                    <svg v-if="opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    <div :class="[
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                      (q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true' || q.correct_answer === 'A' || q.correctAnswer === 'A')
+                        ? 'border-emerald-500 bg-emerald-500'
+                        : 'border-slate-300 bg-white'
+                    ]">
+                      <svg v-if="q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true' || q.correct_answer === 'A' || q.correctAnswer === 'A'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    True
                   </div>
-                  <span>{{ typeof opt === 'object' ? (opt.text || opt.label || opt.value) : opt }}</span>
-                  <span v-if="opt === q.correctAnswer || opt === q.correct_answer || oIdx === q.correctAnswerIndex || oIdx === q.correct_answer_index" class="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">Correct</span>
+                  <div :class="[
+                    'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium flex-1 justify-center',
+                    (q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false' || q.correct_answer === 'B' || q.correctAnswer === 'B')
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-slate-50 border-slate-100 text-slate-600'
+                  ]">
+                    <div :class="[
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                      (q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false' || q.correct_answer === 'B' || q.correctAnswer === 'B')
+                        ? 'border-emerald-500 bg-emerald-500'
+                        : 'border-slate-300 bg-white'
+                    ]">
+                      <svg v-if="q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false' || q.correct_answer === 'B' || q.correctAnswer === 'B'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    False
+                  </div>
                 </div>
-              </div>
 
-              <!-- True / False Options -->
-              <div v-else-if="q.type === 'true_false' || q.type === 'true/false'" class="ml-11 flex gap-3">
-                <div :class="[
-                  'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium flex-1 justify-center',
-                  (q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true')
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-slate-50 border-slate-100 text-slate-600'
-                ]">
-                  <div :class="[
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                    (q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true')
-                      ? 'border-emerald-500 bg-emerald-500'
-                      : 'border-slate-300 bg-white'
-                  ]">
-                    <svg v-if="q.correctAnswer === true || q.correctAnswer === 'true' || q.correct_answer === true || q.correct_answer === 'true'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                <!-- Short Answer / Essay hint -->
+                <div v-else-if="q.type === 'short_answer' || q.type === 'essay'" class="ml-11">
+                  <div class="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[12px] text-slate-400 italic">
+                    {{ q.type === 'essay' ? 'Open-ended essay response' : 'Short written answer' }}
+                    <span v-if="q.sampleAnswer || q.sample_answer" class="block mt-1 not-italic text-slate-600 font-medium">Sample: {{ q.sampleAnswer || q.sample_answer }}</span>
                   </div>
-                  True
                 </div>
-                <div :class="[
-                  'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium flex-1 justify-center',
-                  (q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false')
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-slate-50 border-slate-100 text-slate-600'
-                ]">
-                  <div :class="[
-                    'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                    (q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false')
-                      ? 'border-emerald-500 bg-emerald-500'
-                      : 'border-slate-300 bg-white'
-                  ]">
-                    <svg v-if="q.correctAnswer === false || q.correctAnswer === 'false' || q.correct_answer === false || q.correct_answer === 'false'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                  </div>
-                  False
-                </div>
-              </div>
 
-              <!-- Short Answer / Essay hint -->
-              <div v-else-if="q.type === 'short_answer' || q.type === 'essay'" class="ml-11">
-                <div class="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[12px] text-slate-400 italic">
-                  {{ q.type === 'essay' ? 'Open-ended essay response' : 'Short written answer' }}
-                  <span v-if="q.sampleAnswer || q.sample_answer" class="block mt-1 not-italic text-slate-600 font-medium">Sample: {{ q.sampleAnswer || q.sample_answer }}</span>
+                <!-- Fill in the Blank hint -->
+                <div v-else-if="q.type === 'fill_blank'" class="ml-11">
+                  <div class="px-4 py-3 bg-purple-50 border border-purple-100 rounded-xl text-[12px] text-purple-600 font-medium">
+                    ✏️ Student types the missing word/phrase.
+                    <span v-if="q.correct_answer" class="block mt-1 text-emerald-700 font-bold">Correct Answer: {{ q.correct_answer }}</span>
+                  </div>
                 </div>
-              </div>
+
+                <!-- Matching pairs -->
+                <div v-else-if="q.type === 'matching' && q.pairs" class="ml-11 space-y-2">
+                  <div v-for="(pair, pIdx) in q.pairs" :key="pIdx" class="flex items-center gap-3">
+                    <span class="px-3 py-1.5 bg-teal-50 border border-teal-100 rounded-lg text-[12px] font-medium text-teal-800 flex-1">{{ pair.left }}</span>
+                    <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                    <span class="px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg text-[12px] font-medium text-emerald-800 flex-1">{{ pair.right }}</span>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
 
           <!-- Modal Footer -->
           <div class="px-8 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
             <span class="text-[12px] text-slate-500 font-medium">{{ formStore.questions.length }} question{{ formStore.questions.length !== 1 ? 's' : '' }} · {{ formStore.totalMarks }} total marks</span>
-            <button @click="showQuestionsFullscreen = false" class="px-5 py-2 bg-[#5138ed] text-white text-[13px] font-bold rounded-xl hover:bg-indigo-600 transition-colors shadow-sm">Close</button>
+            <div class="flex gap-3">
+              <button @click="showQuestionsFullscreen = false" class="px-5 py-2 bg-[#5138ed] text-white text-[13px] font-bold rounded-xl hover:bg-indigo-600 transition-colors shadow-sm">
+                {{ isEditModeFullscreen ? 'Done Editing' : 'Close' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

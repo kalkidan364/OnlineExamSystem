@@ -14,6 +14,7 @@ class Question extends Model
         'question_bank_id',
         'exam_id',
         'type',
+        'instruction',
         'text',
         'options',
         'correct_answer',

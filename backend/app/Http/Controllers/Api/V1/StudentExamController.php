@@ -136,11 +136,15 @@ class StudentExamController extends Controller
         if ($existingAttempt && $existingAttempt->status === 'in_progress') {
             // Resume existing attempt — return questions again
             $questions = $exam->questions()->get()->map(fn($q) => [
-                'id'      => $q->id,
-                'text'    => $q->text,
-                'type'    => $this->mapQuestionType($q->type),
-                'options' => $q->options ?? [],
-                'marks'   => $q->marks,
+                'id'          => $q->id,
+                'instruction' => $q->instruction,
+                'text'        => $q->text,
+                'type'        => $this->mapQuestionType($q->type),
+                'options'     => $q->type !== 'matching' ? ($q->options ?? []) : [],
+                'pairs'       => $q->type === 'matching' ? collect($q->options ?? [])->map(fn($p) => ['left' => $p['left'] ?? '', 'right' => $p['right'] ?? ''])->values()->toArray() : null,
+                'columnA'     => $q->type === 'matching' ? (($q->options[0]['columnA'] ?? null) ?: 'Column A') : null,
+                'columnB'     => $q->type === 'matching' ? (($q->options[0]['columnB'] ?? null) ?: 'Column B') : null,
+                'marks'       => $q->marks,
             ]);
 
             return response()->json([
@@ -152,6 +156,7 @@ class StudentExamController extends Controller
                     'duration_minutes' => $exam->duration_minutes,
                     'total_marks'     => $exam->total_marks,
                     'started_at'      => $existingAttempt->started_at->toISOString(),
+                    'settings'        => $exam->settings ?? [],
                     'questions'       => $questions,
                 ]
             ]);
@@ -172,11 +177,15 @@ class StudentExamController extends Controller
 
         // Return questions WITHOUT correct_answer
         $questions = $exam->questions()->get()->map(fn($q) => [
-            'id'      => $q->id,
-            'text'    => $q->text,
-            'type'    => $this->mapQuestionType($q->type),
-            'options' => $q->options ?? [],
-            'marks'   => $q->marks,
+            'id'          => $q->id,
+            'instruction' => $q->instruction,
+            'text'        => $q->text,
+            'type'        => $this->mapQuestionType($q->type),
+            'options'     => $q->type !== 'matching' ? ($q->options ?? []) : [],
+            'pairs'       => $q->type === 'matching' ? collect($q->options ?? [])->map(fn($p) => ['left' => $p['left'] ?? '', 'right' => $p['right'] ?? ''])->values()->toArray() : null,
+            'columnA'     => $q->type === 'matching' ? (($q->options[0]['columnA'] ?? null) ?: 'Column A') : null,
+            'columnB'     => $q->type === 'matching' ? (($q->options[0]['columnB'] ?? null) ?: 'Column B') : null,
+            'marks'       => $q->marks,
         ]);
 
         return response()->json([
@@ -188,6 +197,7 @@ class StudentExamController extends Controller
                 'duration_minutes' => $exam->duration_minutes,
                 'total_marks'      => $exam->total_marks,
                 'started_at'       => $attempt->started_at->toISOString(),
+                'settings'         => $exam->settings ?? [],
                 'questions'        => $questions,
             ]
         ], 201);
@@ -339,10 +349,13 @@ class StudentExamController extends Controller
     {
         return match ($type) {
             'multiple_choice' => 'multiple-choice',
-            'true_false'      => 'multiple-choice', // TF is rendered as 2-option MCQ
+            'true_false'      => 'true_false',
+            'fill_blank'      => 'fill_blank',
+            'matching'        => 'matching',
+            'multiple_true_false' => 'multiple_true_false',
             'short_answer'    => 'text',
             'essay'           => 'text',
-            default           => 'text',
+            default           => $type,
         };
     }
 
