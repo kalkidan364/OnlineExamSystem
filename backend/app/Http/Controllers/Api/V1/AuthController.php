@@ -32,6 +32,15 @@ class AuthController extends Controller
         // Revoke old tokens (single-session policy)
         $user->tokens()->delete();
 
+        if ($user->role === 'instructor') {
+            $hasCourses = \App\Models\Course::where('instructor_id', $user->id)->exists();
+            if (!$hasCourses) {
+                throw ValidationException::withMessages([
+                    'email' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
+                ]);
+            }
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

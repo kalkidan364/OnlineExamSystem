@@ -41,8 +41,16 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
       
-      // Redirect to instructor dashboard
-      router.push('/instructor/dashboard')
+      // Redirect based on user role
+      if (user.value.role === 'dept_head') {
+        router.push('/dept-head/dashboard')
+      } else if (user.value.role === 'admin') {
+        router.push('/admin/dashboard')
+      } else if (user.value.role === 'student') {
+        router.push('/student')
+      } else {
+        router.push('/instructor/dashboard')
+      }
       
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {

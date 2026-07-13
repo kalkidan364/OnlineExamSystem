@@ -36,10 +36,27 @@ Route::prefix('v1')->group(function () {
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Current user info
-    Route::get('/user', fn(Request $request) => $request->user());
+    Route::get('/user', fn(Request $request) => $request->user()->load('department'));
 
     // Auth — logout
     Route::post('/logout', [\App\Http\Controllers\Api\V1\AuthController::class, 'logout']);
+
+    // ------------------------------------------------------------------
+    // Super Admin Routes
+    // ------------------------------------------------------------------
+    Route::prefix('admin')->group(function () {
+        Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
+        Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'destroy']);
+        Route::apiResource('courses', \App\Http\Controllers\Api\V1\AdminCourseController::class);
+    });
+
+    // ------------------------------------------------------------------
+    // Department Head Routes
+    // ------------------------------------------------------------------
+    Route::prefix('dept-head')->group(function () {
+        Route::apiResource('instructors', \App\Http\Controllers\Api\V1\DeptHead\InstructorController::class);
+        Route::apiResource('courses', \App\Http\Controllers\Api\V1\DeptHead\CourseController::class);
+    });
 
     // ------------------------------------------------------------------
     // Instructor Routes

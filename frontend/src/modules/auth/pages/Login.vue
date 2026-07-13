@@ -4,8 +4,8 @@ import { useAuthStore } from '../store/authStore'
 
 const authStore = useAuthStore()
 
-const email = ref('kalkidan@gmail.com')
-const password = ref('password')
+const email = ref('admin@wollo.edu.et')
+const password = ref('password123')
 const rememberMe = ref(false)
 const showPassword = ref(false)
 

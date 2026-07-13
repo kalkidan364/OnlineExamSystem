@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import apiClient from '../../../core/api/apiClient'
 
 // ── State ──
 const search = ref('')
@@ -10,25 +11,37 @@ const perPage = 8
 const showAddModal = ref(false)
 const showDeleteModal = ref(false)
 const selectedUser = ref<any>(null)
+const isLoading = ref(false)
 
-// ── Dummy Data ──
-const allUsers = ref([
-  { id: 1,  name: 'Dr. Abebe Kebede',    email: 'abebe@wou.edu.et',       role: 'instructor', course: 'Database Systems',       status: 'active',   joined: 'Jan 12, 2024', avatar: 'AK' },
-  { id: 2,  name: 'Fikirte Girma',       email: 'fikirte@wou.edu.et',     role: 'instructor', course: 'Mathematics',            status: 'active',   joined: 'Feb 03, 2024', avatar: 'FG' },
-  { id: 3,  name: 'Yonas Tadesse',       email: 'yonas@wou.edu.et',       role: 'instructor', course: 'Software Engineering',   status: 'active',   joined: 'Mar 15, 2024', avatar: 'YT' },
-  { id: 4,  name: 'Tigist Haile',        email: 'tigist@wou.edu.et',      role: 'instructor', course: 'Computer Networks',      status: 'inactive', joined: 'Apr 20, 2024', avatar: 'TH' },
-  { id: 5,  name: 'Dawit Mengistu',      email: 'dawit@student.wou.et',   role: 'student',    course: 'Computer Science Y3',   status: 'active',   joined: 'Sep 01, 2023', avatar: 'DM' },
-  { id: 6,  name: 'Selam Bekele',        email: 'selam@student.wou.et',   role: 'student',    course: 'Information Systems Y2',status: 'active',   joined: 'Sep 01, 2023', avatar: 'SB' },
-  { id: 7,  name: 'Berhane Tesfaye',     email: 'berhane@student.wou.et', role: 'student',    course: 'Software Eng. Y4',      status: 'active',   joined: 'Sep 01, 2022', avatar: 'BT' },
-  { id: 8,  name: 'Hana Wolde',          email: 'hana@student.wou.et',    role: 'student',    course: 'Computer Science Y1',   status: 'suspended',joined: 'Sep 01, 2024', avatar: 'HW' },
-  { id: 9,  name: 'Mekdes Alemu',        email: 'mekdes@student.wou.et',  role: 'student',    course: 'Mathematics Y2',        status: 'active',   joined: 'Sep 01, 2023', avatar: 'MA' },
-  { id: 10, name: 'Robel Girma',         email: 'robel@student.wou.et',   role: 'student',    course: 'Physics Y3',            status: 'active',   joined: 'Sep 01, 2022', avatar: 'RG' },
-  { id: 11, name: 'Kidist Hailu',        email: 'kidist@student.wou.et',  role: 'student',    course: 'Computer Science Y2',   status: 'active',   joined: 'Sep 01, 2023', avatar: 'KH' },
-  { id: 12, name: 'Tewodros Abay',       email: 'tewodros@wou.edu.et',    role: 'instructor', course: 'Data Structures',        status: 'active',   joined: 'Jun 10, 2024', avatar: 'TA' },
-])
+const allUsers = ref<any[]>([])
+const allDepartments = ref<any[]>([])
 
 // ── New User Form ──
-const newUser = ref({ name: '', email: '', role: 'instructor', course: '', password: '' })
+const newUser = ref({ name: '', email: '', role: 'student', department_id: '', password: '' })
+
+// ── Fetch Users ──
+const fetchUsers = async () => {
+  try {
+    const res = await apiClient.get('/admin/users')
+    allUsers.value = (res.data.data || []).map((u: any) => ({
+      ...u,
+      avatar: u.name ? u.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
+      status: 'active',
+      joined: new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      departmentName: u.department?.name || '—',
+    }))
+  } catch (err) { console.error('Failed to fetch users:', err) }
+}
+
+// ── Fetch Departments ──
+const fetchDepartments = async () => {
+  try {
+    const res = await apiClient.get('/admin/departments')
+    allDepartments.value = res.data.data || []
+  } catch (err) { console.error('Failed to fetch departments:', err) }
+}
+
+onMounted(async () => { await Promise.all([fetchUsers(), fetchDepartments()]) })
 
 // ── Computed ──
 const filtered = computed(() => {
@@ -41,7 +54,7 @@ const filtered = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.ceil(filtered.value.length / perPage))
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginated  = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
 
 const stats = computed(() => ({
@@ -56,6 +69,7 @@ const roleColor = (role: string) => ({
   instructor: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
   student:    'bg-sky-50 text-sky-700 border border-sky-200',
   admin:      'bg-rose-50 text-rose-700 border border-rose-200',
+  dept_head:  'bg-violet-50 text-violet-700 border border-violet-200',
 }[role] || 'bg-slate-100 text-slate-600')
 
 const statusColor = (status: string) => ({
@@ -76,21 +90,44 @@ const avatarColor = (id: number) => {
 }
 
 // ── Actions ──
-const openAdd = () => { newUser.value = { name: '', email: '', role: 'instructor', course: '', password: '' }; showAddModal.value = true }
-const addUser = () => {
-  if (!newUser.value.name || !newUser.value.email) return
-  allUsers.value.push({
-    id: Date.now(), name: newUser.value.name, email: newUser.value.email,
-    role: newUser.value.role, course: newUser.value.course,
-    status: 'active', joined: new Date().toLocaleDateString('en-US', { month:'short', day:'2-digit', year:'numeric' }),
-    avatar: newUser.value.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)
-  })
-  showAddModal.value = false
+const openAdd = () => { newUser.value = { name: '', email: '', role: 'student', department_id: '', password: '' }; showAddModal.value = true }
+
+const addUser = async () => {
+  if (!newUser.value.name || !newUser.value.email || !newUser.value.password) return
+  isLoading.value = true
+  try {
+    await apiClient.post('/admin/users', {
+      name: newUser.value.name,
+      email: newUser.value.email,
+      role: newUser.value.role,
+      department_id: newUser.value.department_id || null,
+      password: newUser.value.password,
+    })
+    await fetchUsers()
+    showAddModal.value = false
+  } catch (err: any) {
+    let msg = 'Failed to create user.'
+    if (err.response?.data) {
+      msg = err.response.data.message || msg
+      if (err.response.data.errors) {
+        msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
+      }
+    }
+    alert(msg)
+  } finally { isLoading.value = false }
 }
+
 const confirmDelete = (user: any) => { selectedUser.value = user; showDeleteModal.value = true }
-const deleteUser = () => {
-  allUsers.value = allUsers.value.filter(u => u.id !== selectedUser.value.id)
-  showDeleteModal.value = false
+const deleteUser = async () => {
+  if (!selectedUser.value) return
+  isLoading.value = true
+  try {
+    await apiClient.delete(`/admin/users/${selectedUser.value.id}`)
+    await fetchUsers()
+    showDeleteModal.value = false
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to delete user.')
+  } finally { isLoading.value = false }
 }
 const toggleStatus = (user: any) => {
   user.status = user.status === 'active' ? 'inactive' : 'active'
@@ -173,7 +210,7 @@ const toggleStatus = (user: any) => {
           <tr class="bg-slate-50/60 border-b border-slate-100">
             <th class="text-left px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">User</th>
             <th class="text-left px-4 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Role</th>
-            <th class="text-left px-4 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course / Program</th>
+            <th class="text-left px-4 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Department</th>
             <th class="text-left px-4 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
             <th class="text-left px-4 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Joined</th>
             <th class="text-right px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
@@ -195,9 +232,9 @@ const toggleStatus = (user: any) => {
             <td class="px-4 py-4">
               <span :class="[roleColor(user.role), 'text-[11px] font-bold px-2.5 py-1 rounded-lg capitalize']">{{ user.role }}</span>
             </td>
-            <!-- Course -->
+            <!-- Department -->
             <td class="px-4 py-4">
-              <p class="text-[13px] text-slate-600 font-medium">{{ user.course || '—' }}</p>
+              <p class="text-[13px] text-slate-600 font-medium">{{ user.departmentName }}</p>
             </td>
             <!-- Status -->
             <td class="px-4 py-4">
@@ -290,25 +327,30 @@ const toggleStatus = (user: any) => {
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Role <span class="text-rose-500">*</span></label>
                 <select v-model="newUser.role" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white">
-                  <option value="instructor">Instructor</option>
                   <option value="student">Student</option>
+                  <option value="instructor">Instructor</option>
                 </select>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Course / Program</label>
-                <input v-model="newUser.course" type="text" placeholder="e.g. Database Systems" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+                <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Department</label>
+                <select v-model="newUser.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white">
+                  <option value="">Select Department</option>
+                  <option v-for="dept in allDepartments" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
+                </select>
               </div>
             </div>
             <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Temporary Password <span class="text-rose-500">*</span></label>
-              <input v-model="newUser.password" type="password" placeholder="Set a temporary password" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <p class="text-[11px] text-slate-400 mt-1.5 font-medium">The user will be prompted to change this on first login.</p>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Password <span class="text-rose-500">*</span></label>
+              <input v-model="newUser.password" type="password" placeholder="Min 8 characters" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+              <p class="text-[11px] text-slate-400 mt-1.5 font-medium">The user will log in with this email and password.</p>
             </div>
           </div>
           <!-- Modal Footer -->
           <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
             <button @click="showAddModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>
-            <button @click="addUser" class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-200 transition-all">Create User</button>
+            <button @click="addUser" :disabled="isLoading" class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-200 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+              {{ isLoading ? 'Creating...' : 'Create User' }}
+            </button>
           </div>
         </div>
       </div>
@@ -329,7 +371,9 @@ const toggleStatus = (user: any) => {
           </div>
           <div class="flex items-center gap-3 px-6 pb-6">
             <button @click="showDeleteModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
-            <button @click="deleteUser" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors">Delete</button>
+            <button @click="deleteUser" :disabled="isLoading" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-70">
+              {{ isLoading ? 'Deleting...' : 'Delete' }}
+            </button>
           </div>
         </div>
       </div>

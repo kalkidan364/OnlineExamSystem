@@ -1,34 +1,73 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import apiClient from '../../../core/api/apiClient'
 
 const search = ref('')
 const deptFilter = ref('all')
 const showAddModal = ref(false)
 const showDeleteModal = ref(false)
+const showAssignModal = ref(false)
 const selectedCourse = ref<any>(null)
+const courseToAssign = ref<any>(null)
+const assignInstructorId = ref('')
+const isLoading = ref(false)
 
-const allCourses = ref([
-  { id: 1,  name: 'Database Systems',       code: 'CS-301', dept: 'Computer Science',    instructor: 'Dr. Abebe Kebede',    students: 142, exams: 18, status: 'active' },
-  { id: 2,  name: 'Calculus & Analysis',    code: 'MT-201', dept: 'Mathematics',         instructor: 'Dr. Fikirte Girma',   students: 98,  exams: 12, status: 'active' },
-  { id: 3,  name: 'Software Engineering',   code: 'CS-401', dept: 'Computer Science',    instructor: 'Prof. Yonas Tadesse', students: 167, exams: 24, status: 'active' },
-  { id: 4,  name: 'Computer Networks',      code: 'EN-302', dept: 'Engineering',         instructor: 'Dr. Tigist Haile',    students: 78,  exams: 9,  status: 'inactive' },
-  { id: 5,  name: 'Data Structures',        code: 'IS-201', dept: 'Information Systems', instructor: 'Prof. Dawit Solomon', students: 110, exams: 15, status: 'active' },
-  { id: 6,  name: 'Algorithms',             code: 'CS-202', dept: 'Computer Science',    instructor: 'Dr. Meron Bekele',    students: 134, exams: 21, status: 'active' },
-  { id: 7,  name: 'Applied Physics',        code: 'PH-101', dept: 'Physics',             instructor: 'Dr. Tewodros Abay',   students: 65,  exams: 7,  status: 'active' },
-  { id: 8,  name: 'Linear Algebra',         code: 'MT-301', dept: 'Mathematics',         instructor: 'Prof. Sara Teferra',  students: 87,  exams: 11, status: 'active' },
-  { id: 9,  name: 'Digital Electronics',    code: 'EN-201', dept: 'Engineering',         instructor: 'Dr. Berhane Alemu',   students: 95,  exams: 13, status: 'inactive' },
-  { id: 10, name: 'Web Development',        code: 'IS-302', dept: 'Information Systems', instructor: 'Prof. Rahel Tesfaye', students: 152, exams: 19, status: 'active' },
-])
+const allCourses = ref<any[]>([])
+const allDepartments = ref<any[]>([])
+const allInstructors = ref<any[]>([])
 
-const newCourse = ref({ name: '', code: '', dept: '', instructor: '' })
-const departments = ['Computer Science', 'Mathematics', 'Physics', 'Engineering', 'Information Systems']
+const newCourse = ref({ name: '', code: '', department_id: '', instructor_id: '' })
+
+const fetchCourses = async () => {
+  try {
+    const res = await apiClient.get('/admin/courses')
+    allCourses.value = (res.data.data || []).map((c: any) => ({
+      ...c,
+      name: c.title,
+      dept: c.department?.name || '—',
+      departmentName: c.department?.name || '—',
+      instructor: c.instructor?.name || 'Unassigned',
+      students: 0, // Not available in current schema directly
+      exams: 0,
+      status: c.status || 'active'
+    }))
+  } catch (err) { console.error('Failed to fetch courses:', err) }
+}
+
+const fetchDepartments = async () => {
+  try {
+    const res = await apiClient.get('/admin/departments')
+    allDepartments.value = res.data.data || []
+  } catch (err) { console.error('Failed to fetch departments:', err) }
+}
+
+const fetchInstructors = async () => {
+  try {
+    const res = await apiClient.get('/admin/users?role=instructor')
+    allInstructors.value = res.data.data || []
+  } catch (err) { console.error('Failed to fetch instructors:', err) }
+}
+
+onMounted(async () => {
+  await Promise.all([fetchCourses(), fetchDepartments(), fetchInstructors()])
+})
+
+const availableInstructors = computed(() => {
+  if (!newCourse.value.department_id) return []
+  return allInstructors.value.filter(i => i.department_id === newCourse.value.department_id)
+})
+
+const instructorsForAssign = computed(() => {
+  if (!courseToAssign.value?.department_id) return []
+  return allInstructors.value.filter(i => i.department_id === courseToAssign.value.department_id)
+})
 
 const filtered = computed(() =>
   allCourses.value.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(search.value.toLowerCase()) ||
-                        c.code.toLowerCase().includes(search.value.toLowerCase()) ||
-                        c.instructor.toLowerCase().includes(search.value.toLowerCase())
-    const matchDept = deptFilter.value === 'all' || c.dept === deptFilter.value
+    const matchSearch = (c.name && c.name.toLowerCase().includes(search.value.toLowerCase())) ||
+                        (c.code && c.code.toLowerCase().includes(search.value.toLowerCase())) ||
+                        (c.instructor && c.instructor.toLowerCase().includes(search.value.toLowerCase()))
+    const matchDept = deptFilter.value === 'all' || c.departmentName === deptFilter.value
     return matchSearch && matchDept
   })
 )
@@ -36,8 +75,8 @@ const filtered = computed(() =>
 const stats = computed(() => ({
   total:    allCourses.value.length,
   active:   allCourses.value.filter(c => c.status === 'active').length,
-  students: allCourses.value.reduce((a, c) => a + c.students, 0),
-  exams:    allCourses.value.reduce((a, c) => a + c.exams, 0),
+  students: allCourses.value.reduce((a, c) => a + (c.students || 0), 0),
+  exams:    allCourses.value.reduce((a, c) => a + (c.exams || 0), 0),
 }))
 
 const deptColor = (dept: string) => {
@@ -49,21 +88,87 @@ const deptColor = (dept: string) => {
   return map[dept] || 'bg-slate-100 text-slate-600'
 }
 
-const addCourse = () => {
-  if (!newCourse.value.name || !newCourse.value.code) return
-  allCourses.value.push({ id: Date.now(), ...newCourse.value, students: 0, exams: 0, status: 'active' })
-  showAddModal.value = false
+const addCourse = async () => {
+  if (!newCourse.value.name || !newCourse.value.code || !newCourse.value.department_id) return
+  isLoading.value = true
+  try {
+    await apiClient.post('/admin/courses', {
+      title: newCourse.value.name,
+      code: newCourse.value.code,
+      credits: 3, // Defaulting to 3 for now
+      department_id: newCourse.value.department_id,
+      instructor_id: newCourse.value.instructor_id || null,
+    })
+    await fetchCourses()
+    showAddModal.value = false
+  } catch (err: any) {
+    let msg = 'Failed to create course.'
+    if (err.response?.data?.message) {
+      msg = err.response.data.message
+      if (err.response.data.errors) {
+        msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
+      }
+    }
+    alert(msg)
+  } finally {
+    isLoading.value = false
+  }
 }
+
 const confirmDelete = (c: any) => { selectedCourse.value = c; showDeleteModal.value = true }
-const deleteCourse  = () => { allCourses.value = allCourses.value.filter(c => c.id !== selectedCourse.value.id); showDeleteModal.value = false }
-const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive' : 'active' }
+const deleteCourse  = async () => {
+  if (!selectedCourse.value) return
+  isLoading.value = true
+  try {
+    await apiClient.delete(`/admin/courses/${selectedCourse.value.id}`)
+    await fetchCourses()
+    showDeleteModal.value = false
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to delete course.')
+  } finally {
+    isLoading.value = false
+  }
+}
+const toggleStatus  = async (c: any) => {
+  const newStatus = c.status === 'active' ? 'inactive' : 'active'
+  try {
+    await apiClient.put(`/admin/courses/${c.id}`, { status: newStatus })
+    c.status = newStatus
+  } catch (err) {
+    alert('Failed to update course status.')
+  }
+}
+
+const openAssign = (course: any) => {
+  courseToAssign.value = course
+  // if course has an instructor, it should be course.instructor_id. Wait, `course` object might not have `instructor_id` mapped correctly.
+  // Wait, in fetchCourses we mapped `instructor: c.instructor?.name`, but we didn't keep instructor_id.
+  assignInstructorId.value = course.instructor_id || ''
+  showAssignModal.value = true
+}
+
+const assignInstructor = async () => {
+  if (!courseToAssign.value) return
+  isLoading.value = true
+  try {
+    await apiClient.put(`/admin/courses/${courseToAssign.value.id}`, {
+      instructor_id: assignInstructorId.value || null
+    })
+    await fetchCourses()
+    showAssignModal.value = false
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to assign instructor.')
+  } finally {
+    isLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div><h1 class="text-[22px] font-bold text-slate-800">Course Management</h1><p class="text-[13px] text-slate-500 mt-1">Manage courses, departments, and instructor assignments.</p></div>
-      <button @click="showAddModal = true; newCourse = {name:'',code:'',dept:'',instructor:''}" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-sm shadow-indigo-200 transition-all">
+      <button @click="showAddModal = true; newCourse = {name:'',code:'',department_id:'',instructor_id:''}" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-sm shadow-indigo-200 transition-all">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
         Add Course
       </button>
@@ -93,7 +198,7 @@ const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive
         <div class="flex items-center gap-3">
           <select v-model="deptFilter" class="text-[13px] border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#5138ed] text-slate-600 bg-white">
             <option value="all">All Departments</option>
-            <option v-for="d in departments" :key="d" :value="d">{{ d }}</option>
+            <option v-for="d in allDepartments" :key="d.id" :value="d.name">{{ d.name }}</option>
           </select>
           <span class="text-[12px] font-semibold text-slate-400">{{ filtered.length }} courses</span>
         </div>
@@ -109,7 +214,7 @@ const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive
             <span :class="[course.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400', 'text-[10px] font-bold px-2 py-0.5 rounded-lg capitalize shrink-0 ml-2']">{{ course.status }}</span>
           </div>
           <div class="space-y-2 mb-4">
-            <div class="flex items-center gap-2"><span :class="[deptColor(course.dept), 'text-[11px] font-bold px-2.5 py-1 rounded-lg']">{{ course.dept }}</span></div>
+            <div class="flex items-center gap-2"><span :class="[deptColor(course.departmentName), 'text-[11px] font-bold px-2.5 py-1 rounded-lg']">{{ course.departmentName }}</span></div>
             <div class="flex items-center gap-2 text-[12px] text-slate-500"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><span class="font-semibold">{{ course.instructor }}</span></div>
           </div>
           <div class="grid grid-cols-2 gap-2 mb-4">
@@ -118,7 +223,7 @@ const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive
           </div>
           <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button @click="toggleStatus(course)" :class="[course.status === 'active' ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100', 'flex-1 py-2 text-[11px] font-bold rounded-lg transition-colors']">{{ course.status === 'active' ? 'Deactivate' : 'Activate' }}</button>
-            <button class="flex-1 py-2 text-[11px] font-bold text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">Edit</button>
+            <button @click="openAssign(course)" class="flex-1 py-2 text-[11px] font-bold text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">Assign</button>
             <button @click="confirmDelete(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
@@ -144,8 +249,20 @@ const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Course Name <span class="text-rose-500">*</span></label><input v-model="newCourse.name" type="text" placeholder="e.g. Database Systems" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"></div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Course Code <span class="text-rose-500">*</span></label><input v-model="newCourse.code" type="text" placeholder="e.g. CS-301" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-mono focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"></div>
             </div>
-            <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Department</label><select v-model="newCourse.dept" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] bg-white"><option value="" disabled>Select department</option><option v-for="d in departments" :key="d" :value="d">{{ d }}</option></select></div>
-            <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Assigned Instructor</label><input v-model="newCourse.instructor" type="text" placeholder="e.g. Dr. Abebe Kebede" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]"></div>
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Assign to Department <span class="text-rose-500">*</span></label>
+              <select v-model="newCourse.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white">
+                <option value="" disabled>Select department</option>
+                <option v-for="d in allDepartments" :key="d.id" :value="d.id">{{ d.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Assigned Instructor</label>
+              <select v-model="newCourse.instructor_id" :disabled="!newCourse.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white disabled:bg-slate-50 disabled:text-slate-400">
+                <option value="" disabled>{{ newCourse.department_id ? 'Select instructor' : 'Select a department first' }}</option>
+                <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
+              </select>
+            </div>
           </div>
           <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
             <button @click="showAddModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>
@@ -167,6 +284,26 @@ const toggleStatus  = (c: any) => { c.status = c.status === 'active' ? 'inactive
           <div class="flex items-center gap-3 px-6 pb-6">
             <button @click="showDeleteModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
             <button @click="deleteCourse" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors">Delete</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Assign Modal -->
+    <Teleport to="body">
+      <div v-if="showAssignModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+          <div class="p-6">
+            <h3 class="text-[16px] font-bold text-slate-800 mb-2">Assign Instructor</h3>
+            <p class="text-[13px] text-slate-500 mb-4">Select an instructor for <span class="font-bold text-slate-700">{{ courseToAssign?.name }}</span>.</p>
+            <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white">
+              <option value="">Unassigned</option>
+              <option v-for="inst in instructorsForAssign" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3 px-6 pb-6">
+            <button @click="showAssignModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+            <button @click="assignInstructor" :disabled="isLoading" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-600 rounded-xl transition-colors disabled:opacity-70">Save</button>
           </div>
         </div>
       </div>

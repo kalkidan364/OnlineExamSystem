@@ -17,10 +17,15 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'id_no',
         'password',
         'role',
+        'department_id',
         'course_code',  // The ONE course this instructor teaches
         'course_name',
+        'academic_year',
+        'year_level',
+        'semester',
     ];
 
     protected $hidden = [
@@ -62,5 +67,10 @@ class User extends Authenticatable
     public function isStudent(): bool
     {
         return $this->role === 'student';
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
     }
 }
