@@ -42,24 +42,49 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/CreateQuestion.vue')
       },
       {
+        path: 'question-banks/:id/question/:questionId',
+        name: 'QuestionDetails',
+        component: () => import('../modules/instructor/pages/QuestionDetails.vue')
+      },
+      {
         path: 'exams',
         name: 'Exams',
         component: () => import('../modules/instructor/pages/Exams.vue')
       },
       {
-        path: 'schedule',
-        name: 'ScheduleExams',
-        component: () => import('../modules/instructor/pages/ScheduleExams.vue')
+        path: 'exams',
+        name: 'Exams',
+        component: () => import('../modules/instructor/pages/Exams.vue')
       },
       {
         path: 'students',
-        name: 'StudentManagement',
+        name: 'Students',
         component: () => import('../modules/instructor/pages/Students.vue')
+      },
+      {
+        path: 'students/:studentId',
+        name: 'StudentProfile',
+        component: () => import('../modules/instructor/pages/StudentProfile.vue')
+      },
+      {
+        path: 'students/:studentId/results',
+        name: 'StudentExamResults',
+        component: () => import('../modules/instructor/pages/StudentExamResults.vue')
       },
       {
         path: 'results',
         name: 'Results',
         component: () => import('../modules/instructor/pages/Results.vue')
+      },
+      {
+        path: 'results/:examId',
+        name: 'ExamResultDetail',
+        component: () => import('../modules/instructor/pages/ExamResultDetail.vue')
+      },
+      {
+        path: 'results/:examId/student/:studentId',
+        name: 'StudentResultDetail',
+        component: () => import('../modules/instructor/pages/StudentResultDetail.vue')
       },
       {
         path: 'reports',
@@ -105,11 +130,7 @@ export const routes: Array<RouteRecordRaw> = [
         name: 'AdminDashboard',
         component: () => import('../modules/admin/pages/Dashboard.vue')
       },
-      {
-        path: 'users',
-        name: 'AdminUsers',
-        component: () => import('../modules/admin/pages/Users.vue')
-      },
+
       {
         path: 'instructors',
         name: 'AdminInstructors',
@@ -186,6 +207,11 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'exams',
         name: 'DeptHeadExams',
         component: () => import('../modules/department-head/pages/Exams.vue')
+      },
+      {
+        path: 'schedule',
+        name: 'DeptHeadScheduleExams',
+        component: () => import('../modules/department-head/pages/ExamSchedule.vue')
       },
       {
         path: 'reports',

@@ -4,36 +4,53 @@ import { useInstructorQbStore } from '../store/instructorQbStore'
 
 import QBStatCards from '../components/question-bank/QBStatCards.vue'
 import QBTable from '../components/question-bank/QBTable.vue'
-import QBOverviewChart from '../components/question-bank/QBOverviewChart.vue'
-import QBQuickActions from '../components/question-bank/QBQuickActions.vue'
 import CreateBankModal from '../components/question-bank/CreateBankModal.vue'
 
 const qbStore = useInstructorQbStore()
 const showCreateModal = ref(false)
+const bankToEdit = ref<{ id: number, title: string, description: string } | null>(null)
 
 onMounted(() => {
   qbStore.fetchQuestionBanks()
 })
 
-const handleCreateBank = async (payload: { title: string, description: string }) => {
-  await qbStore.createQuestionBank(payload)
+const openCreateModal = () => {
+  bankToEdit.value = null
+  showCreateModal.value = true
+}
+
+const openEditModal = (bank: any) => {
+  bankToEdit.value = {
+    id: bank.id,
+    title: bank.title,
+    description: bank.description || ''
+  }
+  showCreateModal.value = true
+}
+
+const handleSubmitBank = async (payload: { id?: number, title: string, description: string }) => {
+  if (payload.id) {
+    await qbStore.updateQuestionBank(payload.id, payload)
+  } else {
+    await qbStore.createQuestionBank(payload)
+  }
 }
 </script>
 
 <template>
   <div>
-    <div class="max-w-[1400px] mx-auto flex flex-col xl:flex-row gap-6">
+    <div class="max-w-[1200px] mx-auto">
       
-      <!-- Main Left Column -->
-      <div class="flex-1 min-w-0 space-y-6">
+      <!-- Main Column -->
+      <div class="space-y-6">
         
         <!-- Page Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <div>
-            <h1 class="text-2xl font-bold text-slate-800">Manage your question banks</h1>
-            <p class="text-[14px] text-slate-500 mt-1">Create, organize and manage questions for your exams.</p>
+            <h1 class="text-2xl font-bold text-slate-800">Question Banks</h1>
+            <p class="text-[14px] text-slate-500 mt-1">Create and manage question banks for your courses.</p>
           </div>
-          <button @click="showCreateModal = true" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-colors w-fit">
+          <button @click="openCreateModal" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-colors w-fit">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
             Create Question Bank
           </button>
@@ -64,18 +81,7 @@ const handleCreateBank = async (payload: { title: string, description: string })
         <QBStatCards />
 
         <!-- Main Table Area -->
-        <QBTable />
-
-      </div>
-
-      <!-- Right Sidebar Column -->
-      <div class="w-full xl:w-[320px] space-y-6">
-        
-        <!-- Overview Chart -->
-        <QBOverviewChart :stats="qbStore.stats" />
-        
-        <!-- Quick Actions -->
-        <QBQuickActions @create="showCreateModal = true" />
+        <QBTable @edit="openEditModal" />
 
       </div>
 
@@ -83,9 +89,10 @@ const handleCreateBank = async (payload: { title: string, description: string })
 
     <!-- Create Bank Modal -->
     <CreateBankModal 
-      :show="showCreateModal" 
+      :show="showCreateModal"
+      :initial-data="bankToEdit"
       @close="showCreateModal = false" 
-      @submit="handleCreateBank" 
+      @submit="handleSubmitBank" 
     />
   </div>
 </template>

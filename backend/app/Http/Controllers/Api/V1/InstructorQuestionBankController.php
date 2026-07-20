@@ -47,7 +47,7 @@ class InstructorQuestionBankController extends Controller
                     'title'            => $bank->title,
                     'description'      => $bank->description,
                     'course_code'      => $bank->course_code,
-                    'course_name'      => $bank->course_name,
+                    'course_name'      => $instructor->course_name,
                     'status'           => 'Active', // Mocking status since there isn't one on the model currently
                     'total_questions'  => $bank->questions_count,
                     'types'            => [
@@ -146,14 +146,27 @@ class InstructorQuestionBankController extends Controller
         $bank = QuestionBank::create([
             'user_id'     => $instructor->id,
             'course_code' => $instructor->course_code,
-            'course_name' => $instructor->course_name,
             'title'       => $validated['title'],
             'description' => $validated['description'],
         ]);
 
         return response()->json([
             'message' => 'Question bank created successfully',
-            'data'    => $bank
+            'data'    => [
+                'id'               => $bank->id,
+                'title'            => $bank->title,
+                'description'      => $bank->description,
+                'course_code'      => $bank->course_code,
+                'course_name'      => $instructor->course_name,
+                'status'           => 'Active',
+                'total_questions'  => 0,
+                'types'            => [
+                    'mcq'   => 0,
+                    'sa'    => 0,
+                    'essay' => 0,
+                ],
+                'updated_at'       => $bank->updated_at->toISOString(),
+            ]
         ], 201);
     }
 

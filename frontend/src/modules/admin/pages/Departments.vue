@@ -5,14 +5,14 @@ import apiClient from '../../../core/api/apiClient'
 
 const search = ref('')
 const statusFilter = ref('all')
-const facultyFilter = ref('all')
+const headFilter = ref('all')
 const sortBy = ref('name')
 const currentPage = ref(1)
 const perPage = 8
 const showAddForm = ref(false)
 const showDeleteModal = ref(false)
 const showEditModal = ref(false)
-const editData = ref({ id: null as number|null, name: '', code: '', established: '' })
+const editData = ref({ id: null as number|null, name: '', code: '', established: '', college: '', headOfDepartment: '', email: '', phone: '', officeLocation: '' })
 const selectedDept = ref<any>(null)
 const isLoading = ref(false)
 
@@ -59,6 +59,7 @@ const newDeptForm = ref({
   code: '',
   faculty: '',
   college: '',
+  year: '',
   programLevel: '',
   departmentType: '',
   headOfDepartment: '',
@@ -73,9 +74,6 @@ const newDeptForm = ref({
   mission: '',
 })
 
-const descriptionCharCount = computed(() => newDeptForm.value.description.length)
-const visionCharCount = computed(() => newDeptForm.value.vision.length)
-const missionCharCount = computed(() => newDeptForm.value.mission.length)
 
 const resetAddForm = () => {
   newDeptForm.value = {
@@ -83,6 +81,7 @@ const resetAddForm = () => {
     code: '',
     faculty: '',
     college: '',
+    year: '',
     programLevel: '',
     departmentType: '',
     headOfDepartment: '',
@@ -142,8 +141,8 @@ const fetchDepartments = async () => {
 }
 fetchDepartments()
 
-const faculties = computed(() => {
-  const set = new Set(allDepts.value.map(d => d.faculty))
+const allHeads = computed(() => {
+  const set = new Set(allDepts.value.map(d => d.head).filter(h => h && h !== 'N/A'))
   return Array.from(set)
 })
 
@@ -153,8 +152,8 @@ const filtered = computed(() =>
                         d.head.toLowerCase().includes(search.value.toLowerCase()) ||
                         d.code.toLowerCase().includes(search.value.toLowerCase())
     const matchStatus = statusFilter.value === 'all' || d.status === statusFilter.value
-    const matchFaculty = facultyFilter.value === 'all' || d.faculty === facultyFilter.value
-    return matchSearch && matchStatus && matchFaculty
+    const matchHead = headFilter.value === 'all' || d.head === headFilter.value
+    return matchSearch && matchStatus && matchHead
   }).sort((a: any, b: any) => {
     if (sortBy.value === 'name') return a.name.localeCompare(b.name)
     if (sortBy.value === 'students') return b.students - a.students
@@ -212,7 +211,7 @@ const saveDepartment = async () => {
 }
 
 const openEditModal = (d: any) => {
-  editData.value = { id: d.id, name: d.name, code: d.code, established: d.established === 'N/A' ? '' : d.established }
+  editData.value = { id: d.id, name: d.name, code: d.code, established: d.established === 'N/A' ? '' : d.established, college: d.college || '', headOfDepartment: d.headOfDepartment || d.head || '', email: d.email || '', phone: d.phone || '', officeLocation: d.officeLocation || '' }
   showEditModal.value = true
 }
 
@@ -223,7 +222,12 @@ const updateDept = async () => {
     await apiClient.put(`/admin/departments/${editData.value.id}`, {
       name: editData.value.name,
       code: editData.value.code,
-      established: editData.value.established
+      established: editData.value.established,
+      college: editData.value.college,
+      headOfDepartment: editData.value.headOfDepartment,
+      email: editData.value.email,
+      phone: editData.value.phone,
+      officeLocation: editData.value.officeLocation
     })
     await fetchDepartments()
     showEditModal.value = false
@@ -255,44 +259,7 @@ const deleteDept = async () => {
 }
 
 
-// File upload drag & drop
-const isDragging = ref(false)
-const logoFile = ref<File | null>(null)
-const logoPreview = ref('')
 
-const handleDragOver = (e: DragEvent) => {
-  e.preventDefault()
-  isDragging.value = true
-}
-const handleDragLeave = () => {
-  isDragging.value = false
-}
-const handleDrop = (e: DragEvent) => {
-  e.preventDefault()
-  isDragging.value = false
-  const files = e.dataTransfer?.files
-  if (files && files.length > 0) {
-    processFile(files[0])
-  }
-}
-const handleFileSelect = (e: Event) => {
-  const input = e.target as HTMLInputElement
-  if (input.files && input.files.length > 0) {
-    processFile(input.files[0])
-  }
-}
-const processFile = (file: File) => {
-  if (file.size > 2 * 1024 * 1024) {
-    alert('File size must be less than 2MB')
-    return
-  }
-  logoFile.value = file
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    logoPreview.value = e.target?.result as string
-  }
-  reader.readAsDataURL(file)
-}
 </script>
 
 <template>
@@ -715,7 +682,7 @@ const processFile = (file: File) => {
         </div>
 
         <div class="space-y-6">
-          <!-- Row 1: Name, Code, Faculty -->
+          <!-- Row 1: Name, Code, College -->
           <div class="grid grid-cols-3 gap-6">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Name <span class="text-rose-500">*</span></label>
@@ -725,25 +692,6 @@ const processFile = (file: File) => {
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Code <span class="text-rose-500">*</span></label>
               <input v-model="newDeptForm.code" type="text" placeholder="e.g., CS" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 font-mono focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
             </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Faculty <span class="text-rose-500">*</span></label>
-              <div class="relative">
-                <select v-model="newDeptForm.faculty" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="" disabled>Select faculty</option>
-                  <option value="Computing & Informatics">Computing & Informatics</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Natural Sciences">Natural Sciences</option>
-                  <option value="Social Sciences">Social Sciences</option>
-                  <option value="Business & Economics">Business & Economics</option>
-                  <option value="Health Sciences">Health Sciences</option>
-                </select>
-                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
-          </div>
-
-          <!-- Row 2: College/School, Program Level, Department Type -->
-          <div class="grid grid-cols-3 gap-6">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">College/School <span class="text-rose-500">*</span></label>
               <div class="relative">
@@ -759,25 +707,9 @@ const processFile = (file: File) => {
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
             </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Program Level</label>
-              <input v-model="newDeptForm.programLevel" type="text" placeholder="Select program level" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Type</label>
-              <div class="relative">
-                <select v-model="newDeptForm.departmentType" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="" disabled>Select department type</option>
-                  <option value="Academic">Academic</option>
-                  <option value="Research">Research</option>
-                  <option value="Service">Service</option>
-                </select>
-                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
           </div>
 
-          <!-- Row 3: Head, Email, Phone -->
+          <!-- Row 2: Head, Email, Phone -->
           <div class="grid grid-cols-3 gap-6">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Head of Department</label>
@@ -802,97 +734,24 @@ const processFile = (file: File) => {
             </div>
           </div>
 
-          <!-- Row 4: Office Location, Description -->
-          <div class="grid grid-cols-[1fr_2fr] gap-6">
+          <!-- Row 3: Office Location & Year -->
+          <div class="grid grid-cols-2 gap-6">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Office Location</label>
               <input v-model="newDeptForm.officeLocation" type="text" placeholder="e.g., Block C, Room 204" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
             </div>
             <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Description</label>
+              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Year</label>
               <div class="relative">
-                <textarea v-model="newDeptForm.description" maxlength="500" rows="3" placeholder="Enter department description..." class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow resize-y"></textarea>
-                <span class="absolute bottom-2 right-3 text-[11px] text-slate-400">{{ descriptionCharCount }} / 500</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Additional Information Section -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
-        <div class="flex items-center gap-3 mb-8">
-          <div class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-          </div>
-          <h2 class="text-[16px] font-bold text-slate-800">Additional Information</h2>
-        </div>
-
-        <div class="space-y-6">
-          <!-- Row 1: Established Date, Status, Display Order -->
-          <div class="grid grid-cols-3 gap-6">
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Established Date</label>
-              <div class="relative">
-                <input v-model="newDeptForm.establishedDate" type="date" placeholder="Select date" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-              </div>
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Status <span class="text-rose-500">*</span></label>
-              <div class="relative">
-                <select v-model="newDeptForm.status" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                <select v-model="newDeptForm.year" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
+                  <option value="" disabled>Select Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                  <option value="5th Year">5th Year</option>
                 </select>
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Display Order</label>
-              <input v-model.number="newDeptForm.displayOrder" type="number" min="0" placeholder="0" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-              <p class="text-[11px] text-slate-400 mt-1 italic">Lower numbers appear first</p>
-            </div>
-          </div>
-
-          <!-- Row 2: Logo Upload, Vision, Mission -->
-          <div class="grid grid-cols-3 gap-6">
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Logo (Optional)</label>
-              <div
-                @dragover="handleDragOver"
-                @dragleave="handleDragLeave"
-                @drop="handleDrop"
-                :class="[isDragging ? 'border-[#4338ca] bg-indigo-50' : 'border-slate-200 bg-white', 'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-[#4338ca] hover:bg-indigo-50/30 transition-all']"
-                @click="($refs.fileInput as HTMLInputElement)?.click()"
-              >
-                <input ref="fileInput" type="file" accept=".png,.jpg,.jpeg,.svg" class="hidden" @change="handleFileSelect" />
-                <div v-if="logoPreview" class="flex flex-col items-center gap-2">
-                  <img :src="logoPreview" alt="Logo preview" class="w-16 h-16 object-contain rounded-lg" />
-                  <p class="text-[11px] text-slate-500">{{ logoFile?.name }}</p>
-                </div>
-                <div v-else class="flex flex-col items-center gap-2">
-                  <div class="w-10 h-10 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                  </div>
-                  <div>
-                    <p class="text-[12px] text-slate-600"><span class="font-bold text-slate-700">Click to upload</span> or drag and drop</p>
-                    <p class="text-[11px] text-slate-400 mt-0.5">PNG, JPG or SVG (max. 2MB)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Vision (Optional)</label>
-              <div class="relative">
-                <textarea v-model="newDeptForm.vision" maxlength="300" rows="4" placeholder="Enter department vision..." class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow resize-y"></textarea>
-                <span class="absolute bottom-2 right-3 text-[11px] text-slate-400">{{ visionCharCount }} / 300</span>
-              </div>
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Mission (Optional)</label>
-              <div class="relative">
-                <textarea v-model="newDeptForm.mission" maxlength="300" rows="4" placeholder="Enter department mission..." class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow resize-y"></textarea>
-                <span class="absolute bottom-2 right-3 text-[11px] text-slate-400">{{ missionCharCount }} / 300</span>
               </div>
             </div>
           </div>
@@ -957,9 +816,9 @@ const processFile = (file: File) => {
           </div>
           
           <div class="relative">
-            <select v-model="facultyFilter" class="pl-4 pr-8 py-2.5 text-[13px] border border-slate-200 rounded-lg text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] w-[180px]">
-              <option value="all">All Faculties</option>
-              <option v-for="f in faculties" :key="f" :value="f">{{ f }}</option>
+            <select v-model="headFilter" class="pl-4 pr-8 py-2.5 text-[13px] border border-slate-200 rounded-lg text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] w-[180px]">
+              <option value="all">All Department Heads</option>
+              <option v-for="h in allHeads" :key="h" :value="h">{{ h }}</option>
             </select>
             <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
@@ -994,8 +853,7 @@ const processFile = (file: File) => {
             <tr class="border-b border-slate-100">
               <th class="text-left px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department</th>
               <th class="text-left px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department Code</th>
-              <th class="text-left px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Faculty</th>
-              <th class="text-left px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Head of Department</th>
+                            <th class="text-left px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Head of Department</th>
               <th class="text-center px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Students</th>
               <th class="text-center px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Instructors</th>
               <th class="text-center px-4 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courses</th>
@@ -1023,10 +881,6 @@ const processFile = (file: File) => {
                 <span class="text-[13px] font-semibold font-mono text-slate-700">{{ dept.code }}</span>
               </td>
               
-              <!-- Faculty -->
-              <td class="px-4 py-4">
-                <p class="text-[12px] text-slate-600 leading-snug max-w-[160px]">{{ dept.faculty }}</p>
-              </td>
               
               <!-- Head of Department -->
               <td class="px-4 py-4">
@@ -1064,8 +918,8 @@ const processFile = (file: File) => {
                   <button @click="openEditModal(dept)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#4338ca] hover:bg-indigo-50 transition-colors" title="Edit">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                   </button>
-                  <button @click="confirmDelete(dept)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors" title="More">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                  <button @click="confirmDelete(dept)" class="w-8 h-8 rounded-lg flex items-center justify-center text-rose-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Delete">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                   </button>
                 </div>
               </td>
@@ -1128,12 +982,43 @@ const processFile = (file: File) => {
             <div><h3 class="text-[16px] font-bold text-slate-800">Edit Department</h3><p class="text-[12px] text-slate-500 mt-0.5">Update department details.</p></div>
             <button @click="showEditModal = false" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
           </div>
-          <div class="px-6 py-5 space-y-4">
+          <div class="px-6 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
             <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Department Name <span class="text-rose-500">*</span></label><input v-model="editData.name" type="text" placeholder="e.g. Computer Science" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
+            
             <div class="grid grid-cols-2 gap-4">
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Dept Code <span class="text-rose-500">*</span></label><input v-model="editData.code" type="text" placeholder="e.g. CS" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-mono focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
+              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">College/School</label>
+                <select v-model="editData.college" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                  <option value="" disabled>Select college</option>
+                  <option value="College of Computing and Informatics">College of Computing and Informatics</option>
+                  <option value="College of Engineering and Technology">College of Engineering and Technology</option>
+                  <option value="College of Natural Sciences">College of Natural Sciences</option>
+                  <option value="College of Social Sciences">College of Social Sciences</option>
+                  <option value="College of Business and Economics">College of Business and Economics</option>
+                  <option value="College of Health Sciences">College of Health Sciences</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Head of Department</label>
+                <select v-model="editData.headOfDepartment" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                  <option value="" disabled>Select head</option>
+                  <option value="Dr. Solomon Abate">Dr. Solomon Abate</option>
+                  <option value="Dr. Abebe Kebede">Dr. Abebe Kebede</option>
+                  <option value="Dr. Yeshimebet D.">Dr. Yeshimebet D.</option>
+                  <option value="Dr. Getachew T.">Dr. Getachew T.</option>
+                </select>
+              </div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Established Year</label><input v-model="editData.established" type="number" placeholder="e.g. 2010" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
             </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Email</label><input v-model="editData.email" type="email" placeholder="e.g. cs@wu.edu.et" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
+              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Phone</label><input v-model="editData.phone" type="text" placeholder="e.g. +251 11 123 4567" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
+            </div>
+
+            <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Office Location</label><input v-model="editData.officeLocation" type="text" placeholder="e.g. Block C, Room 204" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
           </div>
           <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
             <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>

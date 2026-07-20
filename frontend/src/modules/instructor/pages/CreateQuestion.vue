@@ -7,618 +7,686 @@ const route = useRoute()
 const router = useRouter()
 const qbStore = useInstructorQbStore()
 
-// We'd normally fetch the bank name based on route.params.id
-const bankId = route.params.id
-const questionId = route.params.questionId as string | undefined
-const isEditMode = !!questionId
-const bankTitle = ref('Database Systems Questions Bank')
+const bankId = route.params.id as string
+const bank = ref<any>(null)
+const isLoading = ref(true)
 
-// Form State
+// Form State (Mocked)
 const questionType = ref('Multiple Choice (MCQ)')
 const difficulty = ref('Medium')
-const chapter = ref('SQL')
-const topic = ref('SELECT Statement')
+const score = ref(1)
+const chapter = ref('Chapter 1')
 
-const editorRef = ref<HTMLDivElement | null>(null)
-const questionText = ref('Which SQL command is used to retrieve data from a database?')
+const title = ref('')
+const description = ref('')
+const questionText = ref('')
 
-const reverseMapType = (backendType: string) => {
-  const map: Record<string, string> = {
-    multiple_choice: 'Multiple Choice (MCQ)',
-    short_answer: 'Short Answer',
-    essay: 'Essay',
-    true_false: 'True/False',
-  }
-  return map[backendType] || 'Multiple Choice (MCQ)'
-}
+const options = ref([
+  { id: 1, label: 'A', text: '' },
+  { id: 2, label: 'B', text: '' },
+  { id: 3, label: 'C', text: '' },
+  { id: 4, label: 'D', text: '' }
+])
+const correctAnswer = ref('')
+const explanation = ref('')
+
+// Matching question data
+const matchingQuestions = ref([
+  { id: 1, label: 'A', text: 'Database' },
+  { id: 2, label: 'B', text: 'Primary Key' },
+  { id: 3, label: 'C', text: 'SQL' },
+  { id: 4, label: 'D', text: 'Foreign Key' },
+  { id: 5, label: 'E', text: 'Normalization' }
+])
+const matchingOptions = ref([
+  { id: 1, label: 'A', text: 'A unique identifier for a record' },
+  { id: 2, label: 'B', text: 'A structured collection of related data.' },
+  { id: 3, label: 'C', text: 'Structured Query Language.' },
+  { id: 4, label: 'D', text: 'A key used to link two tables together.' },
+  { id: 5, label: 'E', text: 'The process of organizing data to reduce redundancy.' }
+])
+
+// Settings
+const shuffleChoices = ref(true)
+const requiredQuestion = ref(true)
+const allowPartialMarks = ref(false)
+const negativeMarking = ref(false)
+const showExplanation = ref(true)
 
 onMounted(async () => {
-  if (editorRef.value && !isEditMode) {
-    editorRef.value.innerHTML = questionText.value
-  }
-  // If in edit mode, fetch question data and populate the form
-  if (isEditMode) {
-    try {
-      const { default: apiClient } = await import('../../../core/api/apiClient')
-      const res = await apiClient.get(`/instructor/question-banks/${bankId}`)
-      const data = res.data.data
-      bankTitle.value = data.bank.title
-      const q = data.questions.find((item: any) => String(item.id) === String(questionId))
-      if (q) {
-        questionType.value = reverseMapType(q.type)
-        difficulty.value = q.difficulty || 'Medium'
-        chapter.value = q.chapter || ''
-        topic.value = q.topic || ''
-        questionText.value = q.text || ''
-        marks.value = q.marks || 1
-        negativeMarks.value = q.negative_marks || 0
-        timeSeconds.value = q.time_seconds || 0
-        status.value = q.status === 'Active' || q.status === true
-        tags.value = q.tags || ''
-        if (q.type === 'multiple_choice' && q.options) {
-          options.value = q.options.map((opt: any, i: number) => ({
-            id: String.fromCharCode('A'.charCodeAt(0) + i),
-            text: typeof opt === 'string' ? opt : opt.text
-          }))
-          correctAnswer.value = q.correct_answer || 'A'
-        } else if (q.type === 'true_false') {
-          trueFalseAnswer.value = q.correct_answer || 'True'
-        } else if (q.type === 'short_answer') {
-          shortAnswerText.value = q.correct_answer || ''
-        } else if (q.type === 'essay') {
-          essayModelAnswer.value = q.correct_answer || ''
-        }
-        // Populate the rich text editor
-        if (editorRef.value) {
-          editorRef.value.innerHTML = questionText.value
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load question for editing', err)
-    }
+  try {
+    const data = await qbStore.fetchQuestionBank(bankId)
+    bank.value = data.bank
+  } catch (err) {
+    console.error("Failed to load bank", err)
+  } finally {
+    isLoading.value = false
   }
 })
 
-// Formatting using native browser execCommand for true WYSIWYG
-const execFormat = (command: string, value: string = '') => {
-  document.execCommand(command, false, value)
-  // Ensure the Vue state stays in sync after formatting
-  if (editorRef.value) {
-    questionText.value = editorRef.value.innerHTML
-    editorRef.value.focus()
-  }
-}
-
-const updateContent = (e: Event) => {
-  const target = e.target as HTMLDivElement
-  questionText.value = target.innerHTML
-}
-
-const insertLink = () => {
-  const url = prompt('Enter link URL (e.g., https://example.com):')
-  if (url) {
-    execFormat('createLink', url)
-  }
-}
-
-// Answer Options State
-const options = ref([
-  { id: 'A', text: 'INSERT' },
-  { id: 'B', text: 'UPDATE' },
-  { id: 'C', text: 'SELECT' },
-  { id: 'D', text: 'DELETE' }
-])
-const correctAnswer = ref('C')
-const shortAnswerText = ref('')
-const trueFalseAnswer = ref('True')
-const essayModelAnswer = ref('')
-
-// Settings State
-const marks = ref(2)
-const negativeMarks = ref(0)
-const timeSeconds = ref(0)
-const status = ref(true)
-const tags = ref('sql, select, queries, database')
-
-const isSubmitting = ref(false)
-const errorMsg = ref('')
-
-const goBack = () => {
-  router.push(`/instructor/question-banks/${bankId}`)
+const formatDate = (iso: string) => {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: '2-digit', year: 'numeric'
+  })
 }
 
 const addOption = () => {
-  const nextId = String.fromCharCode('A'.charCodeAt(0) + options.value.length)
-  options.value.push({ id: nextId, text: '' })
+  const nextLabel = String.fromCharCode(65 + options.value.length)
+  options.value.push({ id: Date.now(), label: nextLabel, text: '' })
 }
 
 const removeOption = (index: number) => {
-  if (options.value.length > 2) {
-    options.value.splice(index, 1)
-    
-    // Reassign IDs (A, B, C...)
-    options.value.forEach((opt, idx) => {
-      opt.id = String.fromCharCode('A'.charCodeAt(0) + idx)
-    })
-    
-    // Reset correct answer if it was removed or if it's no longer in the list
-    const validIds = options.value.map(o => o.id)
-    if (!validIds.includes(correctAnswer.value)) {
-      correctAnswer.value = 'A'
-    }
-  }
+  options.value.splice(index, 1)
+  options.value.forEach((opt, i) => {
+    opt.label = String.fromCharCode(65 + i)
+  })
 }
 
-const resetForm = () => {
-  questionText.value = ''
-  options.value = [
-    { id: 'A', text: 'Option A' },
-    { id: 'B', text: 'Option B' },
-    { id: 'C', text: 'Option C' },
-    { id: 'D', text: 'Option D' }
-  ]
-  correctAnswer.value = 'A'
-  shortAnswerText.value = ''
-  trueFalseAnswer.value = 'True'
-  essayModelAnswer.value = ''
-  errorMsg.value = ''
+// Matching helpers
+const addMatchingRow = () => {
+  const nextLabel = String.fromCharCode(65 + matchingQuestions.value.length)
+  matchingQuestions.value.push({ id: Date.now(), label: nextLabel, text: '' })
 }
 
-const mapType = (uiType: string) => {
-  if (uiType === 'Multiple Choice (MCQ)') return 'multiple_choice'
-  if (uiType === 'Short Answer') return 'short_answer'
-  if (uiType === 'Essay') return 'essay'
-  if (uiType === 'True/False') return 'true_false'
-  return 'multiple_choice'
+const removeMatchingRow = (index: number) => {
+  matchingQuestions.value.splice(index, 1)
+  matchingQuestions.value.forEach((q, i) => {
+    q.label = String.fromCharCode(65 + i)
+  })
 }
 
-const saveQuestion = async (addNew = false) => {
-  errorMsg.value = ''
-  
-  if (!questionText.value.trim()) {
-    errorMsg.value = 'Question text is required.'
-    return
-  }
+const addMatchingOption = () => {
+  const nextLabel = String.fromCharCode(65 + matchingOptions.value.length)
+  matchingOptions.value.push({ id: Date.now(), label: nextLabel, text: '' })
+}
 
-  isSubmitting.value = true
+const removeMatchingOption = (index: number) => {
+  matchingOptions.value.splice(index, 1)
+  matchingOptions.value.forEach((o, i) => {
+    o.label = String.fromCharCode(65 + i)
+  })
+}
 
-  let payloadOptions = null
-  let payloadCorrectAnswer = null
-
-  if (questionType.value === 'Multiple Choice (MCQ)') {
-    payloadOptions = options.value.map(o => o.text)
-    payloadCorrectAnswer = correctAnswer.value
-  } else if (questionType.value === 'True/False') {
-    payloadOptions = ['True', 'False']
-    payloadCorrectAnswer = trueFalseAnswer.value
-  } else if (questionType.value === 'Short Answer') {
-    payloadCorrectAnswer = shortAnswerText.value
-  } else if (questionType.value === 'Essay') {
-    payloadCorrectAnswer = essayModelAnswer.value
-  }
-
-  const payload = {
-    type: mapType(questionType.value),
-    difficulty: difficulty.value,
-    chapter: chapter.value,
-    topic: topic.value,
-    text: questionText.value,
-    options: payloadOptions,
-    correct_answer: payloadCorrectAnswer,
-    marks: marks.value,
-    negative_marks: negativeMarks.value,
-    time_seconds: timeSeconds.value,
-    status: status.value,
-    tags: tags.value
-  }
-
-  try {
-    if (isEditMode) {
-      await qbStore.updateQuestion(questionId as string, payload)
-    } else {
-      await qbStore.addQuestion(bankId as string, payload)
-    }
-    if (addNew) {
-      resetForm()
-    } else {
-      goBack()
-    }
-  } catch (error: any) {
-    errorMsg.value = error.response?.data?.message || 'Failed to save question.'
-  } finally {
-    isSubmitting.value = false
-  }
+const handleCancel = () => {
+  router.push('/instructor/question-banks')
 }
 </script>
 
 <template>
-  <div class="max-w-[1600px] mx-auto space-y-6">
-    
-    <!-- Breadcrumb -->
-    <div class="flex items-center text-[13px] text-slate-500 font-medium">
-      <router-link to="/instructor/question-banks" class="hover:text-[#5138ed] transition-colors">Question Banks</router-link>
-      <svg class="w-4 h-4 mx-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-      <router-link :to="`/instructor/question-banks/${bankId}`" class="hover:text-[#5138ed] transition-colors">{{ bankTitle }}</router-link>
-      <svg class="w-4 h-4 mx-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-      <span class="text-slate-800 font-bold">{{ isEditMode ? 'Edit Question' : 'Create Question' }}</span>
+  <div class="pb-24">
+    <!-- Breadcrumbs & Header -->
+    <div class="max-w-[1400px] mx-auto mb-6">
+      <div class="flex flex-col gap-2">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">Create Question</h1>
+          <p class="text-[14px] text-slate-500 mt-1">Create a new question inside this Question Bank.</p>
+        </div>
+        <div class="flex items-center gap-2 text-[13px] text-slate-500 font-medium mt-2">
+          <router-link to="/instructor/question-banks" class="hover:text-[#5138ed] transition-colors">Question Banks</router-link>
+          <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          <span v-if="!isLoading" class="hover:text-[#5138ed] transition-colors cursor-pointer">{{ bank?.title || 'Loading...' }}</span>
+          <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          <span class="text-[#5138ed]">Create Question</span>
+        </div>
+      </div>
     </div>
 
-    <div class="flex flex-col xl:flex-row gap-6 pb-20">
+    <!-- Main Content Grid -->
+    <div class="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
       
-      <!-- Main Content Area -->
-      <div class="flex-1 space-y-6 min-w-0">
+      <!-- Left Column (Main Form) -->
+      <div class="lg:col-span-8 space-y-6">
         
-        <!-- Info Alert -->
-        <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex items-start gap-4">
-          <div class="w-10 h-10 rounded-full bg-indigo-100 text-[#5138ed] flex items-center justify-center shrink-0 mt-0.5">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <!-- Question Bank Information -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Question Bank Information</h2>
           </div>
-          <div>
-            <h3 class="text-[14px] font-bold text-slate-800">Question Information</h3>
-            <p class="text-[13px] text-slate-600 mt-1">Add a new question to your question bank</p>
-          </div>
-        </div>
-
-        <div v-if="errorMsg" class="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl px-4 py-3 text-[13px] font-medium mb-6">
-          {{ errorMsg }}
-        </div>
-
-        <!-- Form Card -->
-        <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-6">
           
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div v-if="isLoading" class="text-sm text-slate-500">Loading bank details...</div>
+          <div v-else class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Question Type <span class="text-rose-500">*</span></label>
-              <select v-model="questionType" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none">
+              <p class="text-[12px] font-bold text-slate-800 mb-1">Question Bank</p>
+              <p class="text-[13px] text-slate-600">{{ bank?.title }}</p>
+            </div>
+            <div class="md:col-span-2">
+              <p class="text-[12px] font-bold text-slate-800 mb-1">Description</p>
+              <p class="text-[13px] text-slate-600">{{ bank?.description || 'No description available.' }}</p>
+            </div>
+            <div>
+              <p class="text-[12px] font-bold text-slate-800 mb-1">Created Date</p>
+              <div class="flex items-center gap-1.5 text-[13px] text-slate-600">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                {{ formatDate(bank?.created_at || bank?.updated_at) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question Information -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Question Information</h2>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Type <span class="text-rose-500">*</span></label>
+              <select v-model="questionType" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer">
                 <option>Multiple Choice (MCQ)</option>
                 <option>Short Answer</option>
                 <option>Essay</option>
-                <option>True/False</option>
+                <option>True / False</option>
+                <option>Matching</option>
+                <option>Fill in the Blank</option>
               </select>
             </div>
             <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Difficulty Level <span class="text-rose-500">*</span></label>
-              <select v-model="difficulty" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none">
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Difficulty <span class="text-rose-500">*</span></label>
+              <select v-model="difficulty" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer">
                 <option>Easy</option>
                 <option>Medium</option>
                 <option>Hard</option>
               </select>
             </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Chapter</label>
-              <select v-model="chapter" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none">
-                <option>SQL</option>
-                <option>Normalization</option>
-                <option>Transactions</option>
-              </select>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Score <span class="text-rose-500">*</span></label>
+              <input v-model="score" type="number" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" min="1" />
             </div>
             <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Topic</label>
-              <select v-model="topic" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none">
-                <option>SELECT Statement</option>
-                <option>JOINs</option>
-                <option>Subqueries</option>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Chapter</label>
+              <select v-model="chapter" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer">
+                <option>Chapter 1</option>
+                <option>Chapter 2</option>
+                <option>Chapter 3</option>
+                <option>Chapter 4</option>
+                <option>Chapter 5</option>
               </select>
             </div>
           </div>
+        </div>
 
-          <!-- Question Text -->
+        <!-- Question Content -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Question Content</h2>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Title <span class="text-rose-500">*</span></label>
+              <input v-model="title" type="text" placeholder="Enter a short title for this question" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+            </div>
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Description (Optional)</label>
+              <input v-model="description" type="text" placeholder="Enter a brief description or additional notes about this question..." class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+            </div>
+          </div>
+
           <div>
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">Question Text <span class="text-rose-500">*</span></label>
-            <div class="border border-slate-200 rounded-xl overflow-hidden focus-within:border-[#5138ed] focus-within:ring-1 focus-within:ring-[#5138ed] transition-shadow">
-              <!-- Toolbar -->
-              <div class="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center gap-1">
-                <button @click.prevent="execFormat('bold')" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded font-bold transition-colors" title="Bold">B</button>
-                <button @click.prevent="execFormat('italic')" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded italic transition-colors" title="Italic">I</button>
-                <button @click.prevent="execFormat('underline')" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded underline transition-colors" title="Underline">U</button>
-                <div class="w-px h-4 bg-slate-300 mx-1"></div>
-                <button @click.prevent="execFormat('justifyLeft')" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded transition-colors" title="Align Left">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                </button>
-                <button @click.prevent="execFormat('justifyCenter')" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded transition-colors" title="Align Center">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"></path></svg>
-                </button>
-                <div class="w-px h-4 bg-slate-300 mx-1"></div>
-                <button @click.prevent="execFormat('superscript')" class="px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-200 rounded transition-colors" title="Superscript">x²</button>
-                <button @click.prevent="execFormat('subscript')" class="px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-200 rounded transition-colors" title="Subscript">x₂</button>
-                <div class="w-px h-4 bg-slate-300 mx-1"></div>
-                <button @click.prevent="insertLink" class="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 rounded transition-colors" title="Insert Link">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-                </button>
+            <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Text <span class="text-rose-500">*</span></label>
+            <div class="border border-slate-200 rounded-xl overflow-hidden">
+              <!-- Toolbar mock -->
+              <div class="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-4 text-slate-600">
+                <select class="bg-transparent text-[13px] font-medium focus:outline-none cursor-pointer">
+                  <option>Paragraph</option>
+                  <option>Heading 1</option>
+                  <option>Heading 2</option>
+                </select>
+                <div class="w-px h-4 bg-slate-300"></div>
+                <button class="hover:text-slate-800 transition-colors font-bold">B</button>
+                <button class="hover:text-slate-800 transition-colors italic">I</button>
+                <button class="hover:text-slate-800 transition-colors underline">U</button>
+                <button class="hover:text-slate-800 transition-colors line-through">S</button>
+                <div class="w-px h-4 bg-slate-300"></div>
+                <button class="hover:text-slate-800 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+                <button class="hover:text-slate-800 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"></path></svg></button>
+                <div class="w-px h-4 bg-slate-300"></div>
+                <button class="hover:text-slate-800 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></button>
+                <button class="hover:text-slate-800 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg></button>
+                <button class="hover:text-slate-800 transition-colors italic font-serif">fx</button>
+                <button class="hover:text-slate-800 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg></button>
               </div>
-              
-              <!-- WYSIWYG Content Editable Area -->
-              <div 
-                ref="editorRef" 
-                contenteditable="true" 
-                @input="updateContent"
-                class="w-full px-4 py-3 text-[13px] text-slate-700 min-h-[120px] focus:outline-none" 
-                style="white-space: pre-wrap;"
-                placeholder="Type your question here...">
-              </div>
+              <textarea v-model="questionText" rows="5" class="w-full bg-white px-4 py-4 text-[13px] text-slate-700 focus:outline-none resize-none" placeholder="Type or paste the question text here..."></textarea>
+              <div class="px-4 pb-2 text-right text-[11px] text-slate-400">0 / 3000</div>
             </div>
-            <div class="text-right mt-2 text-[11px] text-slate-400 font-medium">Characters: {{ questionText.length }}</div>
+          </div>
+        </div>
+
+        <!-- Answer Options (MCQ) -->
+        <div v-if="questionType === 'Multiple Choice (MCQ)'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Answer Options <span class="text-slate-500 font-normal">(Multiple Choice)</span></h2>
+          </div>
+          
+          <div class="space-y-3 mb-4">
+            <div v-for="(option, index) in options" :key="option.id" class="flex items-center gap-4 group">
+              <button class="text-slate-300 hover:text-slate-500 cursor-move transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>
+              </button>
+              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 border border-slate-200 text-[13px] font-bold text-slate-700 flex-shrink-0">
+                {{ option.label }}
+              </div>
+              <input v-model="option.text" type="text" :placeholder="`Enter option ${option.label}`" class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+              <div class="w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center cursor-pointer">
+                <div v-if="correctAnswer === option.label" class="w-2.5 h-2.5 rounded-full bg-[#5138ed]"></div>
+              </div>
+              <button @click="removeOption(index)" class="w-8 h-8 flex items-center justify-center rounded-lg text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>
+            </div>
           </div>
 
-          <!-- Answer Options -->
-          <div v-if="questionType === 'Multiple Choice (MCQ)'">
-            <div class="flex items-center justify-between mb-4">
-              <label class="block text-[12px] font-bold text-slate-700">Answer Options <span class="text-rose-500">*</span></label>
-              <label class="block text-[12px] font-bold text-slate-700">Correct Answer</label>
+          <button @click="addOption" class="flex items-center gap-1.5 text-[13px] font-bold text-[#5138ed] hover:text-indigo-700 transition-colors mb-6">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Add Option
+          </button>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100">
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Correct Answer <span class="text-rose-500">*</span></label>
+              <select v-model="correctAnswer" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer">
+                <option value="" disabled>Select the correct option</option>
+                <option v-for="opt in options" :key="opt.id" :value="opt.label">Option {{ opt.label }}</option>
+              </select>
             </div>
-            
-            <div class="space-y-3">
-              <div v-for="(opt, index) in options" :key="opt.id" class="flex items-center gap-4 group">
-                <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[13px] shrink-0 transition-colors"
-                     :class="correctAnswer === opt.id ? 'bg-[#5138ed] text-white' : 'bg-indigo-50 text-[#5138ed]'">
-                  {{ opt.id }}
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Explanation (Optional)</label>
+              <textarea v-model="explanation" rows="2" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="Explain why this is the correct answer..."></textarea>
+              <div class="text-right text-[11px] text-slate-400 mt-1">0 / 1000</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- True / False Options -->
+        <div v-if="questionType === 'True / False'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">True / False Options</h2>
+          </div>
+          
+          <div class="mb-6">
+            <label class="block text-[12px] font-bold text-slate-800 mb-3">Correct Answer <span class="text-rose-500">*</span></label>
+            <div class="flex gap-4">
+              <label class="flex-1 relative cursor-pointer" @click="correctAnswer = 'True'">
+                <div :class="[
+                  'flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border transition-all',
+                  correctAnswer === 'True' ? 'border-[#5138ed] bg-indigo-50/30 text-[#5138ed] shadow-[0_0_0_1px_#5138ed]' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                ]">
+                  <div :class="[
+                    'w-4 h-4 rounded-full border-2 flex items-center justify-center',
+                    correctAnswer === 'True' ? 'border-[#5138ed]' : 'border-slate-300'
+                  ]">
+                    <div v-if="correctAnswer === 'True'" class="w-2 h-2 rounded-full bg-[#5138ed]"></div>
+                  </div>
+                  <span class="text-[13px] font-bold">True</span>
                 </div>
-                <input type="text" v-model="opt.text" class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors">
-                
-                <!-- Remove option button (only show if > 2 options) -->
-                <button v-if="options.length > 2" @click="removeOption(index)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+              </label>
+              
+              <label class="flex-1 relative cursor-pointer" @click="correctAnswer = 'False'">
+                <div :class="[
+                  'flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border transition-all',
+                  correctAnswer === 'False' ? 'border-[#5138ed] bg-indigo-50/30 text-[#5138ed] shadow-[0_0_0_1px_#5138ed]' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                ]">
+                  <div :class="[
+                    'w-4 h-4 rounded-full border-2 flex items-center justify-center',
+                    correctAnswer === 'False' ? 'border-[#5138ed]' : 'border-slate-300'
+                  ]">
+                    <div v-if="correctAnswer === 'False'" class="w-2 h-2 rounded-full bg-[#5138ed]"></div>
+                  </div>
+                  <span class="text-[13px] font-bold">False</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[12px] font-bold text-slate-800 mb-2">Explanation (Optional)</label>
+            <textarea v-model="explanation" rows="3" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="Provide an explanation..."></textarea>
+            <div class="text-right text-[11px] text-slate-400 mt-1">{{ explanation.length }} / 1000</div>
+          </div>
+        </div>
+
+        <!-- Matching Question Builder -->
+        <div v-if="questionType === 'Matching'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Matching Question Builder</h2>
+            <div class="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-slate-400 cursor-help" title="Match items from Column A to Column B">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+          </div>
+
+          <!-- Two Column Headers -->
+          <div class="grid grid-cols-2 gap-8 mb-4">
+            <div>
+              <p class="text-[12px] font-bold text-slate-800 mb-1">Column A (Questions)</p>
+              <p class="text-[11px] text-slate-400">- Enter the correct answer key</p>
+            </div>
+            <div>
+              <p class="text-[12px] font-bold text-slate-800 mb-1">Column B (Options)</p>
+              <p class="text-[11px] text-slate-400">- Enter the answer options</p>
+            </div>
+          </div>
+
+          <!-- Matching Rows -->
+          <div class="space-y-3 mb-4">
+            <div v-for="(pair, index) in matchingQuestions" :key="pair.id" class="grid grid-cols-2 gap-4 items-center">
+              <!-- Column A -->
+              <div class="flex items-center gap-3 group">
+                <button class="text-slate-300 hover:text-slate-500 cursor-move transition-colors flex-shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>
+                </button>
+                <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-[13px] font-bold text-[#5138ed] flex-shrink-0">
+                  {{ pair.label }}
+                </div>
+                <input v-model="pair.text" type="text" :placeholder="`Enter term ${pair.label}`" class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+              </div>
+              <!-- Arrow -->
+              <div class="flex items-center gap-3">
+                <span class="text-slate-300 font-bold text-[13px] flex-shrink-0">↔</span>
+                <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 border border-slate-200 text-[13px] font-bold text-slate-700 flex-shrink-0">
+                  {{ matchingOptions[index]?.label || '' }}
+                </div>
+                <input v-model="matchingOptions[index].text" type="text" :placeholder="`Enter description ${matchingOptions[index]?.label}`" class="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+                <button @click="removeMatchingRow(index); removeMatchingOption(index)" class="w-8 h-8 flex items-center justify-center rounded-lg text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors flex-shrink-0">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
-                <div v-else class="w-8"></div>
-
-                <div class="w-12 flex justify-end shrink-0">
-                  <div @click="correctAnswer = opt.id" class="w-5 h-5 rounded-full border-2 cursor-pointer flex items-center justify-center transition-colors"
-                       :class="correctAnswer === opt.id ? 'border-[#5138ed]' : 'border-slate-300'">
-                    <div v-if="correctAnswer === opt.id" class="w-2.5 h-2.5 rounded-full bg-[#5138ed] transition-transform"></div>
-                  </div>
-                </div>
               </div>
             </div>
+          </div>
 
-            <button @click="addOption" class="mt-4 w-full py-3 border-2 border-dashed border-[#5138ed]/30 hover:border-[#5138ed] text-[#5138ed] rounded-xl font-bold text-[13px] flex items-center justify-center gap-2 transition-colors bg-indigo-50/30 hover:bg-indigo-50">
+          <!-- Add Row / Add Option Buttons -->
+          <div class="flex items-center gap-6 mb-6">
+            <button @click="addMatchingRow(); addMatchingOption()" class="flex items-center gap-1.5 text-[13px] font-bold text-[#5138ed] hover:text-indigo-700 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              Add Row
+            </button>
+            <button @click="addMatchingOption" class="flex items-center gap-1.5 text-[13px] font-bold text-[#5138ed] hover:text-indigo-700 transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
               Add Option
             </button>
           </div>
 
-          <div v-else-if="questionType === 'True/False'">
-            <label class="block text-[12px] font-bold text-slate-700 mb-4">Correct Answer <span class="text-rose-500">*</span></label>
-            <div class="flex items-center gap-4">
-              <label class="flex-1 cursor-pointer" @click="trueFalseAnswer = 'True'">
-                <div class="flex items-center gap-3 p-4 rounded-xl border-2 transition-colors"
-                     :class="trueFalseAnswer === 'True' ? 'border-[#5138ed] bg-indigo-50' : 'border-slate-200 bg-white'">
-                  <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                       :class="trueFalseAnswer === 'True' ? 'border-[#5138ed]' : 'border-slate-300'">
-                    <div v-if="trueFalseAnswer === 'True'" class="w-2.5 h-2.5 rounded-full bg-[#5138ed] transition-transform"></div>
-                  </div>
-                  <span class="text-[13px] font-bold text-slate-700">True</span>
-                </div>
-              </label>
-              
-              <label class="flex-1 cursor-pointer" @click="trueFalseAnswer = 'False'">
-                <div class="flex items-center gap-3 p-4 rounded-xl border-2 transition-colors"
-                     :class="trueFalseAnswer === 'False' ? 'border-[#5138ed] bg-indigo-50' : 'border-slate-200 bg-white'">
-                  <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                       :class="trueFalseAnswer === 'False' ? 'border-[#5138ed]' : 'border-slate-300'">
-                    <div v-if="trueFalseAnswer === 'False'" class="w-2.5 h-2.5 rounded-full bg-[#5138ed] transition-transform"></div>
-                  </div>
-                  <span class="text-[13px] font-bold text-slate-700">False</span>
-                </div>
-              </label>
-            </div>
+          <!-- Info Note -->
+          <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl px-4 py-3 flex items-start gap-3">
+            <svg class="w-4 h-4 text-[#5138ed] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <p class="text-[12px] text-slate-600 leading-relaxed">Students will see the options in Column B in random order during the exam. The letters you enter in Column A will be used as the correct answers.</p>
           </div>
-
-          <div v-else-if="questionType === 'Short Answer'">
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">Acceptable Answer(s) <span class="text-rose-500">*</span></label>
-            <input type="text" v-model="shortAnswerText" placeholder="e.g. Relational Database" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors">
-            <p class="text-[11px] text-slate-400 mt-2">Enter the exact word or phrase you expect. Case-insensitive matching will be used.</p>
-          </div>
-
-          <div v-else-if="questionType === 'Essay'">
-            <label class="block text-[12px] font-bold text-slate-700 mb-2">Model Answer / Grading Rubric (Optional)</label>
-            <textarea v-model="essayModelAnswer" rows="4" placeholder="Enter keywords or a model answer to assist in manual grading..." class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors"></textarea>
-            <p class="text-[11px] text-slate-400 mt-2">Essay questions are manually graded by the instructor.</p>
-          </div>
-
-          <!-- Bottom Actions -->
-          <div class="pt-6 border-t border-slate-100 flex items-center justify-between">
-            <button @click="goBack" :disabled="isSubmitting" class="px-6 py-2.5 border border-slate-200 hover:border-slate-300 text-slate-600 rounded-xl font-bold text-[13px] transition-colors disabled:opacity-50">
-              Cancel
-            </button>
-            <div class="flex items-center gap-3">
-              <button @click="saveQuestion(true)" :disabled="isSubmitting" class="px-6 py-2.5 bg-white border border-[#5138ed] text-[#5138ed] hover:bg-indigo-50 rounded-xl font-bold text-[13px] transition-colors flex items-center gap-2 disabled:opacity-50">
-                <svg v-if="isSubmitting" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Save & Add New
-              </button>
-              <button @click="saveQuestion(false)" :disabled="isSubmitting" class="px-6 py-2.5 bg-[#5138ed] hover:bg-indigo-600 text-white rounded-xl font-bold text-[13px] transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
-                <svg v-if="isSubmitting" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-                Save Question
-              </button>
-            </div>
-          </div>
-
         </div>
 
-      </div>
-
-      <!-- Right Sidebar Column -->
-      <div class="w-full xl:w-[360px] space-y-6">
-        
-        <!-- Settings Block -->
-        <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+        <!-- Fill in the Blank (simple textarea) -->
+        <div v-if="questionType === 'Fill in the Blank'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
           <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] flex items-center justify-center shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
             </div>
-            <h3 class="text-[14px] font-bold text-slate-800">Question Settings</h3>
+            <h2 class="text-[15px] font-bold text-slate-800">Correct Answer <span class="text-slate-500 font-normal">(Fill in the Blank)</span></h2>
           </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Marks <span class="text-rose-500">*</span></label>
-              <input type="number" v-model.number="marks" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-            </div>
-            <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Negative Marks</label>
-              <input type="number" v-model.number="negativeMarks" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <p class="text-[10px] text-slate-400 mt-1">Enter 0 if no negative marking</p>
-            </div>
-            <div>
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Time (Seconds)</label>
-              <input type="number" v-model.number="timeSeconds" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <p class="text-[10px] text-slate-400 mt-1">0 for no specific time limit</p>
-            </div>
-            <div class="flex items-center justify-between py-2 border-t border-slate-100 mt-2">
-              <label class="block text-[12px] font-bold text-slate-700">Status</label>
-              <div class="relative inline-block w-10 mr-2 align-middle select-none cursor-pointer" @click="status = !status">
-                <div class="absolute block w-5 h-5 rounded-full bg-white border-2 border-slate-200 shadow shadow-slate-200 transition-transform duration-200 ease-in-out z-10" :class="status ? 'translate-x-5 !border-[#5138ed]' : ''"></div>
-                <div class="block overflow-hidden h-5 rounded-full bg-slate-200 transition-colors duration-200 ease-in-out" :class="status ? '!bg-[#5138ed]' : ''"></div>
-              </div>
-            </div>
-            <div class="pt-2 border-t border-slate-100">
-              <label class="block text-[12px] font-bold text-slate-700 mb-2">Tags</label>
-              <input type="text" v-model="tags" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
-              <p class="text-[10px] text-slate-400 mt-1">Add tags to help organize and search</p>
-            </div>
+          <div>
+            <label class="block text-[12px] font-bold text-slate-800 mb-2">Expected Answer <span class="text-rose-500">*</span></label>
+            <input type="text" placeholder="Enter the correct answer for the blank" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
+            <p class="text-[11px] text-slate-400 mt-2">Use <strong>____</strong> (underscores) in the Question Text above to indicate where the blank should appear.</p>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[12px] font-bold text-slate-800 mb-2">Explanation (Optional)</label>
+            <textarea v-model="explanation" rows="2" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="Explain why this is the correct answer..."></textarea>
           </div>
         </div>
 
-        <!-- Preview Block -->
-        <div class="bg-indigo-50/30 border border-indigo-100 rounded-2xl p-6 shadow-sm">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-indigo-100 text-[#5138ed] flex items-center justify-center shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+        <!-- Short Answer Settings -->
+        <div v-if="questionType === 'Short Answer'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
             </div>
-            <h3 class="text-[14px] font-bold text-slate-800">Question Preview</h3>
+            <h2 class="text-[15px] font-bold text-slate-800">Short Answer Settings</h2>
           </div>
           
-          <div class="mt-4">
-            <p class="text-[13px] text-slate-700 font-medium mb-4" v-html="questionText || 'Question text will appear here...'"></p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-2">Expected Answer / Answer Key <span class="text-rose-500">*</span></label>
+              <textarea rows="3" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="Normalization is the process of organizing data in a database to reduce redundancy and improve data integrity."></textarea>
+              <div class="text-right text-[11px] text-slate-400 mt-1">105 / 3000</div>
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5 mb-1">
+                <label class="block text-[12px] font-bold text-slate-800">Case Sensitivity</label>
+                <div class="w-4 h-4 rounded-full border border-slate-300 flex items-center justify-center text-slate-400 cursor-help" title="Case sensitivity rules">
+                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-500 mb-4">Determine if the student answer is case sensitive.</p>
+              
+              <div class="flex items-center gap-6">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                  <div class="w-4 h-4 rounded-full border-2 border-[#5138ed] flex items-center justify-center">
+                    <div class="w-2 h-2 rounded-full bg-[#5138ed]"></div>
+                  </div>
+                  <span class="text-[13px] font-bold text-[#5138ed]">Not Case Sensitive (Recommended)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer group">
+                  <div class="w-4 h-4 rounded-full border-2 border-slate-300 flex items-center justify-center group-hover:border-slate-400 transition-colors">
+                  </div>
+                  <span class="text-[13px] font-medium text-slate-600">Case Sensitive</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[12px] font-bold text-slate-800 mb-2">Additional Notes for Grading (Optional)</label>
+            <textarea v-model="explanation" rows="2" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="Any additional information for graders..."></textarea>
+            <div class="text-right text-[11px] text-slate-400 mt-1">0 / 1000</div>
+          </div>
+        </div>
+
+        <!-- Essay Question Settings -->
+        <div v-if="questionType === 'Essay'" class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <h2 class="text-[15px] font-bold text-slate-800">Essay Question Settings</h2>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+            <!-- Left: Reference Answer -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-1">Reference Answer / Model Answer (Optional)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Provide a reference answer or key points that describe an ideal response.</p>
+              <textarea rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="ACID stands for Atomicity, Consistency, Isolation, Durability. Explain each property with definition, importance, and example."></textarea>
+              <div class="text-right text-[11px] text-slate-400 mt-1">112 / 5000</div>
+            </div>
             
-            <div v-if="questionType === 'Multiple Choice (MCQ)'" class="space-y-2">
-              <div v-for="opt in options" :key="opt.id" class="flex items-center gap-3">
-                <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-                     :class="correctAnswer === opt.id ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-400 border border-slate-200'">
-                  {{ opt.id }}
-                </div>
-                <span class="text-[12px] text-slate-600">{{ opt.text || `Option ${opt.id}` }}</span>
-              </div>
-              <div class="mt-5 py-2 px-3 bg-emerald-50 text-emerald-600 rounded-lg text-[11px] font-bold inline-block border border-emerald-100">
-                Correct Answer: Option {{ correctAnswer }}
-              </div>
+            <!-- Right: Grading Notes -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-1">Grading Notes / Rubric (Optional)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Provide guidelines for grading this essay question.</p>
+              <textarea rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] resize-none" placeholder="• Clear understanding of each property (2 marks)&#10;• Explanation with proper examples (2 marks)&#10;• Overall organization and clarity (1 mark)"></textarea>
+              <div class="text-right text-[11px] text-slate-400 mt-1">121 / 2000</div>
             </div>
-
-            <div v-else-if="questionType === 'True/False'" class="space-y-2">
-              <div class="flex items-center gap-3">
-                <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-                     :class="trueFalseAnswer === 'True' ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-400 border border-slate-200'">
-                  T
-                </div>
-                <span class="text-[12px] text-slate-600">True</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-                     :class="trueFalseAnswer === 'False' ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-400 border border-slate-200'">
-                  F
-                </div>
-                <span class="text-[12px] text-slate-600">False</span>
-              </div>
-              <div class="mt-5 py-2 px-3 bg-emerald-50 text-emerald-600 rounded-lg text-[11px] font-bold inline-block border border-emerald-100">
-                Correct Answer: {{ trueFalseAnswer }}
-              </div>
-            </div>
-
-            <div v-else-if="questionType === 'Short Answer'">
-              <div class="mt-2 py-2 px-3 bg-emerald-50 text-emerald-600 rounded-lg text-[11px] font-bold inline-block border border-emerald-100">
-                Expected Answer: {{ shortAnswerText || '[Not provided]' }}
-              </div>
-            </div>
-
-            <div v-else-if="questionType === 'Essay'">
-              <div class="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center">
-                <span class="text-[12px] text-slate-400 font-medium">Student text area</span>
-              </div>
-              <div v-if="essayModelAnswer" class="mt-3 py-2 px-3 bg-indigo-50 text-[#5138ed] rounded-lg text-[11px] font-bold border border-indigo-100">
-                Has Rubric/Model Answer
-              </div>
-            </div>
-
           </div>
-        </div>
 
-        <!-- Tips -->
-        <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 text-emerald-500 font-bold text-[13px] mb-4">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
-            Tips for Good Questions
-          </div>
-          <ul class="space-y-2 text-[12px] text-slate-600 font-medium">
-            <li class="flex items-start gap-2">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              Use clear and concise language
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              Ensure only one correct answer
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              Avoid negative wording
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              Make options similar in length
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-              Review before saving
-            </li>
-          </ul>
-        </div>
-
-        <!-- Shortcuts -->
-        <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-          <h3 class="text-[13px] font-bold text-slate-800 mb-4">Shortcuts</h3>
-          <div class="space-y-3">
-            <div class="flex items-center justify-between text-[12px]">
-              <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">Ctrl</span>
-                <span class="text-slate-400">+</span>
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">S</span>
-              </div>
-              <span class="text-slate-500 font-medium">Save Question</span>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Left: Min Words -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-1">Minimum Words (Optional)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Set a minimum word limit for the answer.</p>
+              <input type="number" placeholder="150" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
             </div>
-            <div class="flex items-center justify-between text-[12px]">
-              <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">Ctrl</span>
-                <span class="text-slate-400">+</span>
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">P</span>
-              </div>
-              <span class="text-slate-500 font-medium">Preview Question</span>
-            </div>
-            <div class="flex items-center justify-between text-[12px]">
-              <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">Esc</span>
-              </div>
-              <span class="text-slate-500 font-medium">Cancel</span>
-            </div>
-            <div class="flex items-center justify-between text-[12px]">
-              <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">Ctrl</span>
-                <span class="text-slate-400">+</span>
-                <span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 font-mono text-[10px]">Enter</span>
-              </div>
-              <span class="text-slate-500 font-medium">Save & Add New</span>
+            
+            <!-- Right: Max Words -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-800 mb-1">Maximum Words (Optional)</label>
+              <p class="text-[11px] text-slate-500 mb-2">Set a maximum word limit for the answer.</p>
+              <input type="number" placeholder="1000" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" />
             </div>
           </div>
         </div>
 
       </div>
 
+      <!-- Right Column (Sidebar) -->
+      <div class="lg:col-span-4 space-y-6">
+        
+        <!-- Question Image -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              <h3 class="text-[14px] font-bold text-slate-800">Question Image <span class="text-slate-400 font-normal">(Optional)</span></h3>
+            </div>
+          </div>
+          
+          <div class="border-2 border-dashed border-indigo-100 bg-indigo-50/30 rounded-xl p-8 text-center flex flex-col items-center justify-center transition-colors hover:bg-indigo-50/50 cursor-pointer mb-4">
+            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-[#5138ed] shadow-sm mb-3">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            </div>
+            <p class="text-[13px] font-bold text-slate-700 mb-1">Drag & Drop image here</p>
+            <p class="text-[12px] text-slate-500 mb-4">or</p>
+            <button class="px-4 py-2 border border-[#5138ed] text-[#5138ed] bg-white rounded-lg text-[13px] font-bold hover:bg-indigo-50 transition-colors">Browse Image</button>
+            <p class="text-[11px] text-slate-400 mt-4">Supported: PNG, JPG, JPEG (Max 5 MB)</p>
+          </div>
+
+          <!-- Mock Uploaded Image -->
+          <div class="border border-slate-100 rounded-xl p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
+                <!-- Mock image grid graphic -->
+                <svg class="w-6 h-6 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v2H8V8zm0 4h8v2H8v-2z"></path></svg>
+              </div>
+              <div>
+                <p class="text-[12px] font-bold text-slate-700 truncate w-32">database_relationship.png</p>
+                <p class="text-[11px] text-slate-400">234 KB</p>
+              </div>
+            </div>
+            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Question Settings -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-6">
+            <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <h3 class="text-[14px] font-bold text-slate-800">Question Settings</h3>
+          </div>
+          
+          <div class="space-y-4">
+            <label class="flex items-center gap-3 cursor-pointer group">
+              <div class="relative flex items-center justify-center w-5 h-5 rounded border border-indigo-500 bg-[#5138ed]">
+                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <span class="text-[13px] text-slate-700 font-medium select-none">Shuffle Choices</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+              <div class="relative flex items-center justify-center w-5 h-5 rounded border border-indigo-500 bg-[#5138ed]">
+                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <span class="text-[13px] text-slate-700 font-medium select-none">Required Question</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+              <div class="relative flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white group-hover:border-slate-400 transition-colors">
+              </div>
+              <span class="text-[13px] text-slate-700 font-medium select-none">Allow Partial Marks</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+              <div class="relative flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white group-hover:border-slate-400 transition-colors">
+              </div>
+              <span class="text-[13px] text-slate-700 font-medium select-none">Negative Marking</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+              <div class="relative flex items-center justify-center w-5 h-5 rounded border border-indigo-500 bg-[#5138ed]">
+                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <span class="text-[13px] text-slate-700 font-medium select-none">Show Explanation After Exam</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Question Tags -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-6">
+            <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+            <h3 class="text-[14px] font-bold text-slate-800">Question Tags</h3>
+          </div>
+          
+          <div class="flex flex-wrap gap-2 mb-4">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-[12px] font-bold">
+              Algorithms
+              <button class="hover:text-indigo-900 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-[12px] font-bold">
+              Database
+              <button class="hover:text-indigo-900 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-[12px] font-bold">
+              Data Structures
+              <button class="hover:text-indigo-900 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-[12px] font-bold">
+              Programming
+              <button class="hover:text-indigo-900 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-[12px] font-bold">
+              Networking
+              <button class="hover:text-indigo-900 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </span>
+          </div>
+
+          <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 text-[12px] font-bold hover:bg-slate-50 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Add Tag
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Sticky Footer Actions -->
+    <div class="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-slate-200 px-8 py-4 z-40 flex items-center justify-between">
+      <!-- Add Other Question Button (left side, for ALL types) -->
+      <button class="hidden sm:flex items-center gap-3 px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors group">
+        <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed] group-hover:bg-indigo-100 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="text-left">
+          <p class="text-[13px] font-bold text-slate-800">Add Other Question</p>
+          <p class="text-[11px] text-slate-400">Add a different type of question to this bank</p>
+        </div>
+      </button>
+      <div class="flex items-center gap-4 w-full sm:w-auto justify-end">
+        <button @click="handleCancel" class="px-6 py-2.5 rounded-xl border border-slate-200 text-[14px] font-bold text-slate-600 hover:bg-slate-50 transition-colors flex-1 sm:flex-none text-center">
+          Cancel
+        </button>
+        <button class="px-6 py-2.5 rounded-xl border border-slate-200 text-[14px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+          Save as Draft
+        </button>
+        <button class="px-6 py-2.5 rounded-xl bg-[#5138ed] text-white text-[14px] font-bold hover:bg-indigo-600 transition-colors shadow-sm flex items-center justify-center gap-2 flex-1 sm:flex-none">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+          Save Question
+        </button>
+      </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-/* Custom Toggle Switch styling additions if necessary, though inline works fine for now */
-</style>

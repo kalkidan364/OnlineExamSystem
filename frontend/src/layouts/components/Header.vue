@@ -19,7 +19,6 @@ const pageTitle = computed(() => {
   if (route.path.includes('/dashboard')) return 'Instructor Dashboard'
   if (route.path.includes('/question-banks')) return 'Question Banks'
   if (route.path.includes('/exams')) return 'Exams Management'
-  if (route.path.includes('/schedule')) return 'Schedule Exams'
   if (route.path.includes('/students')) return 'Student Management'
   if (route.path.includes('/results')) return 'Results'
   if (route.path.includes('/reports')) return 'Reports'
@@ -54,9 +53,6 @@ const pageTitle = computed(() => {
             <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             <span class="text-slate-700">Add Questions</span>
           </template>
-        </div>
-        <div v-else-if="route.path.includes('/schedule')" class="mt-0.5 text-[12px] font-medium text-slate-500">
-          Schedule and manage exam sessions.
         </div>
         <div v-else-if="route.path.includes('/results')" class="mt-0.5 text-[12px] font-medium text-slate-500">
           View and analyze exam results and performance.

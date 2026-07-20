@@ -1,27 +1,77 @@
 <template>
-  <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-    <h2 class="text-[14px] font-bold text-slate-800 mb-5">Quick Actions</h2>
+  <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+    <h2 class="text-[12px] font-bold text-slate-800 mb-3">Quick Actions</h2>
     
-    <div class="grid grid-cols-2 gap-3">
+    <div class="space-y-3">
       
-      <button class="flex flex-col items-center justify-center gap-2 p-4 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition-colors group text-center">
-        <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-        <span class="text-[10px] font-bold text-slate-600 group-hover:text-[#5138ed] leading-tight">View Detailed Reports</span>
+      <!-- Continue Grading -->
+      <button class="w-full flex items-center justify-between group">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-indigo-50 text-[#5138ed] flex items-center justify-center group-hover:bg-[#5138ed] group-hover:text-white transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-[11px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Continue Grading</span>
+            <span class="text-[10px] text-slate-500">Pick up where you left off</span>
+          </div>
+        </div>
+        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-[#5138ed] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
       </button>
 
-      <button class="flex flex-col items-center justify-center gap-2 p-4 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition-colors group text-center">
-        <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-        <span class="text-[10px] font-bold text-slate-600 group-hover:text-[#5138ed] leading-tight">Export Results</span>
+      <!-- View Pending Students -->
+      <button class="w-full flex items-center justify-between group">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-[11px] font-bold text-slate-800 group-hover:text-emerald-500 transition-colors">View Pending Students</span>
+            <span class="text-[10px] text-slate-500">See who hasn't submitted</span>
+          </div>
+        </div>
+        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
       </button>
 
-      <button class="flex flex-col items-center justify-center gap-2 p-4 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition-colors group text-center">
-        <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
-        <span class="text-[10px] font-bold text-slate-600 group-hover:text-[#5138ed] leading-tight">Grade Analysis</span>
+      <!-- Publish Results -->
+      <button class="w-full flex items-center justify-between group">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-[11px] font-bold text-slate-800 group-hover:text-orange-500 transition-colors">Publish Results</span>
+            <span class="text-[10px] text-slate-500">Make grades visible to students</span>
+          </div>
+        </div>
+        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
       </button>
 
-      <button class="flex flex-col items-center justify-center gap-2 p-4 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition-colors group text-center">
-        <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-        <span class="text-[10px] font-bold text-slate-600 group-hover:text-[#5138ed] leading-tight">Performance Report</span>
+      <!-- Export Results -->
+      <button class="w-full flex items-center justify-between group">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-[11px] font-bold text-slate-800 group-hover:text-blue-500 transition-colors">Export Results</span>
+            <span class="text-[10px] text-slate-500">Download as CSV or Excel</span>
+          </div>
+        </div>
+        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+      </button>
+
+      <!-- Print Result Summary -->
+      <button class="w-full flex items-center justify-between group">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center group-hover:bg-rose-500 group-hover:text-white transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-[11px] font-bold text-slate-800 group-hover:text-rose-500 transition-colors">Print Result Summary</span>
+            <span class="text-[10px] text-slate-500">Generate a printable PDF report</span>
+          </div>
+        </div>
+        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-rose-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
       </button>
 
     </div>

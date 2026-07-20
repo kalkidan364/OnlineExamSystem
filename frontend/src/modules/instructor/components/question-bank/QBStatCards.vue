@@ -4,78 +4,89 @@ import { useInstructorQbStore } from '../../store/instructorQbStore'
 
 const qbStore = useInstructorQbStore()
 
-const stats = computed(() => [
-  {
-    title: 'Total Question Banks',
-    value: qbStore.stats.total_banks,
-    subtitle: 'All Question Banks',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>',
-    colorClass: 'text-[#5138ed]',
-    bgClass: 'bg-indigo-50'
-  },
-  {
-    title: 'Total Questions',
-    value: qbStore.stats.total_questions,
-    subtitle: 'Across all banks',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
-    colorClass: 'text-emerald-500',
-    bgClass: 'bg-emerald-50'
-  },
-  {
-    title: 'MCQ Questions',
-    value: qbStore.stats.mcq_questions,
-    subtitle: `${qbStore.stats.total_questions > 0 ? Math.round((qbStore.stats.mcq_questions / qbStore.stats.total_questions) * 100) : 0}% of total`,
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path>',
-    colorClass: 'text-blue-500',
-    bgClass: 'bg-blue-50'
-  },
-  {
-    title: 'Short Answer',
-    value: qbStore.stats.sa_questions,
-    subtitle: `${qbStore.stats.total_questions > 0 ? Math.round((qbStore.stats.sa_questions / qbStore.stats.total_questions) * 100) : 0}% of total`,
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>',
-    colorClass: 'text-orange-500',
-    bgClass: 'bg-orange-50'
-  },
-  {
-    title: 'Essay Questions',
-    value: qbStore.stats.essay_questions,
-    subtitle: `${qbStore.stats.total_questions > 0 ? Math.round((qbStore.stats.essay_questions / qbStore.stats.total_questions) * 100) : 0}% of total`,
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>',
-    colorClass: 'text-rose-500',
-    bgClass: 'bg-rose-50'
+const stats = computed(() => {
+  const banks = qbStore.banks || []
+  
+  // Sort by created_at for Last Created
+  const sortedByCreated = [...banks].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+  const lastCreated = sortedByCreated.length > 0 ? sortedByCreated[0] : null
+  
+  // Sort by updated_at for Last Updated
+  const sortedByUpdated = [...banks].sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())
+  const lastUpdated = sortedByUpdated.length > 0 ? sortedByUpdated[0] : null
+
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return '--'
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
-])
+
+  return [
+    {
+      title: 'Question Banks',
+      value: qbStore.stats.total_banks || 0,
+      subtitle: 'Total question banks',
+      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>',
+      colorClass: 'text-[#5138ed]',
+      bgClass: 'bg-indigo-50'
+    },
+    {
+      title: 'Total Questions',
+      value: qbStore.stats.total_questions || 0,
+      subtitle: 'Across all banks',
+      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+      colorClass: 'text-emerald-500',
+      bgClass: 'bg-emerald-50'
+    },
+    {
+      title: 'Last Created',
+      value: formatDate(lastCreated?.created_at),
+      subtitle: lastCreated?.title || 'No banks yet',
+      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>',
+      colorClass: 'text-blue-500',
+      bgClass: 'bg-blue-50'
+    },
+    {
+      title: 'Last Updated',
+      value: formatDate(lastUpdated?.updated_at),
+      subtitle: lastUpdated?.title || 'No banks yet',
+      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+      colorClass: 'text-orange-500',
+      bgClass: 'bg-orange-50'
+    }
+  ]
+})
 </script>
 
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-4">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
     <div 
       v-for="(stat, index) in stats" 
       :key="index"
       class="bg-white rounded-2xl p-4 xl:p-5 border border-slate-100 shadow-sm flex flex-col items-start gap-3 overflow-hidden"
     >
-      <div 
-        class="w-10 h-10 xl:w-12 xl:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-        :class="stat.bgClass"
-      >
-        <svg 
-          class="w-5 h-5 xl:w-6 xl:h-6" 
-          :class="stat.colorClass"
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-          v-html="stat.icon"
-        ></svg>
-      </div>
+      <div class="flex flex-row items-center gap-4 w-full h-full">
+        <div 
+          class="w-12 h-12 xl:w-14 xl:h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+          :class="stat.bgClass"
+        >
+          <svg 
+            class="w-6 h-6 xl:w-7 xl:h-7" 
+            :class="stat.colorClass"
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+            v-html="stat.icon"
+          ></svg>
+        </div>
 
-      <div class="flex flex-col w-full min-w-0">
-        <h3 class="text-[12px] xl:text-[13px] font-bold text-slate-500 mb-1 leading-tight break-words whitespace-normal">{{ stat.title }}</h3>
+      <div class="flex flex-col w-full min-w-0 justify-center">
+        <h3 class="text-[12px] xl:text-[13px] font-bold text-slate-500 mb-1 leading-tight">{{ stat.title }}</h3>
         
         <div v-if="qbStore.isLoading" class="h-6 w-16 bg-slate-100 animate-pulse rounded mb-1"></div>
-        <span v-else class="text-2xl xl:text-3xl font-extrabold text-slate-800 leading-none mb-1">{{ stat.value }}</span>
+        <span v-else class="text-[20px] xl:text-[22px] font-extrabold text-slate-800 leading-none mb-1">{{ stat.value }}</span>
         
-        <span class="text-[11px] xl:text-[12px] text-slate-400 font-medium break-words whitespace-normal">{{ stat.subtitle }}</span>
+        <span class="text-[11px] xl:text-[12px] text-slate-400 font-medium truncate">{{ stat.subtitle }}</span>
+      </div>
       </div>
     </div>
   </div>

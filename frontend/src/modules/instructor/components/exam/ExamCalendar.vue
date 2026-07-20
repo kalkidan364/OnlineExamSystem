@@ -11,14 +11,14 @@ const calendarDays = [
 </script>
 
 <template>
-  <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-    <div class="flex items-center gap-2 mb-4">
-      <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-      <h2 class="text-[13px] font-bold text-slate-800">Exam Calendar</h2>
+  <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+      <h2 class="text-[12px] font-bold text-slate-800">Exam Calendar</h2>
     </div>
 
     <!-- Header Month Navigation -->
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <button class="p-1 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
       </button>
@@ -40,7 +40,7 @@ const calendarDays = [
       <div 
         v-for="(day, index) in calendarDays" 
         :key="index"
-        class="flex flex-col items-center justify-center h-8 rounded-lg text-[11px] font-medium relative cursor-pointer transition-colors"
+        class="flex flex-col items-center justify-center h-6 rounded-lg text-[10px] font-medium relative cursor-pointer transition-colors"
         :class="[
           !day.currentMonth ? 'text-slate-300' : 'text-slate-600',
           day.selected ? 'bg-[#5138ed] text-white shadow-sm shadow-indigo-200' : 'hover:bg-slate-50'

@@ -15,33 +15,49 @@ const stats = computed(() => [
   },
   {
     title: 'Upcoming Exams',
-    value: examStore.exams.filter(e => e.status === 'scheduled').length, // Derived from exams or we can use stats if we had upcoming count
+    value: examStore.stats.upcoming,
     subtitle: 'Scheduled exams',
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>',
     colorClass: 'text-emerald-500',
     bgClass: 'bg-emerald-50'
   },
   {
-    title: 'Published Exams',
-    value: examStore.stats.published,
-    subtitle: 'Active and visible',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>',
-    colorClass: 'text-orange-500',
-    bgClass: 'bg-orange-50'
+    title: 'Active Exams',
+    value: examStore.stats.active,
+    subtitle: 'Currently running',
+    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
+    colorClass: 'text-blue-500',
+    bgClass: 'bg-blue-50'
   },
   {
     title: 'Completed Exams',
     value: examStore.stats.completed,
     subtitle: 'Finished exams',
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>',
+    colorClass: 'text-orange-500',
+    bgClass: 'bg-orange-50'
+  },
+  {
+    title: 'Draft Exams',
+    value: examStore.stats.draft,
+    subtitle: 'Not yet published',
+    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
     colorClass: 'text-rose-500',
     bgClass: 'bg-rose-50'
+  },
+  {
+    title: 'Archived Exams',
+    value: examStore.stats.archived,
+    subtitle: 'Archived exams',
+    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>',
+    colorClass: 'text-slate-600',
+    bgClass: 'bg-slate-100'
   }
 ])
 </script>
 
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
     <div 
       v-for="(stat, index) in stats" 
       :key="index"

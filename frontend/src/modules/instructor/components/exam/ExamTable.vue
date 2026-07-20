@@ -92,10 +92,10 @@ const iconStyles = [
   <div class="p-6">
     
     <!-- Filter Bar -->
-    <div class="flex flex-wrap items-end gap-4 mb-6">
+    <div class="flex items-end gap-4 mb-6 w-full overflow-x-auto pb-2">
       
       <!-- Search -->
-      <div class="relative w-full md:w-64 flex-shrink-0">
+      <div class="relative flex-1 min-w-[200px]">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -152,18 +152,6 @@ const iconStyles = [
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
         </div>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="flex items-center gap-3 w-full sm:w-auto xl:ml-auto">
-        <button class="flex items-center justify-center flex-1 sm:flex-none gap-2 px-5 py-2 border border-indigo-100 text-[#5138ed] text-sm font-semibold rounded-xl hover:bg-indigo-50 transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-          Filter
-        </button>
-        <button @click="resetFilters" class="flex items-center justify-center flex-1 sm:flex-none gap-2 px-5 py-2 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-          Reset
-        </button>
       </div>
 
     </div>
@@ -232,12 +220,13 @@ const iconStyles = [
               </div>
             </td>
             <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ exam.total_marks }}</td>
-            <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ exam.questions_count || 0 }}</td>
+            <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ exam.questions_count !== undefined ? exam.questions_count : '-' }}</td>
             <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">
-              <div class="flex items-center justify-center gap-1.5">
+              <div class="flex items-center justify-center gap-1.5" v-if="exam.students_count !== undefined">
                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                {{ exam.students_count || 0 }}
+                {{ exam.students_count }}
               </div>
+              <div v-else class="text-center">-</div>
             </td>
             <td class="py-4 px-4 text-center">
               <span class="px-2.5 py-1 text-[10px] font-bold rounded-md capitalize" :class="getStatusColor(exam.status)">
@@ -245,14 +234,18 @@ const iconStyles = [
               </span>
             </td>
             <td class="py-4 pl-4 text-center">
-              <div class="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button class="p-1.5 text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="View">
+              <div class="flex items-center justify-center gap-1 text-slate-400">
+                <button class="p-1.5 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="View">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </button>
-                <button class="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Edit">
+                <button class="p-1.5 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="Edit">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                 </button>
-                <button @click="examStore.deleteExam(exam.id)" :disabled="examStore.isSaving" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50" title="Delete">
+                <!-- CREATE ICON -->
+                <router-link to="/instructor/exams/create" class="p-1.5 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Create Exam">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                </router-link>
+                <button @click="examStore.deleteExam(exam.id)" :disabled="examStore.isSaving" class="p-1.5 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50" title="Options">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                 </button>
               </div>
@@ -264,17 +257,27 @@ const iconStyles = [
     
     <!-- Pagination -->
     <div class="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-      <span class="text-[13px] text-slate-500 font-medium">Showing 1 to 8 of 18 exams</span>
-      <div class="flex items-center gap-1">
+      <span class="text-[13px] text-slate-500 font-medium">Showing 1 to 9 of 18 exams</span>
+      <div class="flex items-center gap-2">
         <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
         <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-[#5138ed] text-white font-bold text-sm shadow-sm shadow-indigo-200">1</button>
         <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-sm transition-colors">2</button>
-        <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-sm transition-colors">3</button>
         <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>
+        
+        <div class="relative ml-2">
+          <select class="appearance-none border border-slate-200 rounded-xl text-sm pl-3 pr-8 py-1.5 text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors font-medium">
+            <option>10 / page</option>
+            <option>20 / page</option>
+            <option>50 / page</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+        </div>
       </div>
     </div>
   </div>
