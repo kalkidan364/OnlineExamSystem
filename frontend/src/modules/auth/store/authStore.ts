@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '../../../core/api/apiClient'
+import { useSettingsStore } from '../../../store/settingsStore'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<any>(null)
@@ -13,6 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const login = async (credentials: any) => {
     isLoading.value = true
     error.value = null
+    const settingsStore = useSettingsStore()
 
     try {
       try {
@@ -51,6 +53,9 @@ export const useAuthStore = defineStore('auth', () => {
       } else {
         router.push('/instructor/dashboard')
       }
+      
+      // Fetch settings so the academic term badge appears immediately
+      settingsStore.fetchSettings()
       
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {

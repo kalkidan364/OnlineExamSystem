@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useAuthStore } from '../../modules/auth/store/authStore'
+import { useSettingsStore } from '../../store/settingsStore'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 const route = useRoute()
 
 const isCreateExam = computed(() => route.path === '/instructor/exams/create')
@@ -67,6 +69,13 @@ const pageTitle = computed(() => {
           Manage system settings and preferences.
         </div>
       </div>
+    </div>
+
+    <!-- Center: Semester/Year Badge -->
+    <div class="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center">
+      <span class="text-[13px] font-bold text-[#5138ed] bg-indigo-50 px-5 py-1.5 rounded-full border border-indigo-100 shadow-sm whitespace-nowrap">
+        {{ settingsStore.formattedAcademicTerm }}
+      </span>
     </div>
 
     <!-- Right Side: User & Actions -->

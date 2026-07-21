@@ -38,8 +38,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // Current user info
     Route::get('/user', fn(Request $request) => $request->user()->load('department'));
 
-    // Auth — logout
+    // Auth — logout & change password
     Route::post('/logout', [\App\Http\Controllers\Api\V1\AuthController::class, 'logout']);
+    Route::put('/user/change-password', [\App\Http\Controllers\Api\V1\AuthController::class, 'changePassword']);
+
+    // Global settings (accessible by all authenticated users)
+    Route::get('/settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'index']);
 
     // ------------------------------------------------------------------
     // Super Admin Routes
@@ -48,6 +52,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
         Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'destroy']);
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\AdminCourseController::class);
+        Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
     });
 
     // ------------------------------------------------------------------
