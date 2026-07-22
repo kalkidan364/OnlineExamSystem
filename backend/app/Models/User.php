@@ -17,11 +17,15 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'username',
+        'phone',
+        'gender',
+        'status',
         'id_no',
         'password',
         'role',
         'department_id',
-        'course_code',  // The ONE course this instructor teaches
+        'course_code',
         'course_name',
         'academic_year',
         'year_level',

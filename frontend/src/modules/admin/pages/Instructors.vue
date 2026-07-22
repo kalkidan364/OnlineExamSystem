@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import apiClient from '../../../core/api/apiClient'
+import { useSettingsStore } from '../../../store/settingsStore'
+
+const settingsStore = useSettingsStore()
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 
@@ -45,16 +48,16 @@ const permissions = ref([
 const fetchInstructors = async () => {
   try {
     const res = await apiClient.get('/admin/users?role=instructor')
-    allInstructors.value = (res.data.data || []).map((u: any, i: number) => ({
+    allInstructors.value = (res.data.data || []).map((u: any) => ({
       ...u,
       avatar: u.name ? u.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
-      status: i % 10 === 0 ? 'inactive' : 'active',
-      joined: new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      status: u.status || 'active',
+      joined: new Date(u.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
       departmentName: u.department?.name || '—',
-      employeeId: `WU-INS-${(u.id || 1).toString().padStart(4, '0')}`,
-      lastLogin: ['Today, 10:30 AM', 'Today, 11:05 AM', 'Today, 08:45 AM', 'Yesterday, 05:30 PM', 'Today, 09:15 AM', '3 weeks ago', 'Yesterday, 02:10 PM', 'Today, 09:20 AM', '2 weeks ago', 'Today, 12:00 PM'][i % 10],
-      phone: '+251 91 ' + String(200 + i).slice(0, 3) + ' ' + String(5000 + i * 111).slice(0, 4),
-      gender: i % 3 === 0 ? 'Female' : 'Male',
+      employeeId: u.id_no || u.employee_id || `WU-INS-${(u.id || 1).toString().padStart(4, '0')}`,
+      lastLogin: u.last_login_at || 'Never',
+      phone: u.phone || 'N/A',
+      gender: u.gender || 'N/A',
     }))
   } catch (err) { console.error('Failed to fetch instructors:', err) }
 }
@@ -83,12 +86,17 @@ const filtered = computed(() => {
 const totalPages  = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginated   = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
 
-const stats = computed(() => ({
-  total:    allInstructors.value.length,
-  active:   allInstructors.value.filter(i => i.status === 'active').length,
-  inactive: allInstructors.value.filter(i => i.status === 'inactive').length,
-  newInst:  9,
-}))
+const stats = computed(() => {
+  const total = allInstructors.value.length
+  const active = allInstructors.value.filter(i => i.status === 'active').length
+  const inactive = total - active
+  const newInst = allInstructors.value.filter(i => {
+    const created = new Date(i.created_at || Date.now())
+    const now = new Date()
+    return (now.getTime() - created.getTime()) < 30 * 24 * 60 * 60 * 1000
+  }).length
+  return { total, active, inactive, newInst }
+})
 
 // ── Donut Chart ──
 const chartData = computed(() => ({
@@ -223,9 +231,15 @@ const addInstructor = async () => {
     await apiClient.post('/admin/users', {
       name: newInstructor.value.name,
       email: newInstructor.value.email,
+      username: newInstructor.value.username,
+      phone: newInstructor.value.phone,
+      gender: newInstructor.value.gender,
       role: 'instructor',
       department_id: newInstructor.value.department_id || null,
       password: newInstructor.value.password,
+      year_level: newInstructor.value.year || null,
+      semester: settingsStore.semester || null,
+      id_no: newInstructor.value.employeeId || null,
     })
     await fetchInstructors()
     showAddPage.value = false
@@ -242,15 +256,21 @@ const addInstructor = async () => {
 }
 
 const confirmDelete = (instructor: any) => { selectedInstructor.value = instructor; showDeleteModal.value = true }
-const deleteInstructor = () => {
+const deleteInstructor = async () => {
   if (!selectedInstructor.value) return
   isLoading.value = true
-  allInstructors.value = allInstructors.value.filter(i => i.id !== selectedInstructor.value.id)
-  if (viewingInstructor.value?.id === selectedInstructor.value.id) {
-    viewingInstructor.value = null
+  try {
+    await apiClient.delete(`/admin/users/${selectedInstructor.value.id}`)
+    await fetchInstructors()
+    if (viewingInstructor.value?.id === selectedInstructor.value.id) {
+      viewingInstructor.value = null
+    }
+    showDeleteModal.value = false
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to delete instructor.')
+  } finally {
+    isLoading.value = false
   }
-  showDeleteModal.value = false
-  isLoading.value = false
 }
 
 const importFileInput = ref<HTMLInputElement | null>(null)
@@ -380,10 +400,10 @@ const handleImport = async (event: Event) => {
       </div>
 
       <!-- ── Main Content Grid ── -->
-      <div class="grid grid-cols-[1fr_300px] gap-6">
+      <div class="flex flex-col gap-6 w-full">
 
-        <!-- Left Column: Table -->
-        <div class="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-w-0">
+        <!-- Top Column: Table -->
+        <div class="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-w-0 w-full">
 
           <!-- Table Filters -->
           <div class="p-4 border-b border-slate-100 flex items-center gap-3 overflow-x-auto">
@@ -408,7 +428,7 @@ const handleImport = async (event: Event) => {
 
           <!-- Table -->
           <div class="overflow-x-auto flex-1">
-            <table class="w-full text-left border-collapse min-w-[900px]">
+            <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="bg-slate-50/60 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th class="px-5 py-3.5">Instructor</th>
@@ -476,8 +496,8 @@ const handleImport = async (event: Event) => {
           </div>
         </div>
 
-        <!-- ── Right Sidebar ── -->
-        <div class="space-y-5">
+        <!-- ── Bottom Grid (was Right Sidebar) ── -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
           <!-- Instructor Overview Chart -->
           <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
@@ -679,10 +699,7 @@ const handleImport = async (event: Event) => {
     <!-- ════════════════ ADD FORM VIEW ════════════════ -->
     <div v-else-if="showAddPage" class="space-y-8 pb-12 min-w-0 w-full">
       <!-- Header -->
-      <div class="flex items-center gap-4">
-        <button @click="closeAdd" class="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center hover:bg-slate-50 transition-colors text-slate-500">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-        </button>
+      <div class="flex items-center justify-between">
         <div>
           <h1 class="text-[22px] font-bold text-slate-800">Add New Instructor</h1>
           <div class="flex items-center gap-2 text-[13px] text-slate-500 mt-0.5">
@@ -691,6 +708,9 @@ const handleImport = async (event: Event) => {
             <span class="font-medium text-slate-700">Add New Instructor</span>
           </div>
         </div>
+        <button @click="closeAdd" class="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> Back to Instructors
+        </button>
       </div>
 
       <div class="grid grid-cols-[1fr_320px] gap-6">
@@ -753,22 +773,17 @@ const handleImport = async (event: Event) => {
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Semester</label>
-                <select v-model="newInstructor.semester" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
-                  <option value="">Select semester</option>
-                  <option value="semester_1">Semester 1</option>
-                  <option value="semester_2">Semester 2</option>
-                  <option value="summer">Summer</option>
-                </select>
+                <input type="text" disabled :value="settingsStore.semester" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed font-bold">
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Year</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Academic Year Level</label>
                 <select v-model="newInstructor.year" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
-                  <option value="">Select year</option>
-                  <option value="year_1">Year 1</option>
-                  <option value="year_2">Year 2</option>
-                  <option value="year_3">Year 3</option>
-                  <option value="year_4">Year 4</option>
-                  <option value="year_5">Year 5</option>
+                  <option value="">Select level</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                  <option value="5th Year">5th Year</option>
                 </select>
               </div>
             </div>

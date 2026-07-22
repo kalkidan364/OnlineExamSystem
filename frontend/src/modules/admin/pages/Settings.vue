@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useSettingsStore } from '../../../store/settingsStore'
+import apiClient from '../../../core/api/apiClient'
 
 const settingsStore = useSettingsStore()
 const saved = ref(false)
@@ -50,38 +51,48 @@ const passwordStatus = ref<{type: 'success' | 'error' | null, message: string}>(
 const isChangingPassword = ref(false)
 
 const changePassword = async () => {
-  if (security.value.newPassword !== security.value.confirmPassword) {
-    passwordStatus.value = { type: 'error', message: 'New passwords do not match' }
+  // Client-side validation
+  if (!security.value.currentPassword) {
+    passwordStatus.value = { type: 'error', message: 'Please enter your current password.' }
     return
   }
-  
   if (security.value.newPassword.length < 8) {
-    passwordStatus.value = { type: 'error', message: 'Password must be at least 8 characters long' }
+    passwordStatus.value = { type: 'error', message: 'New password must be at least 8 characters long.' }
+    return
+  }
+  if (security.value.newPassword !== security.value.confirmPassword) {
+    passwordStatus.value = { type: 'error', message: 'New passwords do not match.' }
     return
   }
 
   isChangingPassword.value = true
   passwordStatus.value = { type: null, message: '' }
-  
+
   try {
-    // Assuming `api` is imported or available globally, or we can use the same axios instance
-    // Let's import api at the top if needed.
-    const { default: api } = await import('../../../core/api/apiClient')
-    await api.put('/user/change-password', {
-      current_password: security.value.currentPassword,
-      new_password: security.value.newPassword,
-      new_password_confirmation: security.value.confirmPassword
+    await apiClient.put('/user/change-password', {
+      current_password:          security.value.currentPassword,
+      new_password:              security.value.newPassword,
+      new_password_confirmation: security.value.confirmPassword,
     })
-    
-    passwordStatus.value = { type: 'success', message: 'Password changed successfully' }
+
+    passwordStatus.value = { type: 'success', message: 'Password changed successfully!' }
+    // Clear the form
     security.value.currentPassword = ''
     security.value.newPassword = ''
     security.value.confirmPassword = ''
-    setTimeout(() => { passwordStatus.value.type = null }, 3000)
+    setTimeout(() => { passwordStatus.value.type = null }, 4000)
+
   } catch (error: any) {
-    passwordStatus.value = { 
-      type: 'error', 
-      message: error.response?.data?.message || 'Failed to change password. Please check your current password.' 
+    // Laravel validation errors come as: { errors: { current_password: ['...'] } }
+    const errData = error.response?.data
+    if (errData?.errors) {
+      const firstField = Object.keys(errData.errors)[0]
+      passwordStatus.value = { type: 'error', message: errData.errors[firstField][0] }
+    } else {
+      passwordStatus.value = {
+        type: 'error',
+        message: errData?.message || 'Failed to change password. Please try again.',
+      }
     }
   } finally {
     isChangingPassword.value = false

@@ -17,15 +17,19 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'email'    => 'required|email',
+            'login'    => 'required|string',
             'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $loginField = $request->login;
+
+        // Try to find user by email first, then by username
+        $user = User::where('email', $loginField)->first()
+              ?? User::where('username', $loginField)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                'login' => ['The provided credentials are incorrect.'],
             ]);
         }
 
@@ -36,7 +40,7 @@ class AuthController extends Controller
             $hasCourses = \App\Models\Course::where('instructor_id', $user->id)->exists();
             if (!$hasCourses) {
                 throw ValidationException::withMessages([
-                    'email' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
+                    'login' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
                 ]);
             }
         }
@@ -46,10 +50,12 @@ class AuthController extends Controller
         return response()->json([
             'data' => [
                 'user'  => [
-                    'id'    => $user->id,
-                    'name'  => $user->name,
-                    'email' => $user->email,
-                    'role'  => $user->role,
+                    'id'         => $user->id,
+                    'name'       => $user->name,
+                    'email'      => $user->email,
+                    'username'   => $user->username,
+                    'role'       => $user->role,
+                    'department_id' => $user->department_id,
                 ],
                 'token' => $token,
             ],

@@ -50,9 +50,23 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // ------------------------------------------------------------------
     Route::prefix('admin')->group(function () {
         Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
+        Route::post('departments/{department}/assign-head', [\App\Http\Controllers\Api\V1\DepartmentController::class, 'assignHead']);
         Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'destroy']);
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\AdminCourseController::class);
         Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
+
+        // List all instructors (for assign-head modal), optionally filter by department_id
+        Route::get('instructors', function (Request $request) {
+            $query = \App\Models\User::whereIn('role', ['instructor', 'dept_head']);
+            if ($request->has('department_id')) {
+                $query->where('department_id', $request->department_id);
+            }
+            return response()->json([
+                'data' => $query->select('id', 'name', 'email', 'role', 'department_id')
+                    ->orderBy('name')
+                    ->get(),
+            ]);
+        });
     });
 
     // ------------------------------------------------------------------

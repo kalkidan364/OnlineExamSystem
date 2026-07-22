@@ -41,6 +41,7 @@ class AdminUserController extends Controller
         $request->validate([
             'name'          => 'required|string|max:255',
             'email'         => 'required|email|unique:users,email',
+            'username'      => 'nullable|string|max:255|unique:users,username',
             'role'          => 'required|in:instructor,student,dept_head,admin',
             'department_id' => 'nullable|exists:departments,id',
             'course_code'   => 'nullable|string|max:255',
@@ -49,12 +50,15 @@ class AdminUserController extends Controller
             'year_level'    => 'nullable|string|max:255',
             'semester'      => 'nullable|string|max:255',
             'id_no'         => 'nullable|string|max:255',
+            'phone'         => 'nullable|string|max:50',
+            'gender'        => 'nullable|in:Male,Female,Other',
             'password'      => 'required|string|min:8',
         ]);
 
         $user = User::create([
             'name'          => $request->name,
             'email'         => $request->email,
+            'username'      => $request->username,
             'role'          => $request->role,
             'department_id' => $request->department_id,
             'course_code'   => $request->course_code,
@@ -63,6 +67,8 @@ class AdminUserController extends Controller
             'year_level'    => $request->year_level,
             'semester'      => $request->semester,
             'id_no'         => $request->id_no,
+            'phone'         => $request->phone,
+            'gender'        => $request->gender,
             'password'      => \Illuminate\Support\Facades\Hash::make($request->password),
         ]);
 

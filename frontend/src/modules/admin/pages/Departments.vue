@@ -12,7 +12,7 @@ const perPage = 8
 const showAddForm = ref(false)
 const showDeleteModal = ref(false)
 const showEditModal = ref(false)
-const editData = ref({ id: null as number|null, name: '', code: '', established: '', college: '', headOfDepartment: '', email: '', phone: '', officeLocation: '' })
+const editData = ref({ id: null as number|null, name: '', code: '', established: '', college: '' })
 const selectedDept = ref<any>(null)
 const isLoading = ref(false)
 
@@ -20,18 +20,29 @@ const isLoading = ref(false)
 const showDetailView = ref(false)
 const viewingDept = ref<any>(null)
 const detailActiveTab = ref('info')
-const showAssignHeadModal = ref(false)
-const headSearchQuery = ref('')
+const detailData = ref<any>(null)
+const isDetailLoading = ref(false)
 
-const viewDeptDetail = (dept: any) => {
+const viewDeptDetail = async (dept: any) => {
   viewingDept.value = dept
   detailActiveTab.value = 'info'
   showDetailView.value = true
+  
+  isDetailLoading.value = true
+  try {
+    const res = await apiClient.get(`/admin/departments/${dept.id}`)
+    detailData.value = res.data.data
+  } catch (err) {
+    console.error('Failed to fetch department details:', err)
+  } finally {
+    isDetailLoading.value = false
+  }
 }
 
 const backToDepartments = () => {
   showDetailView.value = false
   viewingDept.value = null
+  detailData.value = null
 }
 
 const detailTabs = [
@@ -44,12 +55,13 @@ const detailTabs = [
   { key: 'activity', label: 'Activity Log', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
-const mockInstructors = [
-  { name: 'Dr. Abebe Kebede', email: 'abebe.kebede@wu.edu.et', current: true },
-  { name: 'Mr. Tesfaye Alemu', email: 'tesfaye.alemu@wu.edu.et', current: false },
-  { name: 'Ms. Yeshimebet D.', email: 'yeshimebet.d@wu.edu.et', current: false },
-  { name: 'Mr. Haile Getachew', email: 'haile.getachew@wu.edu.et', current: false },
-]
+// Assign head from list view
+const showListAssignHeadModal = ref(false)
+const assignHeadTarget = ref<any>(null)
+const assignHeadSearch = ref('')
+const availableInstructors = ref<any[]>([])
+const isAssigningHead = ref(false)
+const assignHeadStatus = ref<{type: 'success' | 'error' | null, message: string}>({ type: null, message: '' })
 
 const allDepts = ref<any[]>([])
 
@@ -57,21 +69,7 @@ const allDepts = ref<any[]>([])
 const newDeptForm = ref({
   name: '',
   code: '',
-  faculty: '',
   college: '',
-  year: '',
-  programLevel: '',
-  departmentType: '',
-  headOfDepartment: '',
-  email: '',
-  phone: '',
-  officeLocation: '',
-  description: '',
-  establishedDate: '',
-  status: 'active',
-  displayOrder: 0,
-  vision: '',
-  mission: '',
 })
 
 
@@ -79,37 +77,11 @@ const resetAddForm = () => {
   newDeptForm.value = {
     name: '',
     code: '',
-    faculty: '',
     college: '',
-    year: '',
-    programLevel: '',
-    departmentType: '',
-    headOfDepartment: '',
-    email: '',
-    phone: '',
-    officeLocation: '',
-    description: '',
-    establishedDate: '',
-    status: 'active',
-    displayOrder: 0,
-    vision: '',
-    mission: '',
   }
 }
 
-// Mock data for display (will be replaced by API data when available)
-const mockDepts = [
-  { id: 1, name: 'Computer Science', subLabel: 'Computing & Informatics', code: 'CS', faculty: 'College of Computing and Informatics', head: 'Dr. Solomon Abate', headEmail: 'solomon.abate@wu.edu.et', students: 632, instructors: 28, courses: 65, status: 'active', established: '2005' },
-  { id: 2, name: 'Software Engineering', subLabel: 'Computing & Informatics', code: 'SWE', faculty: 'College of Computing and Informatics', head: 'Dr. Abebe Kebede', headEmail: 'abebe.kebede@wu.edu.et', students: 524, instructors: 18, courses: 36, status: 'active', established: '2010' },
-  { id: 3, name: 'Information Systems', subLabel: 'Computing & Informatics', code: 'IS', faculty: 'College of Computing and Informatics', head: 'Dr. Yeshimebet D.', headEmail: 'yeshimebet.d@wu.edu.et', students: 312, instructors: 15, courses: 28, status: 'active', established: '2008' },
-  { id: 4, name: 'Electrical Engineering', subLabel: 'Engineering', code: 'EE', faculty: 'College of Engineering and Technology', head: 'Dr. Getachew T.', headEmail: 'getachew.t@wu.edu.et', students: 298, instructors: 20, courses: 42, status: 'active', established: '2003' },
-  { id: 5, name: 'Mechanical Engineering', subLabel: 'Engineering', code: 'ME', faculty: 'College of Engineering and Technology', head: 'Dr. Melaku A.', headEmail: 'melaku.a@wu.edu.et', students: 276, instructors: 17, courses: 40, status: 'active', established: '2004' },
-  { id: 6, name: 'Civil Engineering', subLabel: 'Engineering', code: 'CE', faculty: 'College of Engineering and Technology', head: 'Dr. Fikret A.', headEmail: 'fikret.a@wu.edu.et', students: 210, instructors: 14, courses: 32, status: 'active', established: '2002' },
-  { id: 7, name: 'Mathematics', subLabel: 'Natural Sciences', code: 'MATH', faculty: 'College of Natural Sciences', head: 'Dr. Tesfaye A.', headEmail: 'tesfaye.a@wu.edu.et', students: 186, instructors: 12, courses: 24, status: 'active', established: '2001' },
-  { id: 8, name: 'Physics', subLabel: 'Natural Sciences', code: 'PHYS', faculty: 'College of Natural Sciences', head: 'Dr. Alemu T.', headEmail: 'alemu.t@wu.edu.et', students: 142, instructors: 10, courses: 20, status: 'active', established: '2001' },
-  { id: 9, name: 'Chemistry', subLabel: 'Natural Sciences', code: 'CHEM', faculty: 'College of Natural Sciences', head: 'Dr. Marta G.', headEmail: 'marta.g@wu.edu.et', students: 120, instructors: 9, courses: 18, status: 'active', established: '2001' },
-  { id: 10, name: 'Biology', subLabel: 'Natural Sciences', code: 'BIO', faculty: 'College of Natural Sciences', head: 'Dr. Hanna B.', headEmail: 'hanna.b@wu.edu.et', students: 98, instructors: 7, courses: 15, status: 'inactive', established: '2006' },
-]
+// Removed mock data
 
 // Fetch departments from backend
 const fetchDepartments = async () => {
@@ -129,14 +101,8 @@ const fetchDepartments = async () => {
       status: d.status,
       established: d.established || 'N/A'
     }))
-    // If API returns no data, use mock data for display
-    if (allDepts.value.length === 0) {
-      allDepts.value = mockDepts
-    }
   } catch (err) {
     console.error('Failed to fetch departments:', err)
-    // Fall back to mock data on error
-    allDepts.value = mockDepts
   }
 }
 fetchDepartments()
@@ -184,16 +150,7 @@ const saveDepartment = async () => {
     await apiClient.post('/admin/departments', {
       name: newDeptForm.value.name,
       code: newDeptForm.value.code,
-      faculty: newDeptForm.value.faculty,
       college: newDeptForm.value.college,
-      head_name: newDeptForm.value.headOfDepartment,
-      head_email: newDeptForm.value.email,
-      head_password: 'password123',
-      established: newDeptForm.value.establishedDate,
-      status: newDeptForm.value.status,
-      description: newDeptForm.value.description,
-      vision: newDeptForm.value.vision,
-      mission: newDeptForm.value.mission,
     })
     await fetchDepartments()
     showAddForm.value = false
@@ -211,8 +168,64 @@ const saveDepartment = async () => {
 }
 
 const openEditModal = (d: any) => {
-  editData.value = { id: d.id, name: d.name, code: d.code, established: d.established === 'N/A' ? '' : d.established, college: d.college || '', headOfDepartment: d.headOfDepartment || d.head || '', email: d.email || '', phone: d.phone || '', officeLocation: d.officeLocation || '' }
+  editData.value = { 
+    id: d.id, 
+    name: d.name, 
+    code: d.code, 
+    established: d.established === 'N/A' ? '' : d.established, 
+    college: d.college || '',
+    status: d.status || 'active'
+  }
   showEditModal.value = true
+}
+
+// Assign Head from List View
+const openAssignHeadFromList = async (dept: any) => {
+  assignHeadTarget.value = dept
+  assignHeadSearch.value = ''
+  assignHeadStatus.value = { type: null, message: '' }
+  showListAssignHeadModal.value = true
+  try {
+    const res = await apiClient.get(`/admin/instructors?department_id=${dept.id}`)
+    availableInstructors.value = res.data.data
+  } catch (err) {
+    console.error('Failed to fetch instructors:', err)
+    availableInstructors.value = []
+  }
+}
+
+const filteredInstructorsForAssign = computed(() => {
+  if (!assignHeadSearch.value) return availableInstructors.value
+  const q = assignHeadSearch.value.toLowerCase()
+  return availableInstructors.value.filter((i: any) =>
+    i.name.toLowerCase().includes(q) || i.email.toLowerCase().includes(q)
+  )
+})
+
+const doAssignHead = async (instructor: any) => {
+  if (!assignHeadTarget.value) return
+  isAssigningHead.value = true
+  assignHeadStatus.value = { type: null, message: '' }
+  try {
+    await apiClient.post(`/admin/departments/${assignHeadTarget.value.id}/assign-head`, {
+      instructor_id: instructor.id
+    })
+    assignHeadStatus.value = { type: 'success', message: `${instructor.name} assigned as head successfully!` }
+    await fetchDepartments()
+    if (showDetailView.value && viewingDept.value?.id === assignHeadTarget.value.id) {
+      await viewDeptDetail(viewingDept.value)
+    }
+    setTimeout(() => {
+      showListAssignHeadModal.value = false
+    }, 1500)
+  } catch (err: any) {
+    assignHeadStatus.value = {
+      type: 'error',
+      message: err.response?.data?.message || 'Failed to assign head.'
+    }
+  } finally {
+    isAssigningHead.value = false
+  }
 }
 
 const updateDept = async () => {
@@ -222,12 +235,8 @@ const updateDept = async () => {
     await apiClient.put(`/admin/departments/${editData.value.id}`, {
       name: editData.value.name,
       code: editData.value.code,
-      established: editData.value.established,
       college: editData.value.college,
-      headOfDepartment: editData.value.headOfDepartment,
-      email: editData.value.email,
-      phone: editData.value.phone,
-      officeLocation: editData.value.officeLocation
+      status: editData.value.status
     })
     await fetchDepartments()
     showEditModal.value = false
@@ -311,16 +320,17 @@ const deleteDept = async () => {
           <!-- Stats -->
           <div class="flex items-center gap-4 shrink-0">
             <div v-for="(stat, si) in [
-              { label: 'Students', val: viewingDept.students, sub: 'Active Students', bg: 'bg-indigo-50', ic: 'text-[#4338ca]', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
-              { label: 'Instructors', val: viewingDept.instructors, sub: 'Total Instructors', bg: 'bg-blue-50', ic: 'text-blue-500', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
-              { label: 'Courses', val: viewingDept.courses, sub: 'Total Courses', bg: 'bg-amber-50', ic: 'text-amber-500', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-              { label: 'Exams', val: 85, sub: 'Total Exams', bg: 'bg-purple-50', ic: 'text-purple-500', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+              { label: 'Students', val: detailData?.students?.length || 0, sub: 'Active Students', bg: 'bg-indigo-50', ic: 'text-[#4338ca]', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+              { label: 'Instructors', val: detailData?.instructors?.length || 0, sub: 'Total Instructors', bg: 'bg-blue-50', ic: 'text-blue-500', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
+              { label: 'Courses', val: detailData?.courses?.length || 0, sub: 'Total Courses', bg: 'bg-amber-50', ic: 'text-amber-500', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+              { label: 'Exams', val: 0, sub: 'Total Exams', bg: 'bg-purple-50', ic: 'text-purple-500', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
             ]" :key="si" class="border border-slate-100 rounded-xl p-4 min-w-[110px] text-center">
               <div :class="[stat.bg, 'w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2']">
                 <svg class="w-4 h-4" :class="stat.ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="stat.icon"></path></svg>
               </div>
               <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{{ stat.label }}</p>
-              <p class="text-[22px] font-bold text-slate-800">{{ stat.val }}</p>
+              <p v-if="isDetailLoading" class="h-6 w-8 bg-slate-100 rounded animate-pulse mx-auto mt-1"></p>
+              <p v-else class="text-[22px] font-bold text-slate-800">{{ stat.val }}</p>
               <p class="text-[10px] text-slate-400">{{ stat.sub }}</p>
             </div>
           </div>
@@ -348,34 +358,33 @@ const deleteDept = async () => {
           <template v-if="detailActiveTab === 'info'">
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
               <h3 class="text-[16px] font-bold text-slate-800 mb-6">Department Information</h3>
-              <div class="grid grid-cols-2 gap-x-16 gap-y-5">
+              <div v-if="isDetailLoading" class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else class="grid grid-cols-2 gap-x-16 gap-y-5">
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
                   <span class="text-[13px] text-slate-500">Department Code</span>
                   <span class="text-[13px] font-semibold text-slate-800">{{ viewingDept.code }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
-                  <span class="text-[13px] text-slate-500">Head Since</span>
-                  <span class="text-[13px] font-semibold text-slate-800">March 15, 2024</span>
+                  <span class="text-[13px] text-slate-500">Head of Department</span>
+                  <span class="text-[13px] font-semibold text-slate-800">{{ detailData?.department?.head?.name || 'Not assigned' }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
-                  <span class="text-[13px] text-slate-500">Faculty</span>
-                  <span class="text-[13px] font-semibold text-slate-800">{{ viewingDept.faculty }}</span>
+                  <span class="text-[13px] text-slate-500">Faculty/College</span>
+                  <span class="text-[13px] font-semibold text-slate-800">{{ viewingDept.college || viewingDept.faculty || 'N/A' }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
-                  <span class="text-[13px] text-slate-500">Email</span>
-                  <span class="text-[13px] font-semibold text-slate-800">{{ viewingDept.code.toLowerCase() }}@wu.edu.et</span>
+                  <span class="text-[13px] text-slate-500">Head Email</span>
+                  <span class="text-[13px] font-semibold text-slate-800">{{ detailData?.department?.head?.email || 'N/A' }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
                   <span class="text-[13px] text-slate-500">Established Date</span>
-                  <span class="text-[13px] font-semibold text-slate-800">September 10, {{ viewingDept.established }}</span>
+                  <span class="text-[13px] font-semibold text-slate-800">{{ viewingDept.established !== 'N/A' ? viewingDept.established : 'N/A' }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
-                  <span class="text-[13px] text-slate-500">Phone</span>
-                  <span class="text-[13px] font-semibold text-slate-800">+251 11 123 4567</span>
-                </div>
-                <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
-                  <span class="text-[13px] text-slate-500">Office Location</span>
-                  <span class="text-[13px] font-semibold text-slate-800">Block C, Room 204</span>
+                  <span class="text-[13px] text-slate-500">Head Phone</span>
+                  <span class="text-[13px] font-semibold text-slate-800">{{ detailData?.department?.head?.phone || 'N/A' }}</span>
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-2 items-start">
                   <span class="text-[13px] text-slate-500">Status</span>
@@ -409,27 +418,38 @@ const deleteDept = async () => {
                   <h3 class="text-[16px] font-bold text-slate-800">Department Head</h3>
                   <p class="text-[13px] text-slate-500 mt-1">Assign an instructor as the department head will additional privileges to manage the department.</p>
                 </div>
-                <button @click="showAssignHeadModal = true" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all">
+                <button @click="openAssignHeadFromList(viewingDept)" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
                   Change Department Head
                 </button>
               </div>
 
               <!-- Current Head Card -->
-              <div class="border border-slate-200 rounded-xl p-6 bg-slate-50/50">
+              <div v-if="isDetailLoading" class="flex justify-center py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else-if="detailData?.department?.head" class="border border-slate-200 rounded-xl p-6 bg-slate-50/50">
                 <h4 class="text-[14px] font-bold text-slate-800 mb-4">Current Department Head</h4>
                 <div class="flex items-center gap-4">
-                  <img :src="getAvatarUrl(viewingDept.head)" :alt="viewingDept.head" class="w-16 h-16 rounded-full border-3 border-white shadow-sm" />
+                  <img :src="getAvatarUrl(detailData.department.head.name)" :alt="detailData.department.head.name" class="w-16 h-16 rounded-full border-3 border-white shadow-sm" />
                   <div class="flex-1">
                     <div class="flex items-center gap-2 mb-1">
-                      <h5 class="text-[15px] font-bold text-slate-800">{{ viewingDept.head }}</h5>
+                      <h5 class="text-[15px] font-bold text-slate-800">{{ detailData.department.head.name }}</h5>
                       <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Current Head</span>
                     </div>
-                    <p class="text-[12px] text-slate-500">{{ viewingDept.headEmail }}</p>
-                    <p class="text-[12px] text-slate-500">+251 91 123 4567</p>
-                    <p class="text-[12px] text-slate-400 mt-1">Since: March 15, 2024</p>
+                    <p class="text-[12px] text-slate-500">{{ detailData.department.head.email }}</p>
+                    <p class="text-[12px] text-slate-500">{{ detailData.department.head.phone || 'No phone number' }}</p>
+                    <p class="text-[12px] text-slate-400 mt-1">Joined: {{ new Date(detailData.department.head.created_at).toLocaleDateString() }}</p>
                   </div>
                 </div>
+              </div>
+              <div v-else class="border border-slate-200 border-dashed rounded-xl p-10 text-center">
+                <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                </div>
+                <h4 class="text-[14px] font-bold text-slate-800 mb-1">No Department Head</h4>
+                <p class="text-[12px] text-slate-500">This department currently has no assigned head.</p>
+               
               </div>
             </div>
           </template>
@@ -439,23 +459,28 @@ const deleteDept = async () => {
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
               <div class="flex items-center justify-between mb-6">
                 <h3 class="text-[16px] font-bold text-slate-800">Instructors <span class="text-slate-400 font-normal">({{ viewingDept.instructors }})</span></h3>
-                <button class="flex items-center gap-2 bg-[#4338ca] hover:bg-indigo-700 text-white text-[13px] font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                  Assign Instructor
-                </button>
               </div>
-              <table class="w-full">
+              <div v-if="isDetailLoading" class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else-if="!detailData?.instructors?.length" class="py-12 flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-2">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                  <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </div>
+                <h4 class="text-[14px] font-bold text-slate-700">No Instructors</h4>
+                <p class="text-[13px] text-slate-500 mt-1">There are no instructors assigned to this department yet.</p>
+              </div>
+              <table v-else class="w-full">
                 <thead>
                   <tr class="border-b border-slate-100">
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Instructor</th>
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</th>
-                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone</th>
-                    <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courses</th>
+                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Role</th>
                     <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="inst in mockInstructors" :key="inst.email" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                  <tr v-for="inst in detailData?.instructors || []" :key="inst.id" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                     <td class="py-3.5 px-4">
                       <div class="flex items-center gap-3">
                         <img :src="getAvatarUrl(inst.name)" :alt="inst.name" class="w-8 h-8 rounded-full border border-slate-100" />
@@ -463,8 +488,7 @@ const deleteDept = async () => {
                       </div>
                     </td>
                     <td class="py-3.5 px-4 text-[12px] text-slate-500">{{ inst.email }}</td>
-                    <td class="py-3.5 px-4 text-[12px] text-slate-500">+251 91 XXX XXXX</td>
-                    <td class="py-3.5 px-4 text-center text-[13px] font-bold text-slate-700">3</td>
+                    <td class="py-3.5 px-4 text-[12px] text-slate-500 capitalize">{{ inst.role === 'dept_head' ? 'Department Head' : 'Instructor' }}</td>
                     <td class="py-3.5 px-4 text-center"><span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600">Active</span></td>
                   </tr>
                 </tbody>
@@ -477,34 +501,34 @@ const deleteDept = async () => {
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
               <div class="flex items-center justify-between mb-6">
                 <h3 class="text-[16px] font-bold text-slate-800">Courses <span class="text-slate-400 font-normal">({{ viewingDept.courses }})</span></h3>
-                <button class="flex items-center gap-2 bg-[#4338ca] hover:bg-indigo-700 text-white text-[13px] font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                  Add Course
-                </button>
               </div>
-              <table class="w-full">
+              <div v-if="isDetailLoading" class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else-if="!detailData?.courses?.length" class="py-12 flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-2">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                  <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                </div>
+                <h4 class="text-[14px] font-bold text-slate-700">No Courses</h4>
+                <p class="text-[13px] text-slate-500 mt-1">There are no courses assigned to this department yet.</p>
+              </div>
+              <table v-else class="w-full">
                 <thead>
                   <tr class="border-b border-slate-100">
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Course Code</th>
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Course Title</th>
                     <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credits</th>
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Instructor</th>
-                    <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Type</th>
-                    <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                    <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Semester</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(course, ci) in [
-                    { code: viewingDept.code + ' 301', title: 'Introduction to ' + viewingDept.name, credits: 4, instructor: viewingDept.head, type: 'Core' },
-                    { code: viewingDept.code + ' 302', title: 'Advanced ' + viewingDept.name, credits: 3, instructor: 'Mr. Tesfaye A.', type: 'Core' },
-                    { code: viewingDept.code + ' 303', title: viewingDept.name + ' Lab', credits: 2, instructor: 'Ms. Yeshimebet D.', type: 'Elective' },
-                  ]" :key="ci" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                  <tr v-for="course in detailData?.courses || []" :key="course.id" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                     <td class="py-3.5 px-4 text-[13px] font-semibold font-mono text-slate-700">{{ course.code }}</td>
                     <td class="py-3.5 px-4 text-[13px] text-slate-600">{{ course.title }}</td>
                     <td class="py-3.5 px-4 text-center text-[13px] font-bold text-slate-700">{{ course.credits }}</td>
-                    <td class="py-3.5 px-4 text-[12px] text-slate-500">{{ course.instructor }}</td>
-                    <td class="py-3.5 px-4 text-center"><span :class="[course.type === 'Core' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600', 'text-[11px] font-bold px-2.5 py-1 rounded-full']">{{ course.type }}</span></td>
-                    <td class="py-3.5 px-4 text-center"><span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600">Active</span></td>
+                    <td class="py-3.5 px-4 text-[12px] text-slate-500">{{ course.instructor?.name || 'Not assigned' }}</td>
+                    <td class="py-3.5 px-4 text-center text-[13px] text-slate-600">{{ course.semester }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -517,32 +541,35 @@ const deleteDept = async () => {
               <div class="flex items-center justify-between mb-6">
                 <h3 class="text-[16px] font-bold text-slate-800">Students <span class="text-slate-400 font-normal">({{ viewingDept.students }})</span></h3>
               </div>
-              <table class="w-full">
+              <div v-if="isDetailLoading" class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else-if="!detailData?.students?.length" class="py-12 flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-2">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                  <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </div>
+                <h4 class="text-[14px] font-bold text-slate-700">No Students</h4>
+                <p class="text-[13px] text-slate-500 mt-1">There are no students enrolled in this department yet.</p>
+              </div>
+              <table v-else class="w-full">
                 <thead>
                   <tr class="border-b border-slate-100">
                     <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Student</th>
-                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Student ID</th>
-                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Year</th>
-                    <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Courses</th>
+                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</th>
+                    <th class="text-left py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Joined Date</th>
                     <th class="text-center py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(student, si) in [
-                    { name: 'Kalkidan Mengistu', id: 'WU/00119/25', year: '3rd Year', courses: 6 },
-                    { name: 'Abebe Tesfaye', id: 'WU/00120/25', year: '3rd Year', courses: 5 },
-                    { name: 'Meron Tadesse', id: 'WU/00145/25', year: '2nd Year', courses: 6 },
-                    { name: 'Solomon Bekele', id: 'WU/00167/25', year: '1st Year', courses: 7 },
-                  ]" :key="si" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                  <tr v-for="student in detailData?.students || []" :key="student.id" class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                     <td class="py-3.5 px-4">
                       <div class="flex items-center gap-3">
                         <img :src="getAvatarUrl(student.name)" :alt="student.name" class="w-8 h-8 rounded-full border border-slate-100" />
                         <span class="text-[13px] font-semibold text-slate-700">{{ student.name }}</span>
                       </div>
                     </td>
-                    <td class="py-3.5 px-4 text-[12px] font-mono text-slate-500">{{ student.id }}</td>
-                    <td class="py-3.5 px-4 text-[12px] text-slate-600">{{ student.year }}</td>
-                    <td class="py-3.5 px-4 text-center text-[13px] font-bold text-slate-700">{{ student.courses }}</td>
+                    <td class="py-3.5 px-4 text-[12px] text-slate-500">{{ student.email }}</td>
+                    <td class="py-3.5 px-4 text-[12px] text-slate-600">{{ new Date(student.created_at).toLocaleDateString() }}</td>
                     <td class="py-3.5 px-4 text-center"><span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600">Active</span></td>
                   </tr>
                 </tbody>
@@ -584,20 +611,33 @@ const deleteDept = async () => {
           <template v-if="detailActiveTab === 'activity'">
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
               <h3 class="text-[16px] font-bold text-slate-800 mb-6">Activity Log</h3>
-              <div class="space-y-4">
-                <div v-for="(activity, ai) in [
-                  { action: 'Department head changed', user: 'Admin', time: '2 hours ago', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4', color: 'bg-blue-50 text-blue-500' },
-                  { action: 'New course added: ' + viewingDept.code + ' 305', user: viewingDept.head, time: '1 day ago', icon: 'M12 4v16m8-8H4', color: 'bg-emerald-50 text-emerald-500' },
-                  { action: 'Instructor assigned', user: 'Admin', time: '3 days ago', icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z', color: 'bg-purple-50 text-purple-500' },
-                  { action: 'Department status changed to Active', user: 'Admin', time: '1 week ago', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-amber-50 text-amber-500' },
-                  { action: 'Department created', user: 'Super Admin', time: 'September 10, ' + viewingDept.established, icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5', color: 'bg-indigo-50 text-[#4338ca]' },
-                ]" :key="ai" class="flex items-start gap-4 p-4 border border-slate-100 rounded-lg hover:bg-slate-50/50 transition-colors">
-                  <div :class="[activity.color, 'w-9 h-9 rounded-lg flex items-center justify-center shrink-0']">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="activity.icon"></path></svg>
+              
+              <div v-if="isDetailLoading" class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4338ca]"></div>
+              </div>
+              <div v-else-if="!detailData?.activities?.length" class="py-12 flex flex-col items-center justify-center text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                  <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <h4 class="text-[14px] font-bold text-slate-700">No Activity</h4>
+                <p class="text-[13px] text-slate-500 mt-1">There are no activities logged for this department yet.</p>
+              </div>
+              <div v-else class="space-y-4">
+                <div v-for="activity in detailData.activities" :key="activity.id" class="flex items-start gap-4 p-4 border border-slate-100 rounded-lg hover:bg-slate-50/50 transition-colors">
+                  <div :class="[
+                    activity.type === 'created' ? 'bg-indigo-50 text-[#4338ca]' : 
+                    activity.type === 'head_assigned' ? 'bg-blue-50 text-blue-500' : 
+                    activity.type === 'status_changed' ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-500', 
+                    'w-9 h-9 rounded-lg flex items-center justify-center shrink-0'
+                  ]">
+                    <svg v-if="activity.type === 'created'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5"></path></svg>
+                    <svg v-else-if="activity.type === 'head_assigned'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                    <svg v-else-if="activity.type === 'status_changed'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   </div>
                   <div class="flex-1">
                     <p class="text-[13px] font-semibold text-slate-700">{{ activity.action }}</p>
-                    <p class="text-[11px] text-slate-400 mt-0.5">by {{ activity.user }} · {{ activity.time }}</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">by {{ activity.user?.name || 'System' }} · {{ new Date(activity.created_at).toLocaleString() }}</p>
                   </div>
                 </div>
               </div>
@@ -607,52 +647,8 @@ const deleteDept = async () => {
         </div>
       </div>
 
-      <!-- Assign Head Modal -->
-      <Teleport to="body">
-        <div v-if="showAssignHeadModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-              <h3 class="text-[16px] font-bold text-slate-800">Assign Department Head</h3>
-              <button @click="showAssignHeadModal = false" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-            </div>
-            <div class="px-6 py-5 space-y-5">
-              <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Department</label>
-                <input type="text" :value="viewingDept.name + ' (' + viewingDept.code + ')'" disabled class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-500 bg-slate-50" />
-              </div>
-              <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Select Instructor</label>
-                <div class="relative mb-3">
-                  <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                  <input v-model="headSearchQuery" type="text" placeholder="Search instructor..." class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400" />
-                  <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-                <div class="border border-slate-200 rounded-lg overflow-hidden max-h-[200px] overflow-y-auto">
-                  <div v-for="inst in mockInstructors" :key="inst.email" class="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 cursor-pointer transition-colors border-b border-slate-50 last:border-b-0" :class="inst.current ? 'bg-indigo-50' : ''">
-                    <img :src="getAvatarUrl(inst.name)" :alt="inst.name" class="w-9 h-9 rounded-full border-2 border-slate-100" />
-                    <div class="flex-1">
-                      <p class="text-[13px] font-semibold text-slate-700">{{ inst.name }}</p>
-                      <p class="text-[11px] text-slate-400">{{ inst.email }}</p>
-                    </div>
-                    <span v-if="inst.current" class="text-[10px] font-bold text-[#4338ca] bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Department Head Since</label>
-                <div class="relative">
-                  <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                  <input type="date" value="2025-05-27" class="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]" />
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-              <button @click="showAssignHeadModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>
-              <button @click="showAssignHeadModal = false" class="px-5 py-2.5 text-[13px] font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl shadow-sm transition-all">Assign Head</button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
+      <!-- Removed mock Assign Head Modal -->
+
 
     </template>
 
@@ -709,51 +705,10 @@ const deleteDept = async () => {
             </div>
           </div>
 
-          <!-- Row 2: Head, Email, Phone -->
-          <div class="grid grid-cols-3 gap-6">
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Head of Department</label>
-              <div class="relative">
-                <select v-model="newDeptForm.headOfDepartment" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="" disabled>Select head of department</option>
-                  <option value="Dr. Solomon Abate">Dr. Solomon Abate</option>
-                  <option value="Dr. Abebe Kebede">Dr. Abebe Kebede</option>
-                  <option value="Dr. Yeshimebet D.">Dr. Yeshimebet D.</option>
-                  <option value="Dr. Getachew T.">Dr. Getachew T.</option>
-                </select>
-                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Email</label>
-              <input v-model="newDeptForm.email" type="email" placeholder="e.g., cs@wu.edu.et" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Phone</label>
-              <input v-model="newDeptForm.phone" type="text" placeholder="e.g., +251 11 123 4567" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-            </div>
-          </div>
-
-          <!-- Row 3: Office Location & Year -->
-          <div class="grid grid-cols-2 gap-6">
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Office Location</label>
-              <input v-model="newDeptForm.officeLocation" type="text" placeholder="e.g., Block C, Room 204" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
-            </div>
-            <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Year</label>
-              <div class="relative">
-                <select v-model="newDeptForm.year" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="" disabled>Select Year</option>
-                  <option value="1st Year">1st Year</option>
-                  <option value="2nd Year">2nd Year</option>
-                  <option value="3rd Year">3rd Year</option>
-                  <option value="4th Year">4th Year</option>
-                  <option value="5th Year">5th Year</option>
-                </select>
-                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+          <!-- Tip: Head is assigned after creation -->
+          <div class="p-3 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-[12px] flex items-center gap-2">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Department Head can be assigned after creating the department using the assign button in the department list.
           </div>
         </div>
       </div>
@@ -912,6 +867,9 @@ const deleteDept = async () => {
               <!-- Actions -->
               <td class="px-4 py-4">
                 <div class="flex items-center justify-center gap-1">
+                  <button @click="openAssignHeadFromList(dept)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Assign Department Head">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                  </button>
                   <button @click="viewDeptDetail(dept)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 transition-colors" title="View Details">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                   </button>
@@ -974,6 +932,54 @@ const deleteDept = async () => {
       </div>
     </Teleport>
 
+    <!-- Assign Head from List Modal -->
+    <Teleport to="body">
+      <div v-if="showListAssignHeadModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <div>
+              <h3 class="text-[16px] font-bold text-slate-800">Assign Department Head</h3>
+              <p class="text-[12px] text-slate-500 mt-0.5">{{ assignHeadTarget?.name }} ({{ assignHeadTarget?.code }})</p>
+            </div>
+            <button @click="showListAssignHeadModal = false" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+
+            <div v-if="assignHeadStatus.type" :class="assignHeadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'" class="p-3 text-[12px] font-medium border rounded-xl flex items-center gap-2">
+              <svg v-if="assignHeadStatus.type === 'success'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              {{ assignHeadStatus.message }}
+            </div>
+
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <input v-model="assignHeadSearch" type="text" placeholder="Search instructors by name or email..." class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400" />
+            </div>
+            <div class="border border-slate-200 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
+              <div v-if="filteredInstructorsForAssign.length === 0" class="py-8 text-center">
+                <p class="text-[13px] text-slate-400">No instructors found. Add instructors first.</p>
+              </div>
+              <div v-for="inst in filteredInstructorsForAssign" :key="inst.id"
+                @click="doAssignHead(inst)"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 cursor-pointer transition-colors border-b border-slate-50 last:border-b-0"
+                :class="assignHeadTarget?.head === inst.name ? 'bg-indigo-50' : ''">
+                <img :src="getAvatarUrl(inst.name)" :alt="inst.name" class="w-9 h-9 rounded-full border-2 border-slate-100" />
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-semibold text-slate-700 truncate">{{ inst.name }}</p>
+                  <p class="text-[11px] text-slate-400 truncate">{{ inst.email }}</p>
+                </div>
+                <span v-if="inst.role === 'dept_head'" class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">Dept Head</span>
+                <span v-if="assignHeadTarget?.head === inst.name" class="text-[10px] font-bold text-[#4338ca] bg-indigo-100 px-2 py-0.5 rounded-full shrink-0">Current</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+            <button @click="showListAssignHeadModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Close</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Edit Modal -->
     <Teleport to="body">
       <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -1000,25 +1006,29 @@ const deleteDept = async () => {
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Head of Department</label>
-                <select v-model="editData.headOfDepartment" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
-                  <option value="" disabled>Select head</option>
-                  <option value="Dr. Solomon Abate">Dr. Solomon Abate</option>
-                  <option value="Dr. Abebe Kebede">Dr. Abebe Kebede</option>
-                  <option value="Dr. Yeshimebet D.">Dr. Yeshimebet D.</option>
-                  <option value="Dr. Getachew T.">Dr. Getachew T.</option>
-                </select>
+            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+              <div>
+                <label class="block text-[13px] font-bold text-slate-700">Department Status</label>
+                <p class="text-[11px] text-slate-500 mt-0.5">Toggle to set department as active or inactive.</p>
               </div>
-              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Established Year</label><input v-model="editData.established" type="number" placeholder="e.g. 2010" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
+              <button 
+                @click="editData.status = editData.status === 'active' ? 'inactive' : 'active'" 
+                :class="[
+                  editData.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-300 hover:bg-slate-400',
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none'
+                ]" 
+                role="switch" 
+                :aria-checked="editData.status === 'active'"
+              >
+                <span 
+                  aria-hidden="true" 
+                  :class="[
+                    editData.status === 'active' ? 'translate-x-5' : 'translate-x-0',
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out'
+                  ]"
+                ></span>
+              </button>
             </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Email</label><input v-model="editData.email" type="email" placeholder="e.g. cs@wu.edu.et" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
-              <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Phone</label><input v-model="editData.phone" type="text" placeholder="e.g. +251 11 123 4567" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
-            </div>
-
-            <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Office Location</label><input v-model="editData.officeLocation" type="text" placeholder="e.g. Block C, Room 204" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
           </div>
           <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
             <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>

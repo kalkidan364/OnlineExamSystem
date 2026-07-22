@@ -33,7 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = {
             id: 1,
             name: 'Dr. Abebe Kebede',
-            email: credentials.email || 'instructor@wollo.edu.et',
+            email: credentials.login || 'instructor@wollo.edu.et',
             role: 'instructor'
           }
           token.value = 'mock_jwt_token_for_frontend_dev'

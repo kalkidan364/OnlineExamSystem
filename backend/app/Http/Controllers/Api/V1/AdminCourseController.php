@@ -40,6 +40,9 @@ class AdminCourseController extends Controller
                     }
                 },
             ],
+            'level' => 'required|string',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
         $course = Course::create([
@@ -49,6 +52,9 @@ class AdminCourseController extends Controller
             'semester' => $request->semester,
             'department_id' => $request->department_id,
             'instructor_id' => $request->instructor_id,
+            'level' => $request->level,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
             'status' => 'active',
             'created_by' => $request->user()->id,
         ]);
@@ -84,9 +90,12 @@ class AdminCourseController extends Controller
                     }
                 },
             ],
+            'level' => 'sometimes|string',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
-        $course->update($request->only(['title', 'code', 'credits', 'semester', 'status', 'department_id', 'instructor_id']));
+        $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'start_date', 'end_date', 'status', 'department_id', 'instructor_id']));
 
         return response()->json([
             'message' => 'Course updated successfully',

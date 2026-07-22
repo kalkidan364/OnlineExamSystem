@@ -14,10 +14,13 @@ class Course extends Model
         'code',
         'credits',
         'semester',
+        'level',
         'department_id',
         'instructor_id',
         'status',
         'created_by',
+        'start_date',
+        'end_date',
     ];
 
     public function department()

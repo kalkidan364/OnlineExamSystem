@@ -4,14 +4,14 @@ import { useAuthStore } from '../store/authStore'
 
 const authStore = useAuthStore()
 
-const email = ref('admin@wollo.edu.et')
+const loginField = ref('admin@wollo.edu.et')
 const password = ref('password123')
 const rememberMe = ref(false)
 const showPassword = ref(false)
 
 const handleLogin = async () => {
   await authStore.login({
-    email: email.value,
+    login: loginField.value,
     password: password.value,
     remember: rememberMe.value
   })
@@ -94,9 +94,9 @@ const handleLogin = async () => {
 
         <form @submit.prevent="handleLogin" class="space-y-5">
           
-          <!-- Email Input -->
+          <!-- Email or Username Input -->
           <div>
-            <label for="email" class="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+            <label for="login" class="block text-xs font-semibold text-slate-700 mb-1.5">Email Address or Username</label>
             <div class="relative">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -104,10 +104,10 @@ const handleLogin = async () => {
                 </svg>
               </div>
               <input 
-                id="email" 
-                type="email" 
-                v-model="email"
-                placeholder="Enter your email address" 
+                id="login" 
+                type="text" 
+                v-model="loginField"
+                placeholder="Enter your email or username" 
                 class="block w-full pl-9 pr-3 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all"
                 required
               />
