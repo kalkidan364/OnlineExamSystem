@@ -19,9 +19,11 @@ class AuthController extends Controller
         $request->validate([
             'login'    => 'required|string',
             'password' => 'required|string',
+            'role'     => 'required|string|in:student,instructor,staff',
         ]);
 
         $loginField = $request->login;
+        $requestedRole = $request->role;
 
         // Try to find user by email first, then by username
         $user = User::where('email', $loginField)->first()
@@ -33,10 +35,29 @@ class AuthController extends Controller
             ]);
         }
 
+        $effectiveRole = $user->role;
+
+        // Role Validation Logic
+        if ($requestedRole === 'student') {
+            if ($user->role !== 'student') {
+                throw ValidationException::withMessages(['login' => ['Invalid credentials or role mismatch.']]);
+            }
+        } elseif ($requestedRole === 'instructor') {
+            if (!in_array($user->role, ['instructor', 'dept_head'])) {
+                throw ValidationException::withMessages(['login' => ['Invalid credentials or role mismatch.']]);
+            }
+            $effectiveRole = 'instructor';
+        } elseif ($requestedRole === 'staff') {
+            if (!in_array($user->role, ['admin', 'dept_head'])) {
+                throw ValidationException::withMessages(['login' => ['Invalid credentials or role mismatch.']]);
+            }
+            $effectiveRole = $user->role; // either admin or dept_head
+        }
+
         // Revoke old tokens (single-session policy)
         $user->tokens()->delete();
 
-        if ($user->role === 'instructor') {
+        if ($effectiveRole === 'instructor') {
             $hasCourses = \App\Models\Course::where('instructor_id', $user->id)->exists();
             if (!$hasCourses) {
                 throw ValidationException::withMessages([
@@ -47,6 +68,9 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        // Load department so the frontend has it immediately upon login
+        $user->load('department');
+
         return response()->json([
             'data' => [
                 'user'  => [
@@ -54,8 +78,9 @@ class AuthController extends Controller
                     'name'       => $user->name,
                     'email'      => $user->email,
                     'username'   => $user->username,
-                    'role'       => $user->role,
+                    'role'       => $effectiveRole,
                     'department_id' => $user->department_id,
+                    'department' => $user->department,
                 ],
                 'token' => $token,
             ],

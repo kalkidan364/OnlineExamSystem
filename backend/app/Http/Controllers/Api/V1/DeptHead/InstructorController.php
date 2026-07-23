@@ -29,7 +29,8 @@ class InstructorController extends Controller
         $deptId = $this->resolveDeptId($request);
         
         $instructors = User::where('department_id', $deptId)
-            ->where('role', 'instructor')
+            ->whereIn('role', ['instructor', 'dept_head'])
+            ->with('assignedCourses')
             ->get();
 
         return response()->json(['data' => $instructors]);
@@ -43,8 +44,12 @@ class InstructorController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string|max:255',
+            'gender' => 'nullable|string|max:255',
+            'id_no' => 'nullable|string|max:255',
+            'year_level' => 'nullable|string|max:255',
+            'username' => 'required|string|unique:users,username',
             'password' => 'required|string|min:8',
-            'semester' => 'nullable|string',
         ]);
 
         $deptId = $this->resolveDeptId($request);
@@ -52,10 +57,15 @@ class InstructorController extends Controller
         $instructor = User::create([
             'name' => $request->name,
             'email' => $request->email,
+            'phone' => $request->phone,
+            'gender' => $request->gender,
+            'id_no' => $request->id_no,
+            'year_level' => $request->year_level,
+            'username' => $request->username,
             'password' => $request->password, // automatically hashed
             'role' => 'instructor',
             'department_id' => $deptId,
-            'semester' => $request->semester,
+            'status' => 'active',
         ]);
 
         return response()->json([
@@ -70,7 +80,7 @@ class InstructorController extends Controller
     public function update(Request $request, string $id): JsonResponse
     {
         $deptId = $this->resolveDeptId($request);
-        $instructor = User::where('department_id', $deptId)->where('role', 'instructor')->findOrFail($id);
+        $instructor = User::where('department_id', $deptId)->whereIn('role', ['instructor', 'dept_head'])->findOrFail($id);
 
         $request->validate([
             'name' => 'sometimes|string|max:255',
@@ -92,7 +102,7 @@ class InstructorController extends Controller
     public function destroy(Request $request, string $id): JsonResponse
     {
         $deptId = $this->resolveDeptId($request);
-        $instructor = User::where('department_id', $deptId)->where('role', 'instructor')->findOrFail($id);
+        $instructor = User::where('department_id', $deptId)->whereIn('role', ['instructor', 'dept_head'])->findOrFail($id);
         
         $instructor->delete();
 

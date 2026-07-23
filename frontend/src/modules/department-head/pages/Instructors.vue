@@ -17,29 +17,17 @@ const selectedInstructor = ref<any>(null)
 const isLoading = ref(false)
 const allInstructors = ref<any[]>([])
 
-// ── Add Instructor Form ──
 const addForm = ref({
   fullName: '',
   email: '',
   phone: '',
   gender: '',
   profilePicture: null as File | null,
-  course: '',
-  section: '',
   employeeId: '',
-  semester: '',
-  year: '',
+  yearLevel: '',
   username: '',
   password: '',
-  confirmPassword: '',
-  permissions: {
-    createExams: false,
-    viewResults: false,
-    manageResults: false,
-    manageQuestions: false,
-    gradeExams: false,
-    generateReports: false,
-  }
+  confirmPassword: ''
 })
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -47,9 +35,8 @@ const showConfirmPassword = ref(false)
 const resetAddForm = () => {
   addForm.value = {
     fullName: '', email: '', phone: '', gender: '', profilePicture: null,
-    course: '', section: '', employeeId: '', semester: '', year: '',
-    username: '', password: '', confirmPassword: '',
-    permissions: { createExams: false, viewResults: false, manageResults: false, manageQuestions: false, gradeExams: false, generateReports: false }
+    employeeId: '', yearLevel: '',
+    username: '', password: '', confirmPassword: ''
   }
 }
 
@@ -157,14 +144,14 @@ const years = ['2018', '2019', '2020', '2021', '2022', '2023', '2024']
 const fetchInstructors = async () => {
   try {
     const res = await apiClient.get('/dept-head/instructors')
-    allInstructors.value = (res.data.data || []).map((i: any, index: number) => ({
+    allInstructors.value = (res.data.data || []).map((i: any) => ({
       ...i,
       avatar: i.name ? i.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
-      id_code: `INS-00${18 - index}`,
-      courses: [4, 3, 2, 3, 2, 2, 1, 2][index % 8],
-      credit: [12, 9, 6, 9, 6, 6, 3, 6][index % 8],
-      year: years[index % years.length],
-      status: [0, 1, 2, 3, 4, 6].includes(index) ? 'active' : 'part time',
+      id_code: i.id_no || 'N/A',
+      courses: i.assigned_courses?.length ? i.assigned_courses.map((c: any) => c.title).join(', ') : 'No Courses',
+      credit: i.assigned_courses?.length ? i.assigned_courses.reduce((sum: number, c: any) => sum + (Number(c.credits) || 0), 0) : 0,
+      year: i.year_level || 'N/A',
+      status: i.status || 'active',
       joined: new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
     }))
   } catch (err) { console.error('Failed to fetch instructors:', err) }
@@ -208,8 +195,12 @@ const saveInstructor = async () => {
     await apiClient.post('/dept-head/instructors', {
       name: addForm.value.fullName,
       email: addForm.value.email,
+      phone: addForm.value.phone,
+      gender: addForm.value.gender,
+      id_no: addForm.value.employeeId,
+      year_level: addForm.value.yearLevel,
+      username: addForm.value.username,
       password: addForm.value.password,
-      semester: addForm.value.semester || null,
     })
     await fetchInstructors()
     currentView.value = 'list'
@@ -249,14 +240,15 @@ const uniqueYears = computed(() => {
     <template v-if="currentView === 'add'">
 
       <!-- Header -->
-      <div class="flex items-start gap-4">
-        <button @click="backToList" class="mt-1 w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-700 transition-all shrink-0">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-        </button>
+      <div class="flex items-start justify-between">
         <div>
           <h1 class="text-[22px] font-bold text-slate-800">Add Instructor</h1>
           <p class="text-[13px] text-slate-500 mt-1">Create a new instructor profile. Fill in the details and assign to the course.</p>
         </div>
+        <button @click="backToList" class="px-5 py-2 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          Back to Instructors
+        </button>
       </div>
 
       <!-- Form Sections -->
@@ -288,7 +280,7 @@ const uniqueYears = computed(() => {
               </div>
             </div>
 
-            <!-- Row 2: Gender | Profile Picture -->
+            <!-- Row 2: Gender | Employee ID | Academic Year Level -->
             <div class="grid grid-cols-3 gap-5">
               <div>
                 <label class="block text-[12px] font-semibold text-slate-700 mb-2">Gender</label>
@@ -302,83 +294,15 @@ const uniqueYears = computed(() => {
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
               </div>
-              <div class="col-span-2">
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture</label>
-                <label class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-[#5138ed] hover:bg-indigo-50/30 transition-colors group">
-                  <svg class="w-6 h-6 text-slate-300 group-hover:text-[#5138ed] mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                  <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ addForm.profilePicture ? addForm.profilePicture.name : 'Upload Photo' }}</p>
-                  <p class="text-[11px] text-slate-400">PNG, JPG up to 2MB</p>
-                  <input type="file" accept="image/*" @change="handleFileUpload" class="hidden" />
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Professional Information -->
-        <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-8">
-          <div class="flex items-center gap-3 mb-7">
-            <div class="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center">
-              <svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-            </div>
-            <h2 class="text-[16px] font-bold text-slate-800">Professional Information</h2>
-          </div>
-
-          <div class="space-y-5">
-            <!-- Row 1: Course | Section | Employee ID -->
-            <div class="grid grid-cols-3 gap-5">
-              <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Course <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="addForm.course" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select course</option>
-                    <option value="CS-101">CS-101 Introduction to Programming</option>
-                    <option value="CS-201">CS-201 Data Structures</option>
-                    <option value="CS-301">CS-301 Algorithms</option>
-                    <option value="CS-401">CS-401 Database Systems</option>
-                    <option value="CS-501">CS-501 Software Engineering</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Section <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="addForm.section" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select section</option>
-                    <option value="Section A">Section A</option>
-                    <option value="Section B">Section B</option>
-                    <option value="Section C">Section C</option>
-                    <option value="Section D">Section D</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
               <div>
                 <label class="block text-[12px] font-semibold text-slate-700 mb-2">Employee ID</label>
                 <input v-model="addForm.employeeId" type="text" placeholder="Enter employee ID" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
               </div>
-            </div>
-
-            <!-- Row 2: Semester | Year -->
-            <div class="grid grid-cols-3 gap-5">
               <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Semester</label>
+                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Academic Year Level</label>
                 <div class="relative">
-                  <select v-model="addForm.semester" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select semester</option>
-                    <option value="Semester 1">Semester 1</option>
-                    <option value="Semester 2">Semester 2</option>
-                    <option value="Summer">Summer</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Year</label>
-                <div class="relative">
-                  <select v-model="addForm.year" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select year</option>
+                  <select v-model="addForm.yearLevel" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
+                    <option value="">Select year level</option>
                     <option value="1st Year">1st Year</option>
                     <option value="2nd Year">2nd Year</option>
                     <option value="3rd Year">3rd Year</option>
@@ -389,8 +313,20 @@ const uniqueYears = computed(() => {
                 </div>
               </div>
             </div>
+
+            <!-- Row 3: Profile Picture -->
+            <div>
+              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture</label>
+              <label class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-[#5138ed] hover:bg-indigo-50/30 transition-colors group">
+                <svg class="w-6 h-6 text-slate-300 group-hover:text-[#5138ed] mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ addForm.profilePicture ? addForm.profilePicture.name : 'Upload Photo' }}</p>
+                <p class="text-[11px] text-slate-400">PNG, JPG up to 2MB</p>
+                <input type="file" accept="image/*" @change="handleFileUpload" class="hidden" />
+              </label>
+            </div>
           </div>
         </div>
+
 
         <!-- Account Information -->
         <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-8">
@@ -429,60 +365,6 @@ const uniqueYears = computed(() => {
           </div>
         </div>
 
-        <!-- Instructor Permissions -->
-        <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-8">
-          <div class="flex items-center gap-3 mb-7">
-            <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
-              <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-            </div>
-            <h2 class="text-[16px] font-bold text-slate-800">Instructor Permissions</h2>
-          </div>
-
-          <div class="grid grid-cols-3 gap-5">
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.createExams" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Create Exams</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">Create and manage exams</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.viewResults" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">View & Results</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">View student results and analytics</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.manageResults" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Manage Results</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">Create and manage results</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.manageQuestions" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Manage Questions</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">Add, edit and manage questions</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.gradeExams" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Grade Exams</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">Grade student submissions</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 border border-slate-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/20 transition-colors cursor-pointer group">
-              <input type="checkbox" v-model="addForm.permissions.generateReports" class="mt-0.5 w-4 h-4 accent-[#5138ed] rounded cursor-pointer" />
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 group-hover:text-[#5138ed] transition-colors">Generate Reports</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">Create and export reports</p>
-              </div>
-            </label>
-          </div>
-        </div>
 
         <!-- Action Buttons -->
         <div class="flex items-center justify-end gap-4 pb-4">
@@ -497,7 +379,7 @@ const uniqueYears = computed(() => {
     </template>
 
     <!-- ══════════════════════════ EDIT INSTRUCTOR VIEW ══════════════════════════ -->
-    <template v-if="currentView === 'edit' && selectedInstructor">
+    <template v-else-if="currentView === 'edit' && selectedInstructor">
 
       <!-- Header -->
       <div class="flex items-start gap-4">
@@ -1007,10 +889,16 @@ const uniqueYears = computed(() => {
           <h1 class="text-[22px] font-bold text-slate-800">Instructors</h1>
           <p class="text-[13px] text-slate-500 mt-1">Manage and monitor department instructors.</p>
         </div>
-        <button class="flex items-center gap-2 bg-white border border-slate-200 hover:border-[#5138ed] hover:text-[#5138ed] text-slate-600 text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-          Export
-        </button>
+        <div class="flex items-center gap-3">
+          <button @click="openAddPage" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Add Instructor
+          </button>
+          <button class="flex items-center gap-2 bg-white border border-slate-200 hover:border-[#5138ed] hover:text-[#5138ed] text-slate-600 text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            Export
+          </button>
+        </div>
       </div>
 
       <!-- KPIs -->
@@ -1055,10 +943,7 @@ const uniqueYears = computed(() => {
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
               Filter
             </button>
-            <button @click="openAddPage" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-              Add Instructor
-            </button>
+
           </div>
         </div>
 

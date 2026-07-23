@@ -51,8 +51,14 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
         Route::post('departments/{department}/assign-head', [\App\Http\Controllers\Api\V1\DepartmentController::class, 'assignHead']);
-        Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'destroy']);
+        Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::get('users-export', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'export']);
+        Route::post('users-import', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'import']);
+        
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\AdminCourseController::class);
+        Route::get('courses-export', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'export']);
+        Route::post('courses-import', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'import']);
+        
         Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
 
         // List all instructors (for assign-head modal), optionally filter by department_id

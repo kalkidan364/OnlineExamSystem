@@ -89,7 +89,9 @@ const logout = () => {
         </div>
         <div class="hidden md:flex flex-col">
           <span class="text-sm font-bold text-slate-800">{{ authStore.user?.name || 'Dr. Head' }}</span>
-          <span class="text-xs font-medium text-[#5138ed]">Department Head</span>
+          <span class="text-xs font-medium text-[#5138ed]">
+            {{ authStore.user?.department?.code ? `${authStore.user.department.code} Department Head` : 'Department Head' }}
+          </span>
         </div>
       </div>
     </div>

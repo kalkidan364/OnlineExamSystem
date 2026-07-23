@@ -30,8 +30,9 @@ class CourseController extends Controller
     {
         $deptId = $this->resolveDeptId($request);
         
-        $courses = Course::with('instructor', 'creator')
+        $courses = Course::with('instructor', 'creator', 'coInstructor')
             ->where('department_id', $deptId)
+            ->withCount('exams')
             ->get();
 
         return response()->json(['data' => $courses]);
@@ -49,6 +50,7 @@ class CourseController extends Controller
             'code' => 'required|string|unique:courses,code',
             'credits' => 'required|integer',
             'semester' => 'nullable|string',
+            'level' => 'nullable|string',
             'instructor_id' => [
                 'nullable',
                 'exists:users,id',
@@ -66,6 +68,7 @@ class CourseController extends Controller
             'code' => $request->code,
             'credits' => $request->credits,
             'semester' => $request->semester,
+            'level' => $request->level,
             'department_id' => $deptId,
             'instructor_id' => $request->instructor_id,
             'status' => 'active',
@@ -95,6 +98,7 @@ class CourseController extends Controller
             'code' => 'sometimes|string|unique:courses,code,' . $course->id,
             'credits' => 'sometimes|integer',
             'semester' => 'nullable|string',
+            'level' => 'nullable|string',
             'status' => 'sometimes|in:active,inactive',
             'instructor_id' => [
                 'nullable',
@@ -106,13 +110,23 @@ class CourseController extends Controller
                     }
                 },
             ],
+            'co_instructor_id' => [
+                'nullable',
+                'exists:users,id',
+                function ($attribute, $value, $fail) use ($deptId) {
+                    $instructor = User::where('id', $value)->where('department_id', $deptId)->where('role', 'instructor')->first();
+                    if (!$instructor) {
+                        $fail('The selected co-instructor is invalid or does not belong to your department.');
+                    }
+                },
+            ],
         ]);
 
-        $course->update($request->only(['title', 'code', 'credits', 'semester', 'status', 'instructor_id']));
+        $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'status', 'instructor_id', 'co_instructor_id']));
 
         return response()->json([
             'message' => 'Course updated successfully',
-            'data' => $course->load('instructor')
+            'data' => $course->load(['instructor', 'coInstructor'])
         ]);
     }
 

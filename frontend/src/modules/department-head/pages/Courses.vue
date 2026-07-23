@@ -3,13 +3,15 @@ import { ref, computed, onMounted } from 'vue'
 import apiClient from '../../../core/api/apiClient'
 
 // ── View State ──
+import { useSettingsStore } from '../../../store/settingsStore'
 const currentView = ref<'list' | 'add' | 'detail' | 'edit'>('list')
+const settingsStore = useSettingsStore()
 
 // ── State ──
 const deptName = ref('Loading...')
 const search = ref('')
-const semesterFilter = ref('all')
-const yearFilter = ref('all')
+const createdByFilter = ref('all')
+const yearLevelFilter = ref('all')
 const statusFilter = ref('all')
 const currentPage = ref(1)
 const perPage = 8
@@ -17,15 +19,34 @@ const showDeleteModal = ref(false)
 const selectedCourse = ref<any>(null)
 const isLoading = ref(false)
 
+// ── Unauthorized Modal ──
+const showUnauthorizedModal = ref(false)
+
 const allCourses = ref<any[]>([])
 const deptInstructors = ref<any[]>([])
 const currentUser = ref<any>(null)
 
-// ── New Course Form ──
 const newCourse = ref({
-  code: '', title: '', department: '', program: '', semester: '', credits: '' as string | number,
+  code: '', title: '', department: '', level: '', semester: '', credits: '' as string | number,
   instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: ''
 })
+
+// ── Assign Instructor State ──
+const showAssignModal = ref(false)
+const courseToAssign = ref<any>(null)
+const assignInstructorId = ref('')
+const assignCoInstructorId = ref('')
+
+const availableInstructors = computed(() => {
+  return deptInstructors.value.filter(inst => inst.id !== assignCoInstructorId.value)
+})
+
+const availableCoInstructors = computed(() => {
+  return deptInstructors.value.filter(inst => inst.id !== assignInstructorId.value)
+})
+
+// ── Edit Course State ──
+const showEditModal = ref(false)
 
 // ── Mock Data (for display until API is connected) ──
 const mockCourses = [
@@ -53,16 +74,17 @@ const fetchCourses = async () => {
   try {
     const res = await apiClient.get('/dept-head/courses')
     const apiCourses = res.data.data || []
-    // Merge API courses with mock enrichment
-    allCourses.value = apiCourses.length > 0 ? apiCourses.map((c: any, i: number) => ({
+    allCourses.value = apiCourses.map((c: any) => ({
       ...c,
-      section: c.section || mockCourses[i % mockCourses.length]?.section || 'Section A',
-      studentsEnrolled: c.studentsEnrolled || mockCourses[i % mockCourses.length]?.studentsEnrolled || Math.floor(Math.random() * 40 + 20),
-      exams: c.exams_count || mockCourses[i % mockCourses.length]?.exams || Math.floor(Math.random() * 3 + 1),
-    })) : mockCourses
+      studentsEnrolled: c.students_count || 0,
+      exams: c.exams_count || 0,
+      createdByRole: c.creator?.role || 'admin',
+      createdByName: c.creator?.role === 'dept_head' || c.creator?.role === 'department_head' ? 'Dept. Head' : 'Admin',
+      co_instructor: c.co_instructor || null,
+    }))
   } catch (err) {
     console.error('Failed to fetch courses:', err)
-    allCourses.value = mockCourses
+    allCourses.value = []
   }
 }
 
@@ -87,9 +109,11 @@ const filtered = computed(() => {
     const s = search.value.toLowerCase()
     const matchSearch = t.includes(s) || cd.includes(s)
     const matchStatus = statusFilter.value === 'all' || c.status === statusFilter.value
-    const matchSemester = semesterFilter.value === 'all' || (c.semester && c.semester.toLowerCase().includes(semesterFilter.value.toLowerCase()))
-    const matchYear = yearFilter.value === 'all' || (c.semester && c.semester.includes(yearFilter.value))
-    return matchSearch && matchStatus && matchSemester && matchYear
+    const matchCreatedBy = createdByFilter.value === 'all' || c.createdByRole === createdByFilter.value || 
+      (createdByFilter.value === 'dept_head' && (c.createdByRole === 'dept_head' || c.createdByRole === 'department_head')) ||
+      (createdByFilter.value === 'admin' && c.createdByRole === 'admin')
+    const matchYearLevel = yearLevelFilter.value === 'all' || (c.level && c.level === yearLevelFilter.value)
+    return matchSearch && matchStatus && matchCreatedBy && matchYearLevel
   })
 })
 
@@ -133,12 +157,17 @@ const openDetail = (course: any) => {
   currentView.value = 'detail'
 }
 const openEdit = (course: any) => {
+  // Block edit if created by admin
+  if (course.createdByRole === 'admin') {
+    showUnauthorizedModal.value = true
+    return
+  }
   selectedCourse.value = course
   newCourse.value = {
     code: course.code || '',
     title: course.title || '',
     department: course.department || '',
-    program: course.program || '',
+    level: course.level || course.program || '',
     semester: course.semester || '',
     credits: course.credits || '',
     instructor_id: course.instructor_id || course.instructor?.id || '',
@@ -146,9 +175,10 @@ const openEdit = (course: any) => {
     enrollmentStatus: course.enrollmentStatus || '',
     visibility: course.visibility || '',
     startDate: course.startDate || '',
-    endDate: course.endDate || ''
+    endDate: course.endDate || '',
+    status: course.status || 'active'
   }
-  currentView.value = 'edit'
+  showEditModal.value = true
 }
 const backToList = () => { currentView.value = 'list' }
 
@@ -160,7 +190,8 @@ const addCourse = async () => {
       title: newCourse.value.title,
       code: newCourse.value.code,
       credits: newCourse.value.credits || 3,
-      semester: newCourse.value.semester || null,
+      level: newCourse.value.level || null,
+      semester: settingsStore.formattedAcademicTerm || null,
       instructor_id: newCourse.value.instructor_id || null,
     })
     await fetchCourses()
@@ -180,11 +211,13 @@ const updateCourse = async () => {
       title: newCourse.value.title,
       code: newCourse.value.code,
       credits: newCourse.value.credits || 3,
-      semester: newCourse.value.semester || null,
+      level: newCourse.value.level || null,
+      semester: settingsStore.formattedAcademicTerm || null,
       instructor_id: newCourse.value.instructor_id || null,
+      status: newCourse.value.status || 'active',
     })
     await fetchCourses()
-    currentView.value = 'list'
+    showEditModal.value = false
   } catch (err: any) {
     let msg = err.response?.data?.message || 'Failed to update course.'
     if (err.response?.data?.errors) msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
@@ -202,6 +235,27 @@ const deleteCourse = async () => {
     showDeleteModal.value = false
   } catch (err: any) {
     alert(err.response?.data?.message || 'Failed to delete course.')
+  } finally { isLoading.value = false }
+}
+
+const openAssign = (course: any) => {
+  courseToAssign.value = course
+  assignInstructorId.value = course.instructor_id || course.instructor?.id || ''
+  showAssignModal.value = true
+}
+
+const assignInstructor = async () => {
+  if (!courseToAssign.value) return
+  isLoading.value = true
+  try {
+    await apiClient.put(`/dept-head/courses/${courseToAssign.value.id}`, {
+      instructor_id: assignInstructorId.value || null,
+      co_instructor_id: assignCoInstructorId.value || null
+    })
+    await fetchCourses()
+    showAssignModal.value = false
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to assign instructor.')
   } finally { isLoading.value = false }
 }
 
@@ -246,29 +300,25 @@ const today = computed(() => {
 <template>
   <div class="space-y-6">
 
-    <!-- ══════════════════════════ ADD/EDIT COURSE VIEW ══════════════════════════ -->
-    <template v-if="currentView === 'add' || currentView === 'edit'">
+    <!-- ══════════════════════════ ADD COURSE VIEW ══════════════════════════ -->
+    <template v-if="currentView === 'add'">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
           <div class="flex items-center gap-3 mb-1">
-            <button @click="backToList" class="w-9 h-9 rounded-xl flex items-center justify-center bg-[#5138ed] text-white hover:bg-indigo-700 transition-all shrink-0 shadow-sm">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-            </button>
-            <h1 class="text-[22px] font-bold text-slate-800">{{ currentView === 'add' ? 'Add New Course' : 'Edit Course' }}</h1>
+            <h1 class="text-[22px] font-bold text-slate-800">Add New Course</h1>
           </div>
-          <div class="flex items-center gap-1.5 text-[12px] text-slate-400 ml-12">
+          <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-2">
             <button @click="backToList" class="text-[#5138ed] hover:text-indigo-700 font-medium transition-colors">Courses</button>
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            <span class="text-slate-600 font-medium">{{ currentView === 'add' ? 'Add New Course' : 'Edit Course' }}</span>
+            <span class="text-slate-600 font-medium">Add New Course</span>
           </div>
         </div>
-        <div class="flex items-center gap-2 text-[13px] text-slate-500">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-          <div class="text-right">
-            <p class="font-semibold text-slate-700">{{ today.date }}</p>
-            <p class="text-[11px] text-slate-400">{{ today.day }}</p>
-          </div>
+        <div class="flex items-center gap-2">
+          <button @click="backToList" class="flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Back to Courses
+          </button>
         </div>
       </div>
 
@@ -295,45 +345,28 @@ const today = computed(() => {
                 <input v-model="newCourse.title" type="text" placeholder="Enter course title" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
               </div>
               <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Department <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="newCourse.department" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select department</option>
-                    <option value="Computer Science">Computer Science</option>
-                    <option value="Software Engineering">Software Engineering</option>
-                    <option value="Information Systems">Information Systems</option>
-                    <option value="Information Technology">Information Technology</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
+                <label class="block text-[13px] font-bold text-slate-700 mb-2">Department</label>
+                <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
               </div>
             </div>
             <!-- Row 2: Program, Semester, Credits -->
             <div class="grid grid-cols-3 gap-5">
               <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Program <span class="text-rose-500">*</span></label>
+                <label class="block text-[13px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <select v-model="newCourse.program" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select program</option>
-                    <option value="Regular">Regular</option>
-                    <option value="Extension">Extension</option>
-                    <option value="Summer">Summer</option>
-                    <option value="Distance">Distance</option>
+                  <select v-model="newCourse.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
+                    <option value="">Select year level</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
                   </select>
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
               </div>
               <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="newCourse.semester" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select semester</option>
-                    <option value="Semester 1">Semester 1</option>
-                    <option value="Semester 2">Semester 2</option>
-                    <option value="Summer">Summer</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
+                <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester</label>
+                <input type="text" :value="settingsStore.formattedAcademicTerm" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
               </div>
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
@@ -343,75 +376,7 @@ const today = computed(() => {
           </div>
         </div>
 
-        <!-- ── Course Settings ── -->
-        <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-8">
-          <div class="flex items-center gap-3 mb-8">
-            <div class="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-              <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            </div>
-            <h2 class="text-[16px] font-bold text-slate-800">Course Settings</h2>
-          </div>
-          <div class="space-y-6">
-            <!-- Row 1: Course Instructor, Co-Instructors, Enrollment Status -->
-            <div class="grid grid-cols-3 gap-5">
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Instructor <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="newCourse.instructor_id" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select course instructor</option>
-                    <option v-for="inst in deptInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Co-Instructors</label>
-                <div class="relative">
-                  <select v-model="newCourse.coInstructors" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select co-instructors</option>
-                    <option v-for="inst in deptInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Enrollment Status <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="newCourse.enrollmentStatus" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select enrollment status</option>
-                    <option value="Open">Open</option>
-                    <option value="Closed">Closed</option>
-                    <option value="Waitlist">Waitlist</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-            </div>
-            <!-- Row 2: Visibility, Start Date, End Date -->
-            <div class="grid grid-cols-3 gap-5">
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Visibility <span class="text-rose-500">*</span></label>
-                <div class="relative">
-                  <select v-model="newCourse.visibility" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select visibility</option>
-                    <option value="Public">Public</option>
-                    <option value="Private">Private</option>
-                    <option value="Department Only">Department Only</option>
-                  </select>
-                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Start Date <span class="text-rose-500">*</span></label>
-                <input v-model="newCourse.startDate" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow" />
-              </div>
-              <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">End Date <span class="text-rose-500">*</span></label>
-                <input v-model="newCourse.endDate" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow" />
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         <!-- Action Buttons -->
         <div class="flex items-center justify-end gap-4 pb-4">
@@ -419,9 +384,9 @@ const today = computed(() => {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             Cancel
           </button>
-          <button @click="currentView === 'add' ? addCourse() : updateCourse()" :disabled="isLoading" class="flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-200 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+          <button @click="addCourse()" :disabled="isLoading" class="flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-200 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-            {{ isLoading ? 'Saving...' : (currentView === 'add' ? 'Save Course' : 'Save Changes') }}
+            {{ isLoading ? 'Saving...' : 'Save Course' }}
           </button>
         </div>
       </div>
@@ -433,12 +398,9 @@ const today = computed(() => {
       <div class="flex items-center justify-between mb-2">
         <div>
           <div class="flex items-center gap-3 mb-1">
-            <button @click="backToList" class="w-9 h-9 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all shrink-0 shadow-sm">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-            </button>
             <h1 class="text-[22px] font-bold text-slate-800">Course Details</h1>
           </div>
-          <div class="flex items-center gap-1.5 text-[12px] text-slate-400 ml-12">
+          <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-2">
             <button @click="backToList" class="text-[#5138ed] hover:text-indigo-700 font-medium transition-colors">Courses</button>
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             <span class="text-slate-600 font-medium">Course Details</span>
@@ -450,13 +412,6 @@ const today = computed(() => {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Back to Courses
           </button>
-          <div class="flex items-center gap-2 text-[13px] text-slate-500 border-l border-slate-200 pl-4">
-            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-            <div class="text-right">
-              <p class="font-semibold text-slate-700">{{ today.date }}</p>
-              <p class="text-[11px] text-slate-400">{{ today.day }}</p>
-            </div>
-          </div>
         </div>
       </div>
       <p class="text-[13px] text-slate-500 mb-6">View complete information about the course.</p>
@@ -484,8 +439,8 @@ const today = computed(() => {
               <p class="text-[13px] text-slate-600">{{ selectedCourse?.department || 'Computer Science' }}</p>
             </div>
             <div>
-              <p class="text-[11px] font-bold text-slate-800 mb-1">Program</p>
-              <p class="text-[13px] text-slate-600">{{ selectedCourse?.program || 'Computer Science' }}</p>
+              <p class="text-[11px] font-bold text-slate-800 mb-1">Academic Year Level</p>
+              <p class="text-[13px] text-slate-600">{{ selectedCourse?.level || '—' }}</p>
             </div>
             <div>
               <p class="text-[11px] font-bold text-slate-800 mb-1">Semester</p>
@@ -513,7 +468,8 @@ const today = computed(() => {
             </div>
             <div>
               <p class="text-[11px] font-bold text-slate-800 mb-2">Co-Instructors</p>
-              <p class="text-[13px] text-slate-600">{{ selectedCourse?.coInstructors || '—' }}</p>
+              <p v-if="selectedCourse?.co_instructor?.name" class="text-[13px] text-slate-600">{{ selectedCourse.co_instructor.name }}</p>
+              <p v-else class="text-[13px] text-slate-400">—</p>
             </div>
             <div>
               <p class="text-[11px] font-bold text-slate-800 mb-2">Enrollment Status</p>
@@ -545,12 +501,11 @@ const today = computed(() => {
           <h1 class="text-[22px] font-bold text-slate-800">Courses</h1>
           <p class="text-[13px] text-slate-500 mt-1">Manage and monitor department courses.</p>
         </div>
-        <div class="flex items-center gap-2 text-[13px] text-slate-500">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-          <div class="text-right">
-            <p class="font-semibold text-slate-700">{{ today.date }}</p>
-            <p class="text-[11px] text-slate-400">{{ today.day }}</p>
-          </div>
+        <div class="flex items-center gap-2">
+          <button @click="openAddPage" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Add Course
+          </button>
         </div>
       </div>
 
@@ -610,23 +565,24 @@ const today = computed(() => {
             <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input v-model="search" type="text" placeholder="Search courses by name or code..." class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
           </div>
-          <!-- Semester Filter -->
+          <!-- Created By Filter -->
           <div class="relative">
-            <select v-model="semesterFilter" class="text-[13px] border border-slate-200 rounded-xl pl-4 pr-8 py-2.5 bg-white focus:outline-none focus:border-[#5138ed] text-slate-600 appearance-none">
-              <option value="all">All Semesters</option>
-              <option value="Spring">Spring</option>
-              <option value="Fall">Fall</option>
-              <option value="Summer">Summer</option>
+            <select v-model="createdByFilter" class="text-[13px] border border-slate-200 rounded-xl pl-4 pr-8 py-2.5 bg-white focus:outline-none focus:border-[#5138ed] text-slate-600 appearance-none">
+              <option value="all">Created By</option>
+              <option value="admin">Admin</option>
+              <option value="dept_head">Dept. Head</option>
             </select>
             <svg class="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
-          <!-- Year Filter -->
+          <!-- Academic Year Level Filter -->
           <div class="relative">
-            <select v-model="yearFilter" class="text-[13px] border border-slate-200 rounded-xl pl-4 pr-8 py-2.5 bg-white focus:outline-none focus:border-[#5138ed] text-slate-600 appearance-none">
-              <option value="all">All Years</option>
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
+            <select v-model="yearLevelFilter" class="text-[13px] border border-slate-200 rounded-xl pl-4 pr-8 py-2.5 bg-white focus:outline-none focus:border-[#5138ed] text-slate-600 appearance-none">
+              <option value="all">All Year Levels</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+              <option value="5th Year">5th Year</option>
             </select>
             <svg class="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
@@ -646,11 +602,6 @@ const today = computed(() => {
             <svg class="w-4 h-4 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
             Filter
           </button>
-          <!-- Add Course Button -->
-          <button @click="openAddPage" class="flex items-center gap-2 bg-[#5138ed] hover:bg-indigo-700 text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            Add Course
-          </button>
         </div>
       </div>
 
@@ -662,10 +613,10 @@ const today = computed(() => {
               <tr class="border-b border-slate-100">
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course Name</th>
                 <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course Code</th>
-                <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Section</th>
+                <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Year Level</th>
                 <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Instructor</th>
-                <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Semester</th>
-                <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Students Enrolled</th>
+                <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Credits</th>
+                <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Created By</th>
                 <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exams</th>
                 <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                 <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
@@ -681,9 +632,9 @@ const today = computed(() => {
                 <td class="px-4 py-4">
                   <span class="text-[13px] font-mono font-semibold text-slate-500">{{ course.code }}</span>
                 </td>
-                <!-- Section -->
+                <!-- Year Level -->
                 <td class="px-4 py-4">
-                  <span class="text-[13px] text-slate-600">{{ course.section || '—' }}</span>
+                  <span class="text-[13px] text-slate-600">{{ course.level || course.program || '—' }}</span>
                 </td>
                 <!-- Instructor -->
                 <td class="px-4 py-4">
@@ -694,13 +645,15 @@ const today = computed(() => {
                     <span class="text-[13px] text-slate-700 font-medium">{{ course.instructor?.name || 'Unassigned' }}</span>
                   </div>
                 </td>
-                <!-- Semester -->
+                <!-- Credits -->
                 <td class="px-4 py-4">
-                  <span class="text-[13px] text-slate-600">{{ course.semester || '—' }}</span>
+                  <span class="text-[13px] text-slate-600">{{ course.credits || '—' }}</span>
                 </td>
-                <!-- Students Enrolled -->
+                <!-- Created By -->
                 <td class="px-4 py-4 text-center">
-                  <span class="text-[13px] font-semibold text-slate-700">{{ course.studentsEnrolled || 0 }}</span>
+                  <span :class="course.createdByRole === 'admin' ? 'bg-violet-50 text-violet-600' : 'bg-sky-50 text-sky-600'" class="text-[11px] font-bold px-2.5 py-1 rounded-full">
+                    {{ course.createdByName || 'Admin' }}
+                  </span>
                 </td>
                 <!-- Exams -->
                 <td class="px-4 py-4 text-center">
@@ -713,6 +666,10 @@ const today = computed(() => {
                 <!-- Actions -->
                 <td class="px-4 py-4">
                   <div class="flex items-center justify-center gap-1">
+                    <!-- Assign Instructor -->
+                    <button @click="openAssign(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 transition-all" title="Assign Instructor">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                    </button>
                     <!-- View -->
                     <button @click="openDetail(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-all" title="View Details">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
@@ -761,6 +718,19 @@ const today = computed(() => {
       </div>
 
     </template>
+    <!-- ── Unauthorized Modal ── -->
+    <Teleport to="body">
+      <div v-if="showUnauthorizedModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-6">
+          <div class="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center mx-auto mb-4"><svg class="w-7 h-7 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></div>
+          <h3 class="text-[16px] font-bold text-slate-800 mb-2">Unauthorized</h3>
+          <p class="text-[13px] text-slate-500 mb-6">You can only edit courses that were created by the Department Head. This course was created by an Admin.</p>
+          <div class="flex gap-3">
+            <button @click="showUnauthorizedModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-violet-500 hover:bg-violet-600 rounded-xl transition-colors">Understood</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- ── Delete Modal ── -->
     <Teleport to="body">
@@ -773,6 +743,126 @@ const today = computed(() => {
             <button @click="showDeleteModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
             <button @click="deleteCourse" :disabled="isLoading" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-70">
               {{ isLoading ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Assign Modal ── -->
+    <Teleport to="body">
+      <div v-if="showAssignModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-[16px] font-bold text-slate-800">Assign Instructor</h3>
+              <p class="text-[12px] text-slate-500 line-clamp-1">{{ courseToAssign?.title }}</p>
+            </div>
+          </div>
+          <div class="mb-6">
+            <label class="block text-[13px] font-bold text-slate-700 mb-2">Select Instructor</label>
+            <div class="relative mb-4">
+              <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
+                <option value="">No Instructor</option>
+                <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
+              </select>
+              <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+            
+            <label class="block text-[13px] font-bold text-slate-700 mb-2">Select Co-Instructor</label>
+            <div class="relative">
+              <select v-model="assignCoInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
+                <option value="">No Co-Instructor</option>
+                <option v-for="inst in availableCoInstructors" :key="'co'+inst.id" :value="inst.id">{{ inst.name }}</option>
+              </select>
+              <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button @click="showAssignModal = false" class="flex-1 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+            <button @click="assignInstructor" :disabled="isLoading" class="flex-1 py-2.5 text-[13px] font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors disabled:opacity-70">
+              {{ isLoading ? 'Assigning...' : 'Assign' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Edit Course Modal ── -->
+    <Teleport to="body">
+      <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden p-8 my-8">
+          <div class="flex items-center gap-3 mb-8">
+            <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-[18px] font-bold text-slate-800">Edit Course</h3>
+              <p class="text-[13px] text-slate-500">{{ selectedCourse?.title }}</p>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-5 mb-6">
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Code <span class="text-rose-500">*</span></label>
+              <input v-model="newCourse.code" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+            </div>
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Title <span class="text-rose-500">*</span></label>
+              <input v-model="newCourse.title" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+            </div>
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Department</label>
+              <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+            </div>
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
+              <div class="relative">
+                <select v-model="newCourse.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+                  <option value="">Select year level</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                </select>
+                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester</label>
+              <input type="text" :value="settingsStore.formattedAcademicTerm" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+            </div>
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
+              <input v-model="newCourse.credits" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+            </div>
+            
+            <div class="col-span-2">
+              <div class="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl p-5">
+                <div>
+                  <h4 class="text-[14px] font-bold text-slate-800">Course Status</h4>
+                  <p class="text-[12px] text-slate-500 mt-1">Toggle to set course as active or inactive.</p>
+                </div>
+                <button 
+                  @click="newCourse.status = newCourse.status === 'active' ? 'inactive' : 'active'" 
+                  :class="newCourse.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'" 
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                  type="button"
+                >
+                  <span :class="newCourse.status === 'active' ? 'translate-x-5' : 'translate-x-0'" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex items-center justify-end gap-3 mt-8">
+            <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+            <button @click="updateCourse" :disabled="isLoading" class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#5138ed] hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-70 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+              {{ isLoading ? 'Saving...' : 'Save Changes' }}
             </button>
           </div>
         </div>

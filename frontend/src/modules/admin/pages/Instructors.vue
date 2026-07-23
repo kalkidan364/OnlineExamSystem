@@ -47,7 +47,7 @@ const permissions = ref([
 // ── Fetch Instructors ──
 const fetchInstructors = async () => {
   try {
-    const res = await apiClient.get('/admin/users?role=instructor')
+    const res = await apiClient.get('/admin/users?role=instructor,dept_head')
     allInstructors.value = (res.data.data || []).map((u: any) => ({
       ...u,
       avatar: u.name ? u.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
@@ -273,6 +273,37 @@ const deleteInstructor = async () => {
   }
 }
 
+const showExportDropdown = ref(false)
+
+const handleExport = async (format: string) => {
+  showExportDropdown.value = false;
+  isLoading.value = true;
+  try {
+    const res = await apiClient.get(`/admin/users-export?role=instructor&format=${format}`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `instructors_export_${new Date().toISOString().slice(0,10)}.${format === 'pdf' ? 'pdf' : 'csv'}`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (err: any) {
+    if (err.response && err.response.data && err.response.data instanceof Blob) {
+      const text = await err.response.data.text();
+      try {
+        const json = JSON.parse(text);
+        alert(json.message || 'Failed to export instructors');
+      } catch (e) {
+        alert('Failed to export instructors');
+      }
+    } else {
+      alert('Failed to export instructors');
+    }
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 const importFileInput = ref<HTMLInputElement | null>(null)
 const triggerImport = () => { if (importFileInput.value) importFileInput.value.click() }
 const handleImport = async (event: Event) => {
@@ -280,10 +311,17 @@ const handleImport = async (event: Event) => {
   if (file) {
     isLoading.value = true
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('role', 'instructor')
+      await apiClient.post('/admin/users-import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
       alert(`Successfully imported ${file.name}`)
       await fetchInstructors()
-    } catch { alert('Failed to import instructors') }
+    } catch (err: any) { 
+        alert(err.response?.data?.message || 'Failed to import instructors') 
+    }
     finally {
       isLoading.value = false
       if (importFileInput.value) importFileInput.value.value = ''
@@ -310,13 +348,19 @@ const handleImport = async (event: Event) => {
           <p class="text-[13px] text-slate-500 ml-[52px]">Manage all instructors and their information across the system.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-          <input type="file" ref="importFileInput" class="hidden" accept=".csv,.xlsx,.xls" @change="handleImport">
+          <input type="file" ref="importFileInput" class="hidden" accept=".csv" @change="handleImport">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Import Instructors
           </button>
-          <button class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> Export Instructors
-          </button>
+          <div class="relative">
+            <button @click="showExportDropdown = !showExportDropdown" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> Export Instructors
+            </button>
+            <div v-if="showExportDropdown" class="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-slate-100 py-2 z-50">
+              <button @click="handleExport('csv')" class="w-full text-left px-4 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-[#4338ca] transition-colors">Export as CSV</button>
+              <button @click="handleExport('pdf')" class="w-full text-left px-4 py-2 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-[#4338ca] transition-colors">Export as PDF</button>
+            </div>
+          </div>
           <button @click="openAdd" class="flex items-center gap-2 px-4 py-2.5 bg-[#4338ca] text-white font-bold rounded-xl text-[13px] hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Add New Instructor
           </button>

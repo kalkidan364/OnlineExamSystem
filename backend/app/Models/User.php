@@ -57,6 +57,12 @@ class User extends Authenticatable
         return $this->hasMany(QuestionBank::class);
     }
 
+    /** Courses assigned to this instructor */
+    public function assignedCourses(): HasMany
+    {
+        return $this->hasMany(Course::class, 'instructor_id');
+    }
+
     /** Exam attempts by this user (student role) */
     public function examAttempts(): HasMany
     {

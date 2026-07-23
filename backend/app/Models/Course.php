@@ -21,6 +21,7 @@ class Course extends Model
         'created_by',
         'start_date',
         'end_date',
+        'co_instructor_id',
     ];
 
     public function department()
@@ -36,5 +37,15 @@ class Course extends Model
     public function instructor()
     {
         return $this->belongsTo(User::class, 'instructor_id');
+    }
+
+    public function coInstructor()
+    {
+        return $this->belongsTo(User::class, 'co_instructor_id');
+    }
+
+    public function exams()
+    {
+        return $this->hasMany(Exam::class, 'course_code', 'code');
     }
 }

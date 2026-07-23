@@ -4,8 +4,9 @@ import { useAuthStore } from '../store/authStore'
 
 const authStore = useAuthStore()
 
-const loginField = ref('admin@wollo.edu.et')
-const password = ref('password123')
+const loginField = ref('')
+const password = ref('')
+const selectedRole = ref('student')
 const rememberMe = ref(false)
 const showPassword = ref(false)
 
@@ -13,6 +14,7 @@ const handleLogin = async () => {
   await authStore.login({
     login: loginField.value,
     password: password.value,
+    role: selectedRole.value,
     remember: rememberMe.value
   })
 }
@@ -111,6 +113,33 @@ const handleLogin = async () => {
                 class="block w-full pl-9 pr-3 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all"
                 required
               />
+            </div>
+          </div>
+
+          <!-- Role Selection Dropdown -->
+          <div>
+            <label for="role" class="block text-xs font-semibold text-slate-700 mb-1.5">Login As</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <select 
+                id="role" 
+                v-model="selectedRole"
+                class="block w-full pl-9 pr-3 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all appearance-none cursor-pointer"
+                required
+              >
+                <option value="student">Student</option>
+                <option value="instructor">Instructor</option>
+                <option value="staff">Staff</option>
+              </select>
+              <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
           </div>
 
