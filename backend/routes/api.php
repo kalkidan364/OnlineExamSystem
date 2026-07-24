@@ -81,6 +81,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::prefix('dept-head')->group(function () {
         Route::apiResource('instructors', \App\Http\Controllers\Api\V1\DeptHead\InstructorController::class);
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\DeptHead\CourseController::class);
+        Route::get('students', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'index']);
+        Route::put('students/{id}', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'update']);
+        Route::get('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'index']);
+        Route::post('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'store']);
     });
 
     // ------------------------------------------------------------------
@@ -108,6 +112,23 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
         // Reports & Results Management
         Route::get('/reports', [InstructorReportController::class, 'index']);
+
+        // Instructor profile — name, department, year_level, section (for header)
+        Route::get('/me', function (Request $request) {
+            $user = $request->user()->load('department');
+            return response()->json([
+                'data' => [
+                    'id'          => $user->id,
+                    'name'        => $user->name,
+                    'role'        => $user->role,
+                    'department'  => $user->department?->name,
+                    'year_level'  => $user->year_level,
+                    'section'     => $user->section,
+                    'course_name' => $user->course_name,
+                    'course_code' => $user->course_code,
+                ]
+            ]);
+        });
 
     });
 

@@ -16,7 +16,7 @@ const semesterFilter = ref('all')
 const statusFilter = ref('all')
 const deptFilter = ref('all')
 const sectionFilter = ref('all')
-const sections = ['A', 'B', 'C']
+const sections = ['A', 'B', 'C', 'D']
 const currentPage = ref(1)
 const perPage = 10
 
@@ -555,7 +555,7 @@ const handleExport = async (format: string) => {
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Student ID</th>
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Email</th>
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Department</th>
-                <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Semester</th>
+                <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Section</th>
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Phone</th>
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Status</th>
                 <th class="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Academic Year Level</th>
@@ -577,7 +577,7 @@ const handleExport = async (format: string) => {
                 <td class="py-3.5 px-4 text-[12px] text-slate-500 font-medium">{{ student.email }}</td>
                 <td class="py-3.5 px-4 text-[12px] text-slate-600 font-medium">{{ student.departmentName }}</td>
                 <td class="py-3.5 px-4">
-                  <span class="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2.5 py-1 rounded-lg capitalize">{{ student.semester }}</span>
+                  <span class="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2.5 py-1 rounded-lg capitalize">{{ student.section }}</span>
                 </td>
                 <td class="py-3.5 px-4 text-[12px] text-slate-500 font-medium">{{ student.phone }}</td>
                 <td class="py-3.5 px-4 text-center">
@@ -651,7 +651,7 @@ const handleExport = async (format: string) => {
         <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
           <h3 class="text-[14px] font-bold text-slate-800 mb-4">Top Departments</h3>
           <div class="space-y-3">
-            <div v-for="(dept, i) in topDepartments" :key="dept.name" class="flex items-center justify-between text-[12px]">
+            <div v-for="dept in topDepartments" :key="dept.name" class="flex items-center justify-between text-[12px]">
               <div class="flex items-center gap-2 text-slate-600">
                 <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                 <span class="truncate max-w-[140px]">{{ dept.name }}</span>
@@ -795,7 +795,10 @@ const handleExport = async (format: string) => {
 
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Section</label>
-                <input type="text" v-model="newStudentForm.section" placeholder="e.g. Section A" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca]">
+                <select v-model="newStudentForm.section" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white focus:outline-none focus:border-[#4338ca]">
+                  <option value="">Select section</option>
+                  <option v-for="s in sections" :key="s" :value="s">{{ s }}</option>
+                </select>
               </div>
             </div>
           </div>
@@ -945,7 +948,10 @@ const handleExport = async (format: string) => {
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Section</label>
-                <input v-model="editStudentForm.section" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-2 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <select v-model="editStudentForm.section" class="w-full border border-slate-200 rounded-xl px-4 py-2 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
+                  <option value="">Select section</option>
+                  <option v-for="s in sections" :key="s" :value="s">{{ s }}</option>
+                </select>
               </div>
             </div>
             

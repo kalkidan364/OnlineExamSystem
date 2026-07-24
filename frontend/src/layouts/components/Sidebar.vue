@@ -55,31 +55,14 @@ const navItems = [
       </router-link>
     </nav>
 
-    <!-- Help Card -->
-    <div class="p-4 mt-auto">
-      <div class="bg-[#5138ed] rounded-2xl p-5 text-center shadow-md shadow-indigo-200">
-        <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mx-auto mb-3">
-          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-        </div>
-        <h4 class="text-white font-bold text-[14px] mb-1">Need Help?</h4>
-        <p class="text-indigo-100 text-[11px] font-medium leading-relaxed mb-4">Visit the user guide or contact support.</p>
-        <button class="w-full bg-white text-[#5138ed] text-[12px] font-bold py-2.5 rounded-xl hover:bg-indigo-50 transition-colors shadow-sm">
-          Contact Support
-        </button>
-      </div>
-    </div>
-
-    <!-- Bottom Graphic (Placeholder matching the architectural style) -->
+    <!-- Bottom Graphic -->
     <div class="p-6 mt-auto">
       <div class="w-full flex flex-col items-center justify-center opacity-60">
-        <div class="w-16 h-16 border-2 border-slate-200 rounded-t-full mb-2"></div>
-        <div class="flex gap-1 mb-2">
-           <div class="w-3 h-4 border border-slate-200"></div>
-           <div class="w-3 h-4 border border-slate-200"></div>
-           <div class="w-3 h-4 border border-slate-200"></div>
+        <div class="w-16 h-16 border-2 border-slate-200 rounded-t-full mb-2 flex items-center justify-center">
+          <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
         </div>
-        <span class="text-xs font-bold text-[#2b4c7e] tracking-wide uppercase">Wollo University</span>
-        <span class="text-[9px] text-slate-400 font-medium">Excellence and Service!</span>
+        <span class="text-xs font-bold text-slate-500 tracking-wide uppercase">Instructor</span>
+        <span class="text-[9px] text-slate-400 font-medium">Portal</span>
       </div>
     </div>
 

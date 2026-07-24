@@ -10,6 +10,7 @@ const deptName = ref('Loading...')
 const search = ref('')
 const statusFilter = ref('all')
 const yearFilter = ref('all')
+const sectionFilter = ref('all')
 const currentPage = ref(1)
 const perPage = 8
 const showDeleteModal = ref(false)
@@ -149,8 +150,10 @@ const fetchInstructors = async () => {
       avatar: i.name ? i.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
       id_code: i.id_no || 'N/A',
       courses: i.assigned_courses?.length ? i.assigned_courses.map((c: any) => c.title).join(', ') : 'No Courses',
+      coCourses: i.co_instructor_courses?.length ? i.co_instructor_courses.map((c: any) => c.title).join(', ') : 'None',
       credit: i.assigned_courses?.length ? i.assigned_courses.reduce((sum: number, c: any) => sum + (Number(c.credits) || 0), 0) : 0,
       year: i.year_level || 'N/A',
+      section: i.section || 'N/A',
       status: i.status || 'active',
       joined: new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
     }))
@@ -167,7 +170,8 @@ const filtered = computed(() => {
                         i.id_code.toLowerCase().includes(search.value.toLowerCase())
     const matchStatus = statusFilter.value === 'all' || i.status === statusFilter.value
     const matchYear = yearFilter.value === 'all' || i.year === yearFilter.value
-    return matchSearch && matchStatus && matchYear
+    const matchSection = sectionFilter.value === 'all' || i.section === sectionFilter.value
+    return matchSearch && matchStatus && matchYear && matchSection
   })
 })
 const totalPages  = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
@@ -230,6 +234,11 @@ const deleteInstructor = async () => {
 const uniqueYears = computed(() => {
   const set = new Set(allInstructors.value.map(i => i.year))
   return Array.from(set).filter(Boolean)
+})
+
+const uniqueSections = computed(() => {
+  const set = new Set(allInstructors.value.map(i => i.section).filter(s => s && s !== 'N/A'))
+  return Array.from(set).sort()
 })
 </script>
 
@@ -755,12 +764,16 @@ const uniqueYears = computed(() => {
             </div>
             <div class="space-y-4">
               <div class="flex justify-between items-start">
-                <span class="text-[12px] font-semibold text-slate-500">Courses</span>
-                <span class="text-[12.5px] font-bold text-slate-800 text-right">{{ selectedInstructor.courses }} courses assigned</span>
+                <span class="text-[12px] font-semibold text-slate-500">Courses Taught</span>
+                <span class="text-[12.5px] font-bold text-slate-800 text-right">{{ selectedInstructor.courses }}</span>
+              </div>
+              <div class="flex justify-between items-start">
+                <span class="text-[12px] font-semibold text-slate-500">Courses Taught (Co-Instructor)</span>
+                <span class="text-[12.5px] font-bold text-slate-800 text-right">{{ selectedInstructor.coCourses }}</span>
               </div>
               <div class="flex justify-between items-start">
                 <span class="text-[12px] font-semibold text-slate-500">Section</span>
-                <span class="text-[12.5px] font-bold text-slate-800 text-right">Computer Science Department</span>
+                <span class="text-[12.5px] font-bold text-slate-800 text-right">{{ selectedInstructor.section }}</span>
               </div>
               <div class="flex justify-between items-start">
                 <span class="text-[12px] font-semibold text-slate-500">Employee ID</span>
@@ -771,7 +784,7 @@ const uniqueYears = computed(() => {
                 <span class="text-[12.5px] font-bold text-slate-800 text-right">--</span>
               </div>
               <div class="flex justify-between items-start">
-                <span class="text-[12px] font-semibold text-slate-500">Year</span>
+                <span class="text-[12px] font-semibold text-slate-500">Year Level</span>
                 <span class="text-[12.5px] font-bold text-slate-800 text-right">{{ selectedInstructor.year }}</span>
               </div>
               <div class="flex justify-between items-start">
@@ -939,6 +952,13 @@ const uniqueYears = computed(() => {
               </select>
               <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </div>
+            <div class="relative">
+              <select v-model="sectionFilter" class="text-[13px] font-medium border border-slate-200 rounded-xl pl-4 pr-8 py-2.5 focus:outline-none focus:border-[#5138ed] text-slate-600 bg-white appearance-none">
+                <option value="all">All Sections</option>
+                <option v-for="s in uniqueSections" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
             <button class="flex items-center gap-2 text-[13px] font-bold text-[#5138ed] border border-indigo-100 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
               Filter
@@ -958,6 +978,7 @@ const uniqueYears = computed(() => {
               <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Credit</th>
               <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
               <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Year</th>
+              <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Section</th>
               <th class="text-center px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Action</th>
             </tr>
           </thead>
@@ -980,6 +1001,7 @@ const uniqueYears = computed(() => {
                 <span :class="[statusBadge(inst.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md capitalize']">{{ inst.status === 'active' ? 'Active' : 'Part Time' }}</span>
               </td>
               <td class="px-4 py-4"><span class="text-[12px] text-slate-600">{{ inst.year }}</span></td>
+              <td class="px-4 py-4"><span class="text-[12px] text-slate-600">{{ inst.section }}</span></td>
               <td class="px-6 py-4">
                 <div class="flex items-center justify-center gap-2">
                   <button @click="openView(inst)" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
@@ -989,7 +1011,7 @@ const uniqueYears = computed(() => {
               </td>
             </tr>
             <tr v-if="paginated.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-[13px] text-slate-400">No instructors found. Click "Add Instructor" to create one.</td>
+              <td colspan="9" class="px-6 py-12 text-center text-[13px] text-slate-400">No instructors found. Click "Add Instructor" to create one.</td>
             </tr>
           </tbody>
         </table>

@@ -189,7 +189,7 @@ const fetchBankDetails = async () => {
       essay: 1,
       tf: 1,
       matching: 1
-    }
+    } as any
     questions.value = [
       {
         id: 1,

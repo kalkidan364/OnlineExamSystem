@@ -99,12 +99,13 @@ class CourseController extends Controller
             'credits' => 'sometimes|integer',
             'semester' => 'nullable|string',
             'level' => 'nullable|string',
+            'section' => 'nullable|string',
             'status' => 'sometimes|in:active,inactive',
             'instructor_id' => [
                 'nullable',
                 'exists:users,id',
                 function ($attribute, $value, $fail) use ($deptId) {
-                    $instructor = User::where('id', $value)->where('department_id', $deptId)->where('role', 'instructor')->first();
+                    $instructor = User::where('id', $value)->where('department_id', $deptId)->whereIn('role', ['instructor', 'dept_head'])->first();
                     if (!$instructor) {
                         $fail('The selected instructor is invalid or does not belong to your department.');
                     }
@@ -114,7 +115,7 @@ class CourseController extends Controller
                 'nullable',
                 'exists:users,id',
                 function ($attribute, $value, $fail) use ($deptId) {
-                    $instructor = User::where('id', $value)->where('department_id', $deptId)->where('role', 'instructor')->first();
+                    $instructor = User::where('id', $value)->where('department_id', $deptId)->whereIn('role', ['instructor', 'dept_head'])->first();
                     if (!$instructor) {
                         $fail('The selected co-instructor is invalid or does not belong to your department.');
                     }
@@ -122,7 +123,25 @@ class CourseController extends Controller
             ],
         ]);
 
-        $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'status', 'instructor_id', 'co_instructor_id']));
+        $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'section', 'status', 'instructor_id', 'co_instructor_id']));
+
+        // Sync instructor's section and year_level when assigning
+        if ($request->has('instructor_id') && $request->instructor_id) {
+            User::where('id', $request->instructor_id)->update([
+                'section'    => $course->section ?? $request->section,
+                'year_level' => $course->level,
+                'course_code' => $course->code,
+                'course_name' => $course->title,
+            ]);
+        }
+        if ($request->has('co_instructor_id') && $request->co_instructor_id) {
+            User::where('id', $request->co_instructor_id)->update([
+                'section'    => $course->section ?? $request->section,
+                'year_level' => $course->level,
+                'course_code' => $course->code,
+                'course_name' => $course->title,
+            ]);
+        }
 
         return response()->json([
             'message' => 'Course updated successfully',

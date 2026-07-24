@@ -13,6 +13,8 @@ ChartJS.register(ArcElement, Tooltip, Legend)
 const search = ref('')
 const deptFilter = ref('all')
 const statusFilter = ref('all')
+const sectionFilter = ref('all')
+const yearFilter = ref('all')
 const currentPage = ref(1)
 const perPage = 10
 const showAddPage = ref(false)
@@ -58,6 +60,10 @@ const fetchInstructors = async () => {
       lastLogin: u.last_login_at || 'Never',
       phone: u.phone || 'N/A',
       gender: u.gender || 'N/A',
+      section: u.section || 'N/A',
+      year: u.year_level || 'N/A',
+      courses: u.assigned_courses?.length ? u.assigned_courses.map((c: any) => c.title).join(', ') : 'No Courses',
+      coCourses: u.co_instructor_courses?.length ? u.co_instructor_courses.map((c: any) => c.title).join(', ') : 'None',
     }))
   } catch (err) { console.error('Failed to fetch instructors:', err) }
 }
@@ -79,7 +85,9 @@ const filtered = computed(() => {
                         i.email.toLowerCase().includes(search.value.toLowerCase())
     const matchDept   = deptFilter.value === 'all' || i.departmentName === deptFilter.value
     const matchStatus = statusFilter.value === 'all' || i.status === statusFilter.value
-    return matchSearch && matchDept && matchStatus
+    const matchSection= sectionFilter.value === 'all' || i.section === sectionFilter.value
+    const matchYear   = yearFilter.value === 'all' || i.year === yearFilter.value
+    return matchSearch && matchDept && matchStatus && matchSection && matchYear
   })
 })
 
@@ -464,6 +472,20 @@ const handleImport = async (event: Event) => {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+            <select v-model="sectionFilter" class="border border-slate-200 rounded-lg px-3 py-2 text-[12px] font-medium text-slate-600 focus:outline-none focus:border-[#4338ca] min-w-[110px] shrink-0 bg-white">
+              <option value="all">All Sections</option>
+              <option value="Section A">Section A</option>
+              <option value="Section B">Section B</option>
+              <option value="Section C">Section C</option>
+            </select>
+            <select v-model="yearFilter" class="border border-slate-200 rounded-lg px-3 py-2 text-[12px] font-medium text-slate-600 focus:outline-none focus:border-[#4338ca] min-w-[110px] shrink-0 bg-white">
+              <option value="all">All Years</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+              <option value="5th Year">5th Year</option>
+            </select>
             <div class="relative shrink-0">
               <input type="text" value="Join Date" readonly class="w-[110px] border border-slate-200 rounded-lg px-3 py-2 text-[12px] font-medium text-slate-600 bg-white cursor-pointer">
               <svg class="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -478,7 +500,8 @@ const handleImport = async (event: Event) => {
                   <th class="px-5 py-3.5">Instructor</th>
                   <th class="px-4 py-3.5">Email</th>
                   <th class="px-4 py-3.5">Department</th>
-                  <th class="px-4 py-3.5">Phone</th>
+                  <th class="px-4 py-3.5">Section</th>
+                  <th class="px-4 py-3.5">Academic Year Level</th>
                   <th class="px-4 py-3.5">Status</th>
                   <th class="px-4 py-3.5">Join Date</th>
                   <th class="px-4 py-3.5">Last Login</th>
@@ -497,7 +520,8 @@ const handleImport = async (event: Event) => {
                   </td>
                   <td class="px-4 py-3 text-[12px] text-slate-500">{{ inst.email }}</td>
                   <td class="px-4 py-3 text-[12px] font-medium text-slate-600">{{ inst.departmentName }}</td>
-                  <td class="px-4 py-3 text-[12px] text-slate-500 whitespace-nowrap">{{ inst.phone }}</td>
+                  <td class="px-4 py-3 text-[12px] text-slate-500 whitespace-nowrap">{{ inst.section }}</td>
+                  <td class="px-4 py-3 text-[12px] text-slate-500 whitespace-nowrap">{{ inst.year }}</td>
                   <td class="px-4 py-3">
                     <span :class="inst.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'" class="px-2.5 py-1 text-[10px] font-bold rounded-md capitalize">
                       {{ inst.status }}
@@ -514,7 +538,7 @@ const handleImport = async (event: Event) => {
                   </td>
                 </tr>
                 <tr v-if="paginated.length === 0">
-                  <td colspan="8" class="px-6 py-10 text-center text-slate-400 text-[13px]">No instructors found matching your criteria.</td>
+                  <td colspan="9" class="px-6 py-10 text-center text-slate-400 text-[13px]">No instructors found matching your criteria.</td>
                 </tr>
               </tbody>
             </table>
@@ -680,6 +704,8 @@ const handleImport = async (event: Event) => {
                 <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.email }}</p></div>
                 <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.phone }}</p></div>
                 <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.departmentName }}</p></div>
+                <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Section</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.section }}</p></div>
+                <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Year Level</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.year }}</p></div>
                 <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Employee ID</p><p class="text-[14px] font-bold text-slate-800">{{ viewingInstructor.employeeId }}</p></div>
               </div>
             </div>
@@ -715,6 +741,10 @@ const handleImport = async (event: Event) => {
               <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Status</span><span :class="viewingInstructor.status==='active'?'text-emerald-500':'text-rose-500'" class="text-[12px] font-bold capitalize">{{ viewingInstructor.status }}</span></div>
               <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Department</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.departmentName }}</span></div>
               <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Employee ID</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.employeeId }}</span></div>
+              <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Section</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.section }}</span></div>
+              <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Year Level</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.year }}</span></div>
+              <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Courses Taught</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.courses }}</span></div>
+              <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Co-Instructor Courses</span><span class="text-[12px] font-bold text-slate-800">{{ viewingInstructor.coCourses }}</span></div>
               <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Role</span><span class="text-[12px] font-bold text-slate-800">Instructor</span></div>
               <div class="flex items-center justify-between"><span class="text-[12px] text-slate-500">Permissions</span><span class="text-[12px] font-bold text-slate-800">6 Modules</span></div>
             </div>

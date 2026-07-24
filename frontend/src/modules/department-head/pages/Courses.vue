@@ -28,14 +28,17 @@ const currentUser = ref<any>(null)
 
 const newCourse = ref({
   code: '', title: '', department: '', level: '', semester: '', credits: '' as string | number,
-  instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: ''
+  instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: '', status: ''
 })
 
 // ── Assign Instructor State ──
 const showAssignModal = ref(false)
 const courseToAssign = ref<any>(null)
+const assignSection = ref('')
 const assignInstructorId = ref('')
 const assignCoInstructorId = ref('')
+
+const sectionOptions = ['All Sections', 'Section A', 'Section B', 'Section C', 'Section D', 'Section E']
 
 const availableInstructors = computed(() => {
   return deptInstructors.value.filter(inst => inst.id !== assignCoInstructorId.value)
@@ -43,6 +46,24 @@ const availableInstructors = computed(() => {
 
 const availableCoInstructors = computed(() => {
   return deptInstructors.value.filter(inst => inst.id !== assignInstructorId.value)
+})
+
+const currentInstructorInfo = computed(() => {
+  if (!courseToAssign.value?.instructor) return null
+  const name = courseToAssign.value.instructor?.name || courseToAssign.value.instructor
+  const section = courseToAssign.value.section || ''
+  const title = courseToAssign.value.title || ''
+  if (!name || name === 'Unassigned') return null
+  return `${name} is the current${section ? ' ' + section : ''} ${title} instructor`
+})
+
+const currentCoInstructorInfo = computed(() => {
+  if (!courseToAssign.value?.coInstructor) return null
+  const name = courseToAssign.value.coInstructor?.name || courseToAssign.value.coInstructor
+  const section = courseToAssign.value.section || ''
+  const title = courseToAssign.value.title || ''
+  if (!name) return null
+  return `${name} is the${section ? ' ' + section : ''} ${title} co-instructor`
 })
 
 // ── Edit Course State ──
@@ -147,8 +168,8 @@ const stats = computed(() => ({
 // ── Actions ──
 const openAddPage = () => {
   newCourse.value = {
-    code: '', title: '', department: '', program: '', semester: '', credits: '',
-    instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: ''
+    code: '', title: '', department: '', level: '', semester: '', credits: '',
+    instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: '', status: 'active'
   }
   currentView.value = 'add'
 }
@@ -240,7 +261,9 @@ const deleteCourse = async () => {
 
 const openAssign = (course: any) => {
   courseToAssign.value = course
+  assignSection.value = course.section || ''
   assignInstructorId.value = course.instructor_id || course.instructor?.id || ''
+  assignCoInstructorId.value = course.co_instructor_id || course.coInstructor?.id || ''
   showAssignModal.value = true
 }
 
@@ -250,7 +273,8 @@ const assignInstructor = async () => {
   try {
     await apiClient.put(`/dept-head/courses/${courseToAssign.value.id}`, {
       instructor_id: assignInstructorId.value || null,
-      co_instructor_id: assignCoInstructorId.value || null
+      co_instructor_id: assignCoInstructorId.value || null,
+      section: assignSection.value === 'All Sections' ? null : assignSection.value || null
     })
     await fetchCourses()
     showAssignModal.value = false
@@ -287,14 +311,6 @@ const getAvatarColor = (id: number) => {
   const colors = ['bg-indigo-100 text-indigo-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-rose-100 text-rose-600', 'bg-sky-100 text-sky-600', 'bg-violet-100 text-violet-600', 'bg-teal-100 text-teal-600', 'bg-orange-100 text-orange-600']
   return colors[id % colors.length]
 }
-
-// ── Today's date ──
-const today = computed(() => {
-  const d = new Date()
-  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
-  const dayName = d.toLocaleDateString('en-US', { weekday: 'long' })
-  return { date: d.toLocaleDateString('en-US', options), day: dayName }
-})
 </script>
 
 <template>
@@ -762,23 +778,43 @@ const today = computed(() => {
               <p class="text-[12px] text-slate-500 line-clamp-1">{{ courseToAssign?.title }}</p>
             </div>
           </div>
-          <div class="mb-6">
-            <label class="block text-[13px] font-bold text-slate-700 mb-2">Select Instructor</label>
-            <div class="relative mb-4">
-              <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
-                <option value="">No Instructor</option>
-                <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
-              </select>
-              <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          <div class="mb-6 space-y-4">
+            <!-- Section -->
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Section</label>
+              <div class="relative">
+                <select v-model="assignSection" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
+                  <option value="">Select section</option>
+                  <option v-for="sec in sectionOptions" :key="sec" :value="sec">{{ sec }}</option>
+                </select>
+                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
             </div>
-            
-            <label class="block text-[13px] font-bold text-slate-700 mb-2">Select Co-Instructor</label>
-            <div class="relative">
-              <select v-model="assignCoInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
-                <option value="">No Co-Instructor</option>
-                <option v-for="inst in availableCoInstructors" :key="'co'+inst.id" :value="inst.id">{{ inst.name }}</option>
-              </select>
-              <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+
+            <!-- Instructor -->
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Instructor</label>
+              <div class="relative">
+                <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
+                  <option value="">No Instructor</option>
+                  <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
+                </select>
+                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+              <p v-if="currentInstructorInfo" class="mt-1.5 text-[11px] text-slate-400 italic">{{ currentInstructorInfo }}</p>
+            </div>
+
+            <!-- Co-Instructor -->
+            <div>
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Co-Instructor</label>
+              <div class="relative">
+                <select v-model="assignCoInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-shadow">
+                  <option value="">No Co-Instructor</option>
+                  <option v-for="inst in availableCoInstructors" :key="'co'+inst.id" :value="inst.id">{{ inst.name }}</option>
+                </select>
+                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+              <p v-if="currentCoInstructorInfo" class="mt-1.5 text-[11px] text-slate-400 italic">{{ currentCoInstructorInfo }}</p>
             </div>
           </div>
           <div class="flex gap-3">

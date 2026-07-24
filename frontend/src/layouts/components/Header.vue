@@ -1,15 +1,67 @@
 <script setup lang="ts">
 import { useAuthStore } from '../../modules/auth/store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import apiClient from '../../core/api/apiClient'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const route = useRoute()
 
+const instructorData = ref<any>(null)
+
+onMounted(async () => {
+  // Only fetch if the user is an instructor
+  if (authStore.user?.role === 'instructor' || authStore.user?.role === 'dept_head') {
+    try {
+      const res = await apiClient.get('/instructor/me')
+      instructorData.value = res.data.data
+    } catch (e) {
+      console.error('Failed to fetch instructor info', e)
+    }
+  }
+})
+
+const instructorRoleText = computed(() => {
+  if (!instructorData.value) return 'Instructor'
+  
+  let deptName = instructorData.value.department || ''
+  
+  // Abbreviate department name (e.g. Computer Science -> cs, Information System -> is)
+  if (deptName) {
+    const knownAbbreviations: Record<string, string> = {
+      'computer science': 'cs',
+      'information system': 'is',
+      'information systems': 'is',
+      'software engineering': 'se',
+      'information technology': 'it'
+    }
+    
+    const lowerDept = deptName.toLowerCase().trim()
+    if (knownAbbreviations[lowerDept]) {
+      deptName = knownAbbreviations[lowerDept]
+    } else {
+      // Fallback: create acronym from words
+      deptName = lowerDept.split(' ')
+        .map((w: string) => w[0])
+        .join('')
+        .toLowerCase()
+    }
+  }
+
+  const dept = deptName ? `${deptName}` : ''
+  const year = instructorData.value.year_level ? `${dept ? ', ' : ''}${instructorData.value.year_level}` : ''
+  const section = instructorData.value.section ? `${(dept || year) ? ', ' : ''}${instructorData.value.section}` : ''
+  
+  // Clean up formatting: "is, 3rd year, section A, instructor"
+  let str = `${dept}${year}${section}${(dept || year || section) ? ', ' : ''}instructor`
+  return str.toLowerCase()
+})
+
 const isCreateExam = computed(() => route.path === '/instructor/exams/create')
 const createExamStep = computed(() => Number(route.query.step) || 1)
+
 
 // Map routes to dynamic titles
 const pageTitle = computed(() => {
@@ -96,12 +148,15 @@ const pageTitle = computed(() => {
           <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Profile" class="w-full h-full object-cover" />
         </div>
         <div class="hidden md:flex flex-col">
-          <span class="text-sm font-bold text-slate-800">{{ authStore.user?.name || 'Dr. Abebe Kebede' }}</span>
-          <span class="text-xs font-medium text-slate-500">Instructor</span>
+          <span class="text-sm font-bold text-slate-800">{{ instructorData?.name || authStore.user?.name || 'Loading...' }}</span>
+          <span class="text-[11px] font-medium text-slate-500 leading-snug max-w-[200px] truncate" :title="instructorRoleText">
+            {{ instructorRoleText }}
+          </span>
         </div>
         <svg class="w-4 h-4 text-slate-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
+
       </div>
 
     </div>

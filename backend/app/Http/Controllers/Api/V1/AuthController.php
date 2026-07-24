@@ -57,13 +57,60 @@ class AuthController extends Controller
         // Revoke old tokens (single-session policy)
         $user->tokens()->delete();
 
+        $assignedOptions = null;
         if ($effectiveRole === 'instructor') {
-            $hasCourses = \App\Models\Course::where('instructor_id', $user->id)->exists();
-            if (!$hasCourses) {
+            $coursesQuery = \App\Models\Course::where('instructor_id', $user->id)
+                ->orWhere('co_instructor_id', $user->id)
+                ->with('department:id,name')
+                ->get();
+
+            if ($coursesQuery->isEmpty()) {
                 throw ValidationException::withMessages([
                     'login' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
                 ]);
             }
+
+            // Extract unique departments
+            $departmentsMap = [];
+            if ($user->department) {
+                $departmentsMap[$user->department->id] = [
+                    'id'   => $user->department->id,
+                    'name' => $user->department->name,
+                ];
+            }
+
+            $coursesData = [];
+            $sectionsSet = [];
+
+            if ($user->section && $user->section !== 'N/A') {
+                $sectionsSet[$user->section] = true;
+            }
+
+            foreach ($coursesQuery as $c) {
+                if ($c->department) {
+                    $departmentsMap[$c->department->id] = [
+                        'id'   => $c->department->id,
+                        'name' => $c->department->name,
+                    ];
+                }
+                $sec = $c->section ?: ($user->section ?: 'Section A');
+                $sectionsSet[$sec] = true;
+
+                $coursesData[] = [
+                    'id'            => $c->id,
+                    'title'         => $c->title,
+                    'code'          => $c->code,
+                    'department_id' => $c->department_id,
+                    'department'    => $c->department?->name ?? 'N/A',
+                    'section'       => $sec,
+                ];
+            }
+
+            $assignedOptions = [
+                'departments' => array_values($departmentsMap),
+                'courses'     => $coursesData,
+                'sections'    => array_keys($sectionsSet),
+            ];
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -74,15 +121,16 @@ class AuthController extends Controller
         return response()->json([
             'data' => [
                 'user'  => [
-                    'id'         => $user->id,
-                    'name'       => $user->name,
-                    'email'      => $user->email,
-                    'username'   => $user->username,
-                    'role'       => $effectiveRole,
+                    'id'            => $user->id,
+                    'name'          => $user->name,
+                    'email'         => $user->email,
+                    'username'      => $user->username,
+                    'role'          => $effectiveRole,
                     'department_id' => $user->department_id,
-                    'department' => $user->department,
+                    'department'    => $user->department,
                 ],
-                'token' => $token,
+                'token'            => $token,
+                'assigned_options' => $assignedOptions,
             ],
             'message' => 'Login successful.',
         ]);

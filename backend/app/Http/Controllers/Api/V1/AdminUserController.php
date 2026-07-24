@@ -18,7 +18,7 @@ class AdminUserController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = User::with('department:id,name')->latest();
+        $query = User::with(['department:id,name', 'assignedCourses:id,title,instructor_id', 'coInstructorCourses:id,title,co_instructor_id'])->latest();
         if ($request->has('role')) {
             $roles = explode(',', $request->role);
             $query->whereIn('role', $roles);
@@ -53,6 +53,7 @@ class AdminUserController extends Controller
             'academic_year' => 'nullable|string|max:255',
             'year_level'    => 'nullable|string|max:255',
             'semester'      => 'nullable|string|max:255',
+            'section'       => 'nullable|string|max:255',
             'id_no'         => 'nullable|string|max:255',
             'phone'         => 'nullable|string|max:50',
             'gender'        => 'nullable|in:Male,Female,Other',
@@ -70,6 +71,7 @@ class AdminUserController extends Controller
             'academic_year' => $request->academic_year,
             'year_level'    => $request->year_level,
             'semester'      => $request->semester,
+            'section'       => $request->section,
             'id_no'         => $request->id_no,
             'phone'         => $request->phone,
             'gender'        => $request->gender,
@@ -96,6 +98,7 @@ class AdminUserController extends Controller
             'academic_year' => 'nullable|string|max:255',
             'year_level'    => 'nullable|string|max:255',
             'semester'      => 'nullable|string|max:255',
+            'section'       => 'nullable|string|max:255',
             'id_no'         => 'nullable|string|max:255',
             'phone'         => 'nullable|string|max:50',
             'gender'        => 'nullable|in:Male,Female,Other',
@@ -104,7 +107,7 @@ class AdminUserController extends Controller
 
         $data = $request->only([
             'name', 'email', 'username', 'role', 'department_id',
-            'academic_year', 'year_level', 'semester', 'id_no',
+            'academic_year', 'year_level', 'semester', 'section', 'id_no',
             'phone', 'gender', 'status'
         ]);
 

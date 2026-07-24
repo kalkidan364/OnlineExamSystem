@@ -15,6 +15,7 @@ class Course extends Model
         'credits',
         'semester',
         'level',
+        'section',
         'department_id',
         'instructor_id',
         'status',

@@ -30,7 +30,7 @@ class InstructorController extends Controller
         
         $instructors = User::where('department_id', $deptId)
             ->whereIn('role', ['instructor', 'dept_head'])
-            ->with('assignedCourses')
+            ->with(['assignedCourses', 'coInstructorCourses'])
             ->get();
 
         return response()->json(['data' => $instructors]);

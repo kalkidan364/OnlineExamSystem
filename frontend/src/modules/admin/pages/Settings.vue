@@ -25,21 +25,21 @@ watch(
   { immediate: true }
 )
 
-const exam = ref({
-  defaultDuration:    90,
-  maxAttempts:        1,
-  autoPublishResults: true,
-  allowLateSubmit:    false,
-  shuffleQuestions:   true,
-  passMarkDefault:    50,
-})
+// const exam = ref({
+//   defaultDuration:    90,
+//   maxAttempts:        1,
+//   autoPublishResults: true,
+//   allowLateSubmit:    false,
+//   shuffleQuestions:   true,
+//   passMarkDefault:    50,
+// })
 
-const notifications = ref({
-  emailOnSubmit:    true,
-  emailOnPublish:   true,
-  emailOnGrade:     false,
-  systemAlerts:     true,
-})
+// const notifications = ref({
+//   emailOnSubmit:    true,
+//   emailOnPublish:   true,
+//   emailOnGrade:     false,
+//   systemAlerts:     true,
+// })
 
 const security = ref({
   currentPassword: '',

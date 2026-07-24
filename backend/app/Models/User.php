@@ -30,6 +30,7 @@ class User extends Authenticatable
         'academic_year',
         'year_level',
         'semester',
+        'section',
     ];
 
     protected $hidden = [
@@ -61,6 +62,12 @@ class User extends Authenticatable
     public function assignedCourses(): HasMany
     {
         return $this->hasMany(Course::class, 'instructor_id');
+    }
+
+    /** Courses where this instructor is a co-instructor */
+    public function coInstructorCourses(): HasMany
+    {
+        return $this->hasMany(Course::class, 'co_instructor_id');
     }
 
     /** Exam attempts by this user (student role) */

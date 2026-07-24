@@ -18,8 +18,32 @@ const showDeleteModal = ref(false)
 const showAssignModal = ref(false)
 const selectedCourse = ref<any>(null)
 const courseToAssign = ref<any>(null)
+const assignSection = ref('')
 const assignInstructorId = ref('')
+const assignCoInstructorId = ref('')
 const isLoading = ref(false)
+
+const sectionOptions = ['All Sections', 'Section A', 'Section B', 'Section C', 'Section D', 'Section E']
+
+const currentInstructorInfo = computed(() => {
+  if (!courseToAssign.value?.instructor) return null
+  const name = courseToAssign.value.instructor?.name || courseToAssign.value.instructor
+  const section = courseToAssign.value.section || ''
+  const title = courseToAssign.value.name || courseToAssign.value.title || ''
+  if (!name || name === 'Unassigned') return null
+  return `${name} is the current${section ? ' ' + section : ''} ${title} instructor`
+})
+
+const currentCoInstructorInfo = computed(() => {
+  if (!courseToAssign.value?.co_instructor_id) return null
+  const coInst = allInstructors.value.find(i => i.id === courseToAssign.value.co_instructor_id)
+  if (!coInst) return null
+  const name = coInst.name
+  const section = courseToAssign.value.section || ''
+  const title = courseToAssign.value.name || courseToAssign.value.title || ''
+  return `${name} is the${section ? ' ' + section : ''} ${title} co-instructor`
+})
+
 
 const settingsStore = useSettingsStore()
 
@@ -45,7 +69,8 @@ const newCourseForm = ref({
   enrollment_status: 'Open for Enrollment',
   visibility: 'Visible to Students',
   start_date: '',
-  end_date: ''
+  end_date: '',
+  status: 'active'
 })
 
 const currentPage = ref(1)
@@ -64,7 +89,9 @@ const fetchCourses = async () => {
       exams: 0,
       status: c.status || 'active',
       semester: c.semester,
+      credits: c.credits || '—',
       level: c.level,
+      created_by: c.creator?.role === 'dept_head' || c.creator?.role === 'department_head' ? 'Dept. Head' : (c.creator?.role === 'admin' ? 'Admin' : 'Unknown'),
       created_on: new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     }))
   } catch (err) { console.error('Failed to fetch courses:', err) }
@@ -88,7 +115,7 @@ onMounted(async () => {
   await Promise.all([fetchCourses(), fetchDepartments(), fetchInstructors()])
 })
 
-const availableInstructors = computed(() => {
+const formAvailableInstructors = computed(() => {
   if (!newCourseForm.value.department_id) return []
   return allInstructors.value.filter(i => i.department_id === newCourseForm.value.department_id)
 })
@@ -96,6 +123,14 @@ const availableInstructors = computed(() => {
 const instructorsForAssign = computed(() => {
   if (!courseToAssign.value?.department_id) return []
   return allInstructors.value.filter(i => i.department_id === courseToAssign.value.department_id)
+})
+
+const availableInstructors = computed(() => {
+  return instructorsForAssign.value.filter(inst => inst.id !== assignCoInstructorId.value)
+})
+
+const availableCoInstructors = computed(() => {
+  return instructorsForAssign.value.filter(inst => inst.id !== assignInstructorId.value)
 })
 
 const levelFilter = ref('all')
@@ -142,7 +177,7 @@ const openAddPage = () => {
     code: '', title: '', type: '', department_id: '', program: '', level: '', semester: settingsStore.semester,
     credits: '', language: '', short_description: '', full_description: '',
     instructor_id: '', co_instructors: '', capacity: '', enrollment_status: 'Open for Enrollment',
-    visibility: 'Visible to Students', start_date: '', end_date: ''
+    visibility: 'Visible to Students', start_date: '', end_date: '', status: 'active'
   }
   showAddPage.value = true
 }
@@ -235,7 +270,9 @@ const deleteCourse  = async () => {
 
 const openAssign = (course: any) => {
   courseToAssign.value = course
+  assignSection.value = course.section || ''
   assignInstructorId.value = course.instructor_id || ''
+  assignCoInstructorId.value = course.co_instructor_id || ''
   showAssignModal.value = true
 }
 
@@ -244,7 +281,9 @@ const assignInstructor = async () => {
   isLoading.value = true
   try {
     await apiClient.put(`/admin/courses/${courseToAssign.value.id}`, {
-      instructor_id: assignInstructorId.value || null
+      instructor_id: assignInstructorId.value || null,
+      co_instructor_id: assignCoInstructorId.value || null,
+      section: assignSection.value === 'All Sections' ? null : assignSection.value || null
     })
     await fetchCourses()
     showAssignModal.value = false
@@ -438,9 +477,9 @@ const handleExport = async (format: string) => {
                 <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department</th>
                 <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Level</th>
                 <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Instructors</th>
-                <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Semester</th>
+                <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Credits</th>
                 <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Status</th>
-                <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Created On</th>
+                <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Created By</th>
                 <th class="px-5 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Actions</th>
               </tr>
             </thead>
@@ -462,13 +501,13 @@ const handleExport = async (format: string) => {
                   <p class="text-[12px] font-semibold text-slate-700">{{ course.instructorsCount }}</p>
                 </td>
                 <td class="px-5 py-4 text-center">
-                  <p class="text-[12px] font-semibold text-slate-700">{{ course.semester }}</p>
+                  <p class="text-[12px] font-semibold text-slate-700">{{ course.credits }}</p>
                 </td>
                 <td class="px-5 py-4 text-center">
                   <span :class="course.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'" class="text-[10px] font-bold px-2.5 py-1 rounded-lg capitalize">{{ course.status }}</span>
                 </td>
-                <td class="px-5 py-4">
-                  <p class="text-[12px] text-slate-500">{{ course.created_on }}</p>
+                <td class="px-5 py-4 text-center">
+                  <span class="text-[11px] font-bold text-sky-600 bg-sky-50 px-2.5 py-1 rounded-md">{{ course.created_by }}</span>
                 </td>
                 <td class="px-5 py-4">
                   <div class="flex items-center justify-center gap-1.5 transition-opacity">
@@ -966,18 +1005,36 @@ const handleExport = async (format: string) => {
             <p class="text-[13px] text-slate-500 mb-4">Select instructors for <span class="font-bold text-slate-700">{{ courseToAssign?.name }}</span>.</p>
             <div class="space-y-4">
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Instructor <span class="text-rose-500">*</span></label>
-                <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white">
-                  <option value="">Unassigned</option>
-                  <option v-for="inst in instructorsForAssign" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
-                </select>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Section</label>
+                <div class="relative">
+                  <select v-model="assignSection" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                    <option value="">Select section</option>
+                    <option v-for="sec in sectionOptions" :key="sec" :value="sec">{{ sec }}</option>
+                  </select>
+                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Co-Instructors</label>
-                <select class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white">
-                  <option value="">Select co-instructors (optional)</option>
-                  <option v-for="inst in instructorsForAssign" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
-                </select>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Instructor <span class="text-rose-500">*</span></label>
+                <div class="relative">
+                  <select v-model="assignInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                    <option value="">Unassigned</option>
+                    <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.id">{{ inst.name }}</option>
+                  </select>
+                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+                <p v-if="currentInstructorInfo" class="mt-1.5 text-[11px] text-slate-400 italic">{{ currentInstructorInfo }}</p>
+              </div>
+              <div>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Co-Instructor</label>
+                <div class="relative">
+                  <select v-model="assignCoInstructorId" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                    <option value="">Select co-instructor (optional)</option>
+                    <option v-for="inst in availableCoInstructors" :key="'co'+inst.id" :value="inst.id">{{ inst.name }}</option>
+                  </select>
+                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+                <p v-if="currentCoInstructorInfo" class="mt-1.5 text-[11px] text-slate-400 italic">{{ currentCoInstructorInfo }}</p>
               </div>
             </div>
           </div>

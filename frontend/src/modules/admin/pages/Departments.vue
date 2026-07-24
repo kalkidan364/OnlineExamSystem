@@ -12,7 +12,7 @@ const perPage = 8
 const showAddForm = ref(false)
 const showDeleteModal = ref(false)
 const showEditModal = ref(false)
-const editData = ref({ id: null as number|null, name: '', code: '', established: '', college: '' })
+const editData = ref({ id: null as number|null, name: '', code: '', established: '', college: '', status: 'active' })
 const selectedDept = ref<any>(null)
 const isLoading = ref(false)
 
