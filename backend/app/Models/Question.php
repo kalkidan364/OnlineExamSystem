@@ -14,10 +14,14 @@ class Question extends Model
         'question_bank_id',
         'exam_id',
         'type',
+        'title',
+        'description',
         'instruction',
         'text',
         'options',
         'correct_answer',
+        'explanation',
+        'image_url',
         'marks',
         'difficulty',
         'chapter',
@@ -26,12 +30,16 @@ class Question extends Model
         'time_seconds',
         'status',
         'tags',
+        'settings',
+        'question_data',
     ];
 
     protected function casts(): array
     {
         return [
-            'options' => 'array',
+            'options'       => 'array',
+            'settings'      => 'array',
+            'question_data' => 'array',
         ];
     }
 

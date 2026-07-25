@@ -7,6 +7,7 @@ use App\Models\QuestionBank;
 use App\Models\Question;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InstructorQuestionBankController extends Controller
 {
@@ -93,22 +94,33 @@ class InstructorQuestionBankController extends Controller
         // Build categories from chapters
         $categoryCounts = $questions->groupBy('chapter')->map->count()->sortDesc();
 
+        $instructorUser = $instructor->load('department');
+        $totalMarks = $questions->sum('marks');
+
         return response()->json([
             'data' => [
                 'bank' => [
-                    'id'          => $questionBank->id,
-                    'title'       => $questionBank->title,
-                    'description' => $questionBank->description,
-                    'course_code' => $questionBank->course_code,
-                    'course_name' => $questionBank->course_name,
-                    'status'      => 'Active',
+                    'id'               => $questionBank->id,
+                    'title'            => $questionBank->title,
+                    'description'      => $questionBank->description,
+                    'course_code'      => $questionBank->course_code,
+                    'course_name'      => $questionBank->course_name ?: ($instructorUser->course_name ?? 'Software Engineering'),
+                    'department'       => $instructorUser->department?->name ?? 'Computer Science',
+                    'instructor'       => $instructorUser->name,
+                    'academic_year'    => $instructorUser->year_level ? $instructorUser->year_level . ' Year' : '3rd Year',
+                    'semester'         => 'Semester I',
+                    'total_questions'  => $total,
+                    'total_marks'      => $totalMarks,
+                    'status'           => 'Active',
+                    'created_at'       => $questionBank->created_at?->toISOString(),
                 ],
                 'stats' => [
-                    'total'   => $total,
-                    'mcq'     => $mcqCount,
-                    'sa'      => $saCount,
-                    'essay'   => $essayCount,
-                    'tf'      => $tfCount,
+                    'total'       => $total,
+                    'total_marks' => $totalMarks,
+                    'mcq'         => $mcqCount,
+                    'sa'          => $saCount,
+                    'essay'       => $essayCount,
+                    'tf'          => $tfCount,
                 ],
                 'questions' => $questions->map(fn($q) => [
                     'id'             => $q->id,
@@ -180,8 +192,10 @@ class InstructorQuestionBankController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $validated = $request->validate([
+        $validator = \Validator::make($request->all(), [
             'type'           => 'required|string',
+            'title'          => 'nullable|string|max:255',
+            'description'    => 'nullable|string',
             'instruction'    => 'nullable|string',
             'difficulty'     => 'nullable|string',
             'chapter'        => 'nullable|string',
@@ -189,22 +203,137 @@ class InstructorQuestionBankController extends Controller
             'text'           => 'required|string',
             'options'        => 'nullable|array',
             'correct_answer' => 'nullable|string',
+            'explanation'    => 'nullable|string',
+            'image_url'      => 'nullable|string',
             'marks'          => 'required|integer|min:1',
             'negative_marks' => 'nullable|integer',
             'time_seconds'   => 'nullable|integer',
-            'status'         => 'nullable|boolean',
+            'status'         => 'nullable|string',
             'tags'           => 'nullable|string',
+            'settings'       => 'nullable|array',
+            'question_data'  => 'nullable|array',
         ]);
+
+        if ($validator->fails()) {
+            \Log::error('Validation Failed: ', $validator->errors()->toArray());
+            file_put_contents(storage_path('logs/validation_errors.log'), json_encode([
+                'payload' => $request->all(),
+                'errors' => $validator->errors()->toArray()
+            ]));
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $validated = $validator->validated();
+
+        if (empty($validated['status'])) {
+            $validated['status'] = 'draft';
+        }
 
         $question = $questionBank->questions()->create($validated);
 
-        // Update the question count
-        $questionBank->increment('questions_count');
-
         return response()->json([
-            'message' => 'Question created successfully',
+            'message' => 'Question created successfully as draft',
             'data'    => $question
         ], 201);
+    }
+
+    /**
+     * Get all draft questions for a specific question bank, grouped hierarchically.
+     */
+    public function getDraftQuestions(Request $request, QuestionBank $questionBank): JsonResponse
+    {
+        if ($questionBank->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $drafts = $questionBank->questions()
+            ->where(function($q) {
+                $q->where('status', 'draft')
+                  ->orWhere('status', '0')
+                  ->orWhereNull('status');
+            })
+            ->oldest() // Keep in creation order
+            ->get();
+
+        // Group by questionType -> instructionGroups -> questions
+        $grouped = $drafts->groupBy('type')->map(function ($questionsOfType, $type) {
+            $instructionGroups = $questionsOfType->groupBy(function($q) {
+                return $q->instruction ?: '';
+            })->map(function ($questionsOfInstruction, $instruction) {
+                return [
+                    'instruction' => $instruction === '' ? null : $instruction,
+                    'questions' => $questionsOfInstruction->values()
+                ];
+            })->values();
+
+            return [
+                'questionType' => strtoupper(str_replace('_', ' ', $type)), // e.g. MULTIPLE CHOICE
+                'instructionGroups' => $instructionGroups
+            ];
+        })->values();
+
+        return response()->json([
+            'data' => $grouped
+        ]);
+    }
+
+    /**
+     * Get distinct instructor instructions for autocomplete.
+     */
+    public function getInstructions(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+        $type = $request->query('type');
+        $bankId = $request->query('bank_id');
+        
+        $query = Question::whereHas('questionBank', function($q) use ($userId) {
+            $q->where('user_id', $userId);
+        })
+        ->whereNotNull('instruction')
+        ->where('instruction', '!=', '');
+
+        if ($type) {
+            $query->where('type', $type);
+        }
+
+        if ($bankId) {
+            $query->where('question_bank_id', $bankId);
+        }
+
+        $instructions = $query->distinct()->pluck('instruction');
+
+        return response()->json([
+            'data' => $instructions
+        ]);
+    }
+
+    /**
+     * Publish all draft questions for a question bank using a DB transaction.
+     */
+    public function publishQuestions(Request $request, QuestionBank $questionBank): JsonResponse
+    {
+        if ($questionBank->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        DB::transaction(function () use ($questionBank) {
+            // Update draft questions to published
+            $questionBank->questions()
+                ->where(function($q) {
+                    $q->where('status', 'draft')
+                      ->orWhere('status', '0')
+                      ->orWhereNull('status');
+                })
+                ->update(['status' => 'published']);
+
+            // Update total questions count on bank
+            $publishedCount = $questionBank->questions()->where('status', 'published')->count();
+            $questionBank->update(['questions_count' => $publishedCount]);
+        });
+
+        return response()->json([
+            'message' => 'All questions published successfully!'
+        ]);
     }
 
     /**
@@ -255,8 +384,10 @@ class InstructorQuestionBankController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $validated = $request->validate([
+        $validator = \Validator::make($request->all(), [
             'type'           => 'required|string',
+            'title'          => 'nullable|string|max:255',
+            'description'    => 'nullable|string',
             'instruction'    => 'nullable|string',
             'difficulty'     => 'nullable|string',
             'chapter'        => 'nullable|string',
@@ -264,12 +395,27 @@ class InstructorQuestionBankController extends Controller
             'text'           => 'required|string',
             'options'        => 'nullable|array',
             'correct_answer' => 'nullable|string',
+            'explanation'    => 'nullable|string',
+            'image_url'      => 'nullable|string',
             'marks'          => 'required|integer|min:1',
             'negative_marks' => 'nullable|integer',
             'time_seconds'   => 'nullable|integer',
-            'status'         => 'nullable|boolean',
+            'status'         => 'nullable|string',
             'tags'           => 'nullable|string',
+            'settings'       => 'nullable|array',
+            'question_data'  => 'nullable|array',
         ]);
+
+        if ($validator->fails()) {
+            \Log::error('Validation Failed: ', $validator->errors()->toArray());
+            file_put_contents(storage_path('logs/validation_errors.log'), json_encode([
+                'payload' => $request->all(),
+                'errors' => $validator->errors()->toArray()
+            ]));
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $validated = $validator->validated();
 
         $question->update($validated);
 

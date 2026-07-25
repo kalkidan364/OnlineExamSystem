@@ -103,9 +103,14 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         // Question Banks Management
         Route::apiResource('question-banks', InstructorQuestionBankController::class);
         Route::post('question-banks/{question_bank}/questions', [InstructorQuestionBankController::class, 'storeQuestion']);
+        Route::get('question-banks/{question_bank}/drafts', [InstructorQuestionBankController::class, 'getDraftQuestions']);
+        Route::post('question-banks/{question_bank}/publish', [InstructorQuestionBankController::class, 'publishQuestions']);
         Route::post('question-banks/{question_bank}/import', [InstructorQuestionBankController::class, 'importQuestions']);
         Route::put('questions/{question}', [InstructorQuestionBankController::class, 'updateQuestion']);
         Route::delete('questions/{question}', [InstructorQuestionBankController::class, 'destroyQuestion']);
+
+        // Instructor Instructions (for autocomplete)
+        Route::get('instructor-instructions', [InstructorQuestionBankController::class, 'getInstructions']);
 
         // Students Management
         Route::get('/students', [InstructorStudentController::class, 'index']);

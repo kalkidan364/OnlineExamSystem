@@ -136,6 +136,26 @@ export const useInstructorQbStore = defineStore('instructorQb', () => {
     }
   }
 
+  const fetchInstructions = async (type?: string, bankId?: string | number) => {
+    try {
+      if (!usingMockData.value) {
+        const queryParams = new URLSearchParams()
+        if (type) queryParams.append('type', type)
+        if (bankId) queryParams.append('bank_id', String(bankId))
+        
+        const queryString = queryParams.toString()
+        const url = queryString ? `/instructor/instructor-instructions?${queryString}` : '/instructor/instructor-instructions'
+        
+        const response = await apiClient.get(url)
+        return response.data.data
+      }
+      return []
+    } catch (err: any) {
+      console.error("Failed to fetch instructions", err)
+      return []
+    }
+  }
+
   const updateQuestionBank = async (id: number, payload: { title: string, description: string }) => {
     try {
       if (!usingMockData.value) {
@@ -183,6 +203,61 @@ export const useInstructorQbStore = defineStore('instructorQb', () => {
   }
 
 
+  const draftQuestions = ref<any[]>([])
+
+  const saveQuestionDraft = async (bankId: number | string, questionData: any) => {
+    try {
+      const payload = {
+        ...questionData,
+        status: 'draft'
+      }
+      if (!usingMockData.value) {
+        const response = await apiClient.post(`/instructor/question-banks/${bankId}/questions`, payload)
+        const saved = response.data.data
+        draftQuestions.value.unshift(saved)
+        return saved
+      }
+      const mockSaved = { ...payload, id: Date.now(), question_bank_id: Number(bankId) }
+      draftQuestions.value.unshift(mockSaved)
+      return mockSaved
+    } catch (err: any) {
+      console.error("Failed to save draft question", err)
+      if (err.response && err.response.data && err.response.data.errors) {
+        throw new Error(Object.values(err.response.data.errors).flat().join(', '))
+      }
+      throw err
+    }
+  }
+
+  const fetchDraftQuestions = async (bankId: number | string) => {
+    try {
+      if (!usingMockData.value) {
+        const response = await apiClient.get(`/instructor/question-banks/${bankId}/drafts`)
+        draftQuestions.value = response.data.data || []
+        return draftQuestions.value
+      }
+      return draftQuestions.value
+    } catch (err: any) {
+      console.error("Failed to fetch draft questions", err)
+      throw err
+    }
+  }
+
+  const publishQuestions = async (bankId: number | string) => {
+    try {
+      if (!usingMockData.value) {
+        const response = await apiClient.post(`/instructor/question-banks/${bankId}/publish`)
+        draftQuestions.value = []
+        return response.data
+      }
+      draftQuestions.value = []
+      return { message: 'All questions published successfully!' }
+    } catch (err: any) {
+      console.error("Failed to publish questions", err)
+      throw err
+    }
+  }
+
   const updateQuestion = async (questionId: number | string, questionData: any) => {
     try {
       if (!usingMockData.value) {
@@ -201,6 +276,7 @@ export const useInstructorQbStore = defineStore('instructorQb', () => {
       if (!usingMockData.value) {
         await apiClient.delete(`/instructor/questions/${questionId}`)
       }
+      draftQuestions.value = draftQuestions.value.filter(q => q.id !== Number(questionId) && q.id !== String(questionId))
     } catch (err: any) {
       console.error("Failed to delete question", err)
       throw err
@@ -213,12 +289,17 @@ export const useInstructorQbStore = defineStore('instructorQb', () => {
     isLoading,
     error,
     usingMockData,
+    draftQuestions,
     fetchQuestionBanks,
     fetchQuestionBank,
+    fetchInstructions,
     createQuestionBank,
     updateQuestionBank,
     deleteQuestionBank,
     addQuestion,
+    saveQuestionDraft,
+    fetchDraftQuestions,
+    publishQuestions,
     importQuestions,
     updateQuestion,
     deleteQuestion,

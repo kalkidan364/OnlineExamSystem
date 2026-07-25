@@ -37,6 +37,11 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/CreateQuestion.vue')
       },
       {
+        path: 'question-banks/:id/review',
+        name: 'ReviewQuestions',
+        component: () => import('../modules/instructor/pages/ReviewQuestions.vue')
+      },
+      {
         path: 'question-banks/:id/edit-question/:questionId',
         name: 'EditQuestion',
         component: () => import('../modules/instructor/pages/CreateQuestion.vue')
