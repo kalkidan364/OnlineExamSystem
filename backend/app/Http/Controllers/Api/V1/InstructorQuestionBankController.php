@@ -132,6 +132,7 @@ class InstructorQuestionBankController extends Controller
                     'topic'          => $q->topic,
                     'options'        => $q->options,
                     'correct_answer' => $q->correct_answer,
+                    'question_data'  => $q->question_data,
                     'status'         => $q->status ? 'Active' : 'Inactive',
                     'tags'           => $q->tags,
                 ]),

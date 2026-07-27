@@ -232,6 +232,7 @@ const buildQuestionPayload = () => {
     instruction: title.value || '',
     description: description.value,
     text: questionType.value === 'Matching' ? '<p>Match the following items:</p>' : questionText.value,
+    options: questionType.value === 'Multiple Choice (MCQ)' ? options.value.map(o => ({ label: o.label, text: o.text })) : null,
     correct_answer: correctAnswer.value,
     explanation: explanation.value,
     marks: Number(score.value) || 1,
@@ -431,7 +432,11 @@ const removeMatchPair = (index: number) => {
 }
 
 // Step Navigation Handlers
-const goToStep = (step: number) => {
+const goToStep = async (step: number) => {
+  if (step === 3) {
+    // Always re-fetch grouped drafts when entering Step 3
+    await qbStore.fetchDraftQuestions(bankId)
+  }
   currentStep.value = step
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -528,7 +533,25 @@ const handleAddAnother = async () => {
   }
 }
 
+const isFormEmpty = () => {
+  if (questionType.value === 'Matching') {
+    return matchPairs.value.every(p => 
+      p.left.replace(/<[^>]*>?/gm, '').trim() === '' && 
+      p.right.replace(/<[^>]*>?/gm, '').trim() === ''
+    )
+  }
+  const strippedText = questionText.value.replace(/<[^>]*>?/gm, '').trim()
+  return !strippedText
+}
+
 const handleReviewAndPublish = async () => {
+  // If the form is completely empty (e.g. they just clicked "Save & Add Another"),
+  // just skip saving and go directly to Step 3.
+  if (isFormEmpty()) {
+    goToStep(3)
+    return
+  }
+  
   if (!validateDraft()) return
   try {
     const payload = buildQuestionPayload()
@@ -538,6 +561,8 @@ const handleReviewAndPublish = async () => {
       await qbStore.saveQuestionDraft(bankId, payload)
     }
     resetForm()
+    // Re-fetch grouped drafts so Step 3 displays them immediately
+    await qbStore.fetchDraftQuestions(bankId)
   } catch (err: any) {
     console.error("Failed auto-saving draft before review", err)
     triggerToast(err.message || "Failed to save draft. Please try again.")
@@ -546,29 +571,93 @@ const handleReviewAndPublish = async () => {
   goToStep(3)
 }
 
-const handleEditDraft = (q: any) => {
-  populateFormForEdit(q)
-  goToStep(2)
+const isEditingModalOpen = ref(false)
+const isDeleteModalOpen = ref(false)
+const isPublishModalOpen = ref(false)
+const draftToDelete = ref<number | string | null>(null)
+const isFullscreen = ref(false)
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => {
+      console.error(`Error attempting to enable fullscreen mode: ${err.message}`)
+    })
+  } else {
+    document.exitFullscreen()
+  }
 }
 
-const handleDeleteDraft = async (id: number | string) => {
-  if (!confirm("Are you sure you want to delete this draft question?")) return
+onMounted(() => {
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement
+  })
+})
+
+const confirmDeleteDraft = async () => {
+  if (!draftToDelete.value) return
   try {
-    await qbStore.deleteQuestion(id)
+    await qbStore.deleteQuestion(draftToDelete.value)
     triggerToast("Draft question deleted.")
+    await qbStore.fetchDraftQuestions(bankId)
   } catch (err) {
     triggerToast("Failed to delete draft question.")
+  } finally {
+    isDeleteModalOpen.value = false
+    draftToDelete.value = null
   }
 }
 
-const handlePublishQuestions = async () => {
+const closeDeleteModal = () => {
+  isDeleteModalOpen.value = false
+  draftToDelete.value = null
+}
+
+const handleEditDraft = (q: any) => {
+  populateFormForEdit(q)
+  if (currentStep.value === 3) {
+    isEditingModalOpen.value = true
+  } else {
+    goToStep(2)
+  }
+}
+
+const closeEditModal = () => {
+  isEditingModalOpen.value = false
+  resetForm()
+}
+
+const saveEditModal = async () => {
+  if (!validateDraft()) return
+  try {
+    const payload = buildQuestionPayload()
+    if (editingDraftId.value) {
+      await qbStore.updateQuestion(editingDraftId.value, payload)
+      triggerToast("Draft question updated successfully!")
+    } else {
+      await qbStore.saveQuestionDraft(bankId, payload)
+      triggerToast("Question saved as draft successfully!")
+    }
+    await qbStore.fetchDraftQuestions(bankId)
+    closeEditModal()
+  } catch (err: any) {
+    triggerToast(err.message || "Failed to save draft.")
+  }
+}
+
+const handleDeleteDraft = (id: number | string) => {
+  draftToDelete.value = id
+  isDeleteModalOpen.value = true
+}
+
+const handlePublishQuestions = () => {
   if (!draftQuestions.value.length) {
-    alert("No draft questions available to publish.")
+    triggerToast("No draft questions available to publish.")
     return
   }
+  isPublishModalOpen.value = true
+}
 
-  if (!confirm(`Are you sure you want to publish ${draftQuestions.value.length} question(s)? They will become active in this Question Bank.`)) return
-
+const confirmPublishQuestions = async () => {
   isPublishing.value = true
   try {
     await qbStore.publishQuestions(bankId)
@@ -579,7 +668,13 @@ const handlePublishQuestions = async () => {
   } catch (err) {
     triggerToast("Failed to publish questions. Please try again.")
     isPublishing.value = false
+  } finally {
+    isPublishModalOpen.value = false
   }
+}
+
+const closePublishModal = () => {
+  isPublishModalOpen.value = false
 }
 
 const handleCancel = () => router.push(`/instructor/question-banks/${bankId}`)
@@ -598,7 +693,7 @@ const getDifficultyClass = (diff: string) => {
 
     <!-- Toast Notification -->
     <transition enter-active-class="transition duration-300 ease-out" enter-from-class="transform translate-y-2 opacity-0" enter-to-class="transform translate-y-0 opacity-100" leave-active-class="transition duration-200 ease-in" leave-from-class="transform translate-y-0 opacity-100" leave-to-class="transform translate-y-2 opacity-0">
-      <div v-if="showToast" class="fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-2xl border border-slate-800">
+      <div v-if="showToast" class="fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-2xl border border-slate-800">
         <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
         <span>{{ toastMessage }}</span>
       </div>
@@ -606,12 +701,18 @@ const getDifficultyClass = (diff: string) => {
 
     <!-- Page Header & Stepper -->
     <div class="max-w-[1200px] mx-auto mb-8">
-      <div class="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-3">
-        <router-link to="/instructor/question-banks" class="hover:text-slate-600 transition-colors">Question Banks</router-link>
-        <span>/</span>
-        <router-link :to="`/instructor/question-banks/${bankId}`" class="hover:text-slate-600 transition-colors">{{ bank?.title || 'Question Bank' }}</router-link>
-        <span>/</span>
-        <span class="text-[#5138ed]">Question Creation Wizard</span>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
+        <div class="flex items-center gap-2 text-xs font-semibold text-slate-400">
+          <router-link to="/instructor/question-banks" class="hover:text-slate-600 transition-colors">Question Banks</router-link>
+          <span>/</span>
+          <router-link :to="`/instructor/question-banks/${bankId}`" class="hover:text-slate-600 transition-colors">{{ bank?.title || 'Question Bank' }}</router-link>
+          <span>/</span>
+          <span class="text-[#5138ed]">Question Creation Wizard</span>
+        </div>
+        <router-link :to="`/instructor/question-banks/${bankId}`" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap self-start">
+           <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+           Back to Question Bank
+        </router-link>
       </div>
 
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-xs mb-6">
@@ -673,15 +774,34 @@ const getDifficultyClass = (diff: string) => {
       </div>
 
       <!-- ==================== STEP 2: ADD QUESTIONS FORM ==================== -->
-      <div v-else-if="currentStep === 2" class="space-y-6">
+      <Teleport to="body" :disabled="!isEditingModalOpen">
+        <div v-show="currentStep === 2 || isEditingModalOpen" 
+             :class="isEditingModalOpen ? 'fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm' : ''">
+          
+          <div :class="isEditingModalOpen ? 'bg-[#f8fafc] w-full max-w-[1200px] rounded-2xl shadow-2xl relative my-auto max-h-full flex flex-col' : 'w-full'">
+            
+            <!-- Modal Header -->
+            <div v-if="isEditingModalOpen" class="flex items-center justify-between p-5 sm:p-6 border-b border-slate-200 shrink-0 bg-white rounded-t-2xl">
+              <h2 class="text-lg font-bold text-slate-800">Edit Question</h2>
+              <button @click="closeEditModal" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+
+            <!-- Form Content -->
+            <div :class="isEditingModalOpen ? 'p-5 sm:p-6 overflow-y-auto space-y-6 flex-1' : 'space-y-6 w-full'">
         
         <!-- Base Information -->
         <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5138ed]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+              </div>
+              <h2 class="text-[15px] font-bold text-slate-800">Dynamic Question Details</h2>
             </div>
-            <h2 class="text-[15px] font-bold text-slate-800">Dynamic Question Details</h2>
+            <button @click="toggleFullscreen" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors" :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'">
+              <svg v-if="!isFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+              <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14L4 20M10 14v6m0-6H4m10 0l6 6m-6-6v6m0-6h6M14 10L20 4M14 10V4m0 6h6M10 10L4 4M10 10V4m0 6H4"></path></svg>
+            </button>
           </div>
           
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -942,10 +1062,20 @@ const getDifficultyClass = (diff: string) => {
           <RichTextEditor v-model="explanation" placeholder="Provide feedback shown to students after answering..." minHeight="100px" />
         </div>
 
-      </div>
+            </div> <!-- End Form Content -->
+            
+            <!-- Modal Footer -->
+            <div v-if="isEditingModalOpen" class="p-5 sm:p-6 border-t border-slate-200 shrink-0 bg-white flex justify-end gap-3 rounded-b-2xl">
+              <button @click="closeEditModal" class="px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
+              <button @click="saveEditModal" class="px-5 py-2.5 rounded-xl bg-[#5138ed] text-white text-xs font-bold hover:bg-indigo-600 transition-colors shadow-md">Save Changes</button>
+            </div>
+
+          </div>
+        </div>
+      </Teleport>
 
       <!-- ==================== STEP 3: REVIEW & PUBLISH ==================== -->
-      <div v-else-if="currentStep === 3" class="space-y-6">
+      <div v-if="currentStep === 3" class="space-y-6">
         <div class="flex items-center justify-between bg-white p-6 rounded-2xl border border-slate-100 shadow-xs">
           <div>
             <h2 class="text-lg font-bold text-slate-900">Step 3: Review Draft Questions</h2>
@@ -1009,7 +1139,7 @@ const getDifficultyClass = (diff: string) => {
                     <div v-if="q.options && q.options.length" class="space-y-1.5 mb-4">
                       <div v-for="(opt, oIdx) in q.options" :key="oIdx" class="flex items-start gap-2 text-xs">
                         <span class="w-5 h-5 shrink-0 rounded bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center border border-slate-200 mt-0.5">{{ opt.label || String.fromCharCode(65 + Number(oIdx)) }}</span>
-                        <span class="pt-0.5">{{ opt.text || opt }}</span>
+                        <span class="pt-0.5 [&>p]:m-0 [&>p]:inline" v-html="opt.text || opt"></span>
                       </div>
                     </div>
 
@@ -1072,6 +1202,47 @@ const getDifficultyClass = (diff: string) => {
         <button @click="handlePublishQuestions" :disabled="isPublishing || totalDraftCount === 0" class="px-6 py-2.5 rounded-xl bg-[#5138ed] text-white text-xs font-bold hover:bg-indigo-600 transition-colors shadow-md shadow-indigo-200 flex items-center gap-2"><svg v-if="!isPublishing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>{{ isPublishing ? 'Publishing...' : 'Publish Questions' }}</span></button>
       </template>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <Teleport to="body" :disabled="!isDeleteModalOpen">
+      <div v-if="isDeleteModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all">
+          <div class="p-6 text-center">
+            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-500 mx-auto flex items-center justify-center mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Delete Draft Question?</h3>
+            <p class="text-sm text-slate-500">Are you sure you want to delete this question? This action cannot be undone.</p>
+          </div>
+          <div class="flex items-center border-t border-slate-100 bg-slate-50">
+            <button @click="closeDeleteModal" class="flex-1 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors border-r border-slate-100">Cancel</button>
+            <button @click="confirmDeleteDraft" class="flex-1 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-100 transition-colors">Delete</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Publish Confirmation Modal -->
+    <Teleport to="body" :disabled="!isPublishModalOpen">
+      <div v-if="isPublishModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all">
+          <div class="p-6 text-center">
+            <div class="w-12 h-12 rounded-full bg-indigo-100 text-[#5138ed] mx-auto flex items-center justify-center mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7M5 13l4-4M19 7l-4 4"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Publish Questions?</h3>
+            <p class="text-sm text-slate-500">Are you sure you want to publish {{ totalDraftCount }} question(s)? They will become active in this Question Bank.</p>
+          </div>
+          <div class="flex items-center border-t border-slate-100 bg-slate-50">
+            <button @click="closePublishModal" class="flex-1 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors border-r border-slate-100">Cancel</button>
+            <button @click="confirmPublishQuestions" :disabled="isPublishing" class="flex-1 px-4 py-3 text-sm font-bold text-[#5138ed] hover:bg-indigo-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              <svg v-if="isPublishing" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <span>{{ isPublishing ? 'Publishing...' : 'Publish' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>
