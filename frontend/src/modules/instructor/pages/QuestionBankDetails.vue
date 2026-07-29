@@ -904,48 +904,55 @@ onMounted(() => {
 
     
     <!-- Controls Bar / Filter Bar -->
-    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
+    <div class="flex items-center gap-2 mb-6 flex-nowrap">
       <!-- Search -->
-      <div class="relative w-full xl:w-96 shrink-0">
-        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      <div class="relative w-52 shrink-0">
+        <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+          <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         </div>
-        <input type="text" v-model="searchQuery" placeholder="Search questions..." class="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
+        <input type="text" v-model="searchQuery" placeholder="Search questions..." class="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
       </div>
+
+      <!-- View Filtered Questions Button -->
+      <router-link 
+        :to="{ name: 'ViewFilteredQuestions', params: { id: route.params.id }, query: { type: selectedType, difficulty: selectedDifficulty, status: selectedStatus, chapter: selectedChapter, search: searchQuery } }"
+        class="bg-[#5138ed] text-white px-4 py-2 rounded-lg font-bold text-[11px] hover:bg-indigo-600 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-sm ml-auto"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+        View Filtered Questions
+      </router-link>
       
       <!-- Dropdowns -->
-      <div class="flex items-center flex-wrap xl:flex-nowrap gap-3 w-full xl:w-auto">
-        <select v-model="selectedType" class="flex-1 xl:flex-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer">
-          <option value="All Types">All Types</option>
-          <option value="MCQ">MCQ</option>
-          <option value="Short Answer">Short Answer</option>
-          <option value="True/False">True/False</option>
-          <option value="Matching">Matching</option>
-          <option value="Fill in Blank">Fill in Blank</option>
-        </select>
-        
-        <select v-model="selectedDifficulty" class="flex-1 xl:flex-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer">
-          <option value="All Difficulties">All Difficulties</option>
-          <option value="Easy">Easy</option>
-          <option value="Medium">Medium</option>
-          <option value="Hard">Hard</option>
-        </select>
-        
-        <select v-model="selectedStatus" class="flex-1 xl:flex-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer">
-          <option value="All Statuses">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Draft">Draft</option>
-        </select>
-        
-        <select v-model="selectedChapter" class="flex-1 xl:flex-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer">
-          <option v-for="ch in availableChapters" :key="ch" :value="ch">{{ ch }}</option>
-        </select>
+      <select v-model="selectedType" class="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer shrink-0">
+        <option value="All Types">All Types</option>
+        <option value="MCQ">MCQ</option>
+        <option value="Short Answer">Short Answer</option>
+        <option value="True/False">True/False</option>
+        <option value="Matching">Matching</option>
+        <option value="Fill in Blank">Fill in Blank</option>
+      </select>
+      
+      <select v-model="selectedDifficulty" class="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer shrink-0">
+        <option value="All Difficulties">All Difficulties</option>
+        <option value="Easy">Easy</option>
+        <option value="Medium">Medium</option>
+        <option value="Hard">Hard</option>
+      </select>
+      
+      <select v-model="selectedStatus" class="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer shrink-0">
+        <option value="All Statuses">All Statuses</option>
+        <option value="Active">Active</option>
+        <option value="Draft">Draft</option>
+      </select>
+      
+      <select v-model="selectedChapter" class="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-[#5138ed] outline-none cursor-pointer shrink-0">
+        <option v-for="ch in availableChapters" :key="ch" :value="ch">{{ ch }}</option>
+      </select>
 
-        <button class="bg-white border border-slate-200 text-[#5138ed] px-5 py-2.5 rounded-xl font-bold text-[13px] hover:bg-slate-50 transition-colors flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-          Filter
-        </button>
-      </div>
+      <button class="bg-white border border-slate-200 text-[#5138ed] px-3 py-2 rounded-lg font-bold text-[11px] hover:bg-slate-50 transition-colors flex items-center gap-1.5 shrink-0">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+        Filter
+      </button>
     </div>
 
     <!-- Table Card -->

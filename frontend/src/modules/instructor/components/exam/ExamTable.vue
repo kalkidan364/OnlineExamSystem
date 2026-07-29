@@ -95,7 +95,7 @@ const iconStyles = [
     <div class="flex items-end gap-4 mb-6 w-full overflow-x-auto pb-2">
       
       <!-- Search -->
-      <div class="relative flex-1 min-w-[200px]">
+      <div class="relative w-full sm:w-72 mr-auto">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -109,19 +109,7 @@ const iconStyles = [
         >
       </div>
 
-      <!-- Semester -->
-      <div class="flex flex-col gap-1.5 w-full sm:w-auto">
-        <label class="text-[11px] font-bold text-slate-700 capitalize tracking-wide">Semester</label>
-        <div class="relative">
-          <select v-model="selectedSemester" class="appearance-none border border-slate-200 rounded-xl text-sm pl-3 pr-10 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors w-full sm:w-[180px]">
-            <option>Semester I, 2025/2026</option>
-            <option>Semester II, 2025/2026</option>
-          </select>
-          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-          </div>
-        </div>
-      </div>
+
 
       <!-- Status -->
       <div class="flex flex-col gap-1.5 w-full sm:w-auto">
@@ -129,10 +117,10 @@ const iconStyles = [
         <div class="relative">
           <select v-model="selectedStatus" class="appearance-none border border-slate-200 rounded-xl text-sm pl-3 pr-10 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors w-full sm:w-[140px]">
             <option>All Status</option>
-            <option value="Scheduled">Scheduled</option>
-            <option value="Published">Published</option>
+            <option value="Upcoming">Upcoming</option>
+            <option value="Active">Active</option>
             <option value="Completed">Completed</option>
-            <option value="Draft">Draft</option>
+            <option value="Drafts">Drafts</option>
           </select>
           <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -162,12 +150,10 @@ const iconStyles = [
         <thead>
           <tr class="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wide">
             <th class="pb-4 pr-4 font-semibold">Exam Title</th>
-            <th class="pb-4 px-4 font-semibold">Exam Code</th>
             <th class="pb-4 px-4 font-semibold">Date & Time</th>
             <th class="pb-4 px-4 font-semibold text-center">Duration</th>
             <th class="pb-4 px-4 font-semibold text-center">Marks</th>
             <th class="pb-4 px-4 font-semibold text-center">Questions</th>
-            <th class="pb-4 px-4 font-semibold text-center">Registered Students</th>
             <th class="pb-4 px-4 font-semibold text-center">Status</th>
             <th class="pb-4 pl-4 text-center font-semibold">Actions</th>
           </tr>
@@ -175,7 +161,7 @@ const iconStyles = [
         <tbody>
           <!-- Loading state -->
           <tr v-if="examStore.isLoading">
-            <td colspan="7" class="py-8 text-center text-slate-500">
+            <td colspan="5" class="py-8 text-center text-slate-500">
               <svg class="animate-spin -ml-1 mr-3 h-5 w-5 inline text-[#5138ed]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -186,7 +172,7 @@ const iconStyles = [
           
           <!-- Empty State -->
           <tr v-else-if="filteredExams.length === 0">
-             <td colspan="7" class="py-8 text-center text-slate-500 font-medium">No exams found.</td>
+             <td colspan="5" class="py-8 text-center text-slate-500 font-medium">No exams found.</td>
           </tr>
 
           <!-- Data rows -->
@@ -202,11 +188,7 @@ const iconStyles = [
                 </div>
               </div>
             </td>
-            <td class="py-4 px-4">
-              <div class="flex flex-col">
-                <span class="text-[13px] font-medium text-slate-600">{{ exam.course_code || 'DBS-MID-2026' }}</span>
-              </div>
-            </td>
+
             <td class="py-4 px-4">
               <div class="flex flex-col">
                 <span class="text-[13px] font-medium text-slate-600">{{ formatDate(exam.scheduled_at) }}</span>
@@ -221,13 +203,7 @@ const iconStyles = [
             </td>
             <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ exam.total_marks }}</td>
             <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">{{ exam.questions_count !== undefined ? exam.questions_count : '-' }}</td>
-            <td class="py-4 px-4 text-[13px] text-slate-600 font-bold text-center">
-              <div class="flex items-center justify-center gap-1.5" v-if="exam.students_count !== undefined">
-                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                {{ exam.students_count }}
-              </div>
-              <div v-else class="text-center">-</div>
-            </td>
+
             <td class="py-4 px-4 text-center">
               <span class="px-2.5 py-1 text-[10px] font-bold rounded-md capitalize" :class="getStatusColor(exam.status)">
                 {{ exam.status }}
@@ -245,8 +221,8 @@ const iconStyles = [
                 <router-link to="/instructor/exams/create" class="p-1.5 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Create Exam">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 </router-link>
-                <button @click="examStore.deleteExam(exam.id)" :disabled="examStore.isSaving" class="p-1.5 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50" title="Options">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                <button @click="examStore.deleteExam(exam.id)" :disabled="examStore.isSaving" class="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50" title="Delete">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
               </div>
             </td>

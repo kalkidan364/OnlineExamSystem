@@ -1,12 +1,61 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useCreateExamStore } from '../../store/createExamStore'
 
 const props = defineProps<{
   isSaving?: boolean
 }>()
 
-const emit = defineEmits(['cancel', 'next', 'save-draft'])
+const emit = defineEmits(['cancel', 'next', 'save-draft', 'prev'])
 const formStore = useCreateExamStore()
+
+// Validation error
+const validationError = ref('')
+
+// Computed end time display
+const endTimeDisplay = computed(() => {
+  if (!formStore.scheduledDate || !formStore.scheduledTime) return null
+  try {
+    const dt = new Date(`${formStore.scheduledDate}T${formStore.scheduledTime}`)
+    dt.setMinutes(dt.getMinutes() + Number(formStore.durationMinutes || 0))
+    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch { return null }
+})
+
+const validate = () => {
+  validationError.value = ''
+  if (!formStore.durationMinutes || Number(formStore.durationMinutes) < 1) {
+    validationError.value = 'Exam duration is required and must be at least 1 minute.'
+    return false
+  }
+  if (!formStore.passingMarks && formStore.passingMarks !== 0) {
+    validationError.value = 'Passing marks is required.'
+    return false
+  }
+  if (Number(formStore.passingMarks) > Number(formStore.totalMarks)) {
+    validationError.value = `Passing marks (${formStore.passingMarks}) cannot exceed total marks (${formStore.totalMarks}).`
+    return false
+  }
+  if (!formStore.scheduledDate) {
+    validationError.value = 'Start date is required.'
+    return false
+  }
+  if (!formStore.scheduledTime) {
+    validationError.value = 'Start time is required.'
+    return false
+  }
+  return true
+}
+
+const handleNext = () => {
+  if (!validate()) return
+  emit('next')
+}
+
+const handleSaveDraft = () => {
+  if (!validate()) return
+  emit('save-draft')
+}
 </script>
 
 <template>
@@ -78,7 +127,10 @@ const formStore = useCreateExamStore()
 
         <div class="grid grid-cols-2 gap-6 mb-6">
           <div class="col-span-2">
-             <p class="text-[10px] text-slate-400 mt-2 font-medium">End time is calculated based on duration.</p>
+             <p class="text-[11px] text-slate-400 mt-1">
+            <span v-if="endTimeDisplay">End time: <strong class="text-slate-600">{{ endTimeDisplay }}</strong> (calculated based on duration)</span>
+            <span v-else>End time is calculated based on duration.</span>
+          </p>
           </div>
         </div>
 
@@ -246,18 +298,34 @@ const formStore = useCreateExamStore()
     </div>
   </div>
 
+  <!-- Validation Error -->
+  <div v-if="validationError" class="flex items-center gap-3 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl mb-4">
+    <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    <span class="text-[13px] font-semibold text-rose-700">{{ validationError }}</span>
+    <button @click="validationError = ''" class="ml-auto p-1 text-rose-400 hover:text-rose-600">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>
+  </div>
+
   <!-- Action Buttons -->
   <div class="flex items-center justify-between pt-2 pb-10">
-    <button @click="emit('cancel')" class="px-6 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
-      Cancel
-    </button>
-    
     <div class="flex items-center gap-3">
-      <button class="px-6 py-2.5 border border-slate-200 text-[#5138ed] font-bold text-[13px] rounded-xl hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
-        Save as Draft
+      <button @click="emit('prev')" class="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        Previous
       </button>
-      <button @click="emit('next')" class="px-8 py-2.5 bg-[#5138ed] hover:bg-indigo-600 text-white font-bold text-[13px] rounded-xl shadow-sm transition-colors flex items-center gap-2">
-        Next: Review & Publish
+      <button @click="emit('cancel')" class="px-6 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
+        Cancel
+      </button>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button @click="handleSaveDraft" :disabled="props.isSaving" class="px-6 py-2.5 border border-slate-200 text-[#5138ed] font-bold text-[13px] rounded-xl hover:border-indigo-200 hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+        <svg v-if="props.isSaving" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        {{ props.isSaving ? 'Saving...' : 'Save as Draft' }}
+      </button>
+      <button @click="handleNext" class="px-8 py-2.5 bg-[#5138ed] hover:bg-indigo-600 text-white font-bold text-[13px] rounded-xl shadow-sm transition-colors flex items-center gap-2">
+        Next: Review &amp; Publish
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
       </button>
     </div>

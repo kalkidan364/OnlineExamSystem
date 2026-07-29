@@ -3,7 +3,7 @@ import { onMounted } from 'vue'
 import { useInstructorExamStore } from '../store/instructorExamStore'
 
 import ExamStatCards from '../components/exam/ExamStatCards.vue'
-import ExamTabs from '../components/exam/ExamTabs.vue'
+
 import ExamTable from '../components/exam/ExamTable.vue'
 import ExamCalendar from '../components/exam/ExamCalendar.vue'
 import ExamOverviewChart from '../components/exam/ExamOverviewChart.vue'
@@ -17,7 +17,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-[1400px] mx-auto flex flex-col xl:flex-row gap-6">
+  <div class="max-w-[1400px] mx-auto flex flex-col gap-6">
     
     <!-- Main Left Column -->
     <div class="flex-1 min-w-0 space-y-6">
@@ -30,18 +30,7 @@ onMounted(() => {
         </div>
         <!-- Top Action Buttons -->
         <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
-          <div class="relative w-full md:w-64">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input 
-              type="text" 
-              class="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-colors"
-              placeholder="Search exams..."
-            >
-          </div>
+
           <router-link to="/instructor/exams/create" class="flex items-center justify-center gap-2 bg-[#5138ed] hover:bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-[13px] shadow-sm transition-colors whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
             Create New Exam
@@ -77,12 +66,9 @@ onMounted(() => {
       <!-- Stat Cards -->
       <ExamStatCards />
 
-      <!-- Tabs & Table Wrapper -->
+      <!-- Table Wrapper -->
       <div class="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-        <div class="px-6 pt-2">
-          <ExamTabs />
-        </div>
-        <!-- Main Table Area (We remove the inner border/shadow from ExamTable since it's wrapped) -->
+        <!-- Main Table Area -->
         <div class="p-0">
           <ExamTable class="border-0 shadow-none rounded-none" />
         </div>
@@ -90,21 +76,12 @@ onMounted(() => {
 
     </div>
 
-    <!-- Right Sidebar Column -->
-    <div class="w-full xl:w-[260px] space-y-4">
-      
-
-      
-      <!-- Exam Calendar -->
-      <ExamCalendar />
-
-      <!-- Overview Chart -->
-      <ExamOverviewChart />
-      
-      <!-- Quick Actions -->
-      <ExamQuickActions />
-
-    </div>
+      <!-- Bottom Section -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <ExamCalendar />
+        <ExamOverviewChart />
+        <ExamQuickActions />
+      </div>
 
   </div>
 </template>

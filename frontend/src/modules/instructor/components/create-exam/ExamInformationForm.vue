@@ -1,16 +1,38 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useCreateExamStore } from '../../store/createExamStore'
+import { useAuthStore } from '../../../auth/store/authStore'
+
+import apiClient from '../../../../core/api/apiClient'
 
 const formStore = useCreateExamStore()
+const authStore = useAuthStore()
 
 const localExamType = ref('Mid Exam')
+const isLoadingCourse = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   if (['Mid Exam', 'Final Exam', 'Quiz', ''].includes(formStore.examType)) {
     localExamType.value = formStore.examType || 'Mid Exam'
   } else {
     localExamType.value = 'Other'
+  }
+  
+  // Set course code from authenticated user by fetching actual profile
+  if (!formStore.courseCode) {
+    isLoadingCourse.value = true
+    try {
+      const res = await apiClient.get('/instructor/me')
+      if (res.data?.data?.course_code) {
+        formStore.courseCode = res.data.data.course_code
+      } else {
+        formStore.courseCode = authStore.user?.course_code || 'CS-301'
+      }
+    } catch (e) {
+      formStore.courseCode = authStore.user?.course_code || 'CS-301'
+    } finally {
+      isLoadingCourse.value = false
+    }
   }
 })
 
@@ -40,9 +62,9 @@ watch(localExamType, (newVal) => {
 
       <!-- Exam Code -->
       <div>
-        <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Code <span class="text-slate-400 font-normal">(Optional)</span></label>
-        <input v-model="formStore.courseCode" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" placeholder="Enter course code">
-        <p class="text-[11px] text-slate-400 mt-2 font-medium">Example: CS-304</p>
+        <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Code</label>
+        <input v-model="formStore.courseCode" type="text" readonly disabled class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed focus:outline-none" placeholder="Assigned course code">
+        <p class="text-[11px] text-slate-400 mt-2 font-medium">Auto-assigned based on your profile</p>
       </div>
 
       <!-- Exam Type -->
@@ -83,7 +105,7 @@ watch(localExamType, (newVal) => {
 
       <!-- Passing Marks -->
       <div>
-        <label class="block text-[13px] font-bold text-slate-700 mb-2">Passing Marks <span class="text-rose-500">*</span></label>
+        <label class="block text-[13px] font-bold text-slate-700 mb-2">Passing Marks <span class="text-slate-400 font-normal">(Optional)</span></label>
         <input v-model="formStore.passingMarks" type="number" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" placeholder="Enter passing marks">
         <p class="text-[11px] text-slate-400 mt-2 font-medium">Minimum marks required to pass</p>
       </div>
