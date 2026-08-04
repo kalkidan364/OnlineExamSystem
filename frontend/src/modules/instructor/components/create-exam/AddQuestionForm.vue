@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useCreateExamStore } from '../../store/createExamStore'
-import RichTextEditor from './RichTextEditor.vue'
+import MinimalEditor from './MinimalEditor.vue'
+import SharedEditorToolbar from './SharedEditorToolbar.vue'
 import { GripVertical } from 'lucide-vue-next'
 
 const props = defineProps<{ isSaving?: boolean }>()
@@ -391,6 +392,9 @@ const getQuestionTypeLabel = (type: string) => {
       </div>
     </div>
 
+    <!-- Shared Toolbar (ONE toolbar for ALL fields) - moved to root so it stays sticky across all sections -->
+    <SharedEditorToolbar class="mb-2" />
+
     <!-- Question Content -->
     <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -410,7 +414,7 @@ const getQuestionTypeLabel = (type: string) => {
 
       <div v-if="questionType !== 'Matching'">
         <label class="block text-[12px] font-bold text-slate-800 mb-2">Question Text <span class="text-rose-500">*</span></label>
-        <RichTextEditor v-model="questionText" placeholder="Type your question content here..." minHeight="200px" />
+        <MinimalEditor v-model="questionText" placeholder="Type your question content here..." label="Question Text" minHeight="160px" />
       </div>
 
       <!-- Matching Question Editor -->
@@ -425,7 +429,7 @@ const getQuestionTypeLabel = (type: string) => {
           <div class="absolute -top-3 left-4 px-2 py-0.5 bg-[#5138ed] text-white text-[10px] font-bold uppercase rounded shadow-sm">
             Currently Editing: Column {{ activeMatchingCell.col === 'left' ? 'A' : 'B' }} • Row {{ activeMatchingCell.rowIndex + 1 }}
           </div>
-          <RichTextEditor v-model="sharedEditorContent" placeholder="Type your content here..." minHeight="120px" />
+          <MinimalEditor v-model="sharedEditorContent" placeholder="Type your content here..." label="Matching Content" minHeight="120px" />
         </div>
 
         <div class="space-y-4">
@@ -545,7 +549,7 @@ const getQuestionTypeLabel = (type: string) => {
           </div>
 
           <div class="flex-1">
-            <RichTextEditor v-model="option.text" placeholder="Type option content..." minHeight="100px" />
+            <MinimalEditor v-model="option.text" :placeholder="'Write option ' + option.label + '...'" :label="'Option ' + option.label" minHeight="80px" />
           </div>
           <button @click="removeOption(index)" class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
         </div>

@@ -140,18 +140,10 @@ const saveAsDraft = async () => {
       </div>
 
       <!-- Right Column (Sidebar Widgets) -->
-      <div v-if="currentStep !== 1 && currentStep !== 2" class="w-full xl:w-[320px] pt-4 xl:pt-[84px]">
-        <template v-if="currentStep === 3">
-          <SettingsOverviewSidebar />
-          <SettingsTipsSidebar />
-          <SettingsHelpSidebar />
-        </template>
-        <template v-else-if="currentStep === 4">
-          <ReviewSummarySidebar />
-          <ReadyPublishSidebar />
-          <WhatHappensNextSidebar />
-          <ExamHelpSidebar class="mt-6" />
-        </template>
+      <div v-if="currentStep === 3" class="w-full xl:w-[320px] pt-4 xl:pt-[84px]">
+        <SettingsOverviewSidebar />
+        <SettingsTipsSidebar />
+        <SettingsHelpSidebar />
       </div>
 
     </div>
