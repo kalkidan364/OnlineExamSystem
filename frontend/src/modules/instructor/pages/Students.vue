@@ -1,24 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useInstructorStudentStore } from '../store/instructorStudentStore'
 
 const router = useRouter()
 const activeDropdown = ref<number | null>(null)
+const store = useInstructorStudentStore()
 
 const toggleDropdown = (id: number) => {
   activeDropdown.value = activeDropdown.value === id ? null : id
 }
 
-const students = ref([
-  { id: 1, name: 'Selamawit Getachew', studentId: 'WU/2021/CS/001', email: 'selamawit.get@wollo.edu.et', section: 'CS-304-A', completed: 4, total: 6, progress: 67, status: 'Active', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267041' },
-  { id: 2, name: 'Kebede Assefa', studentId: 'WU/2021/CS/002', email: 'kebede.assefa@wollo.edu.et', section: 'CS-304-A', completed: 6, total: 6, progress: 100, status: 'Completed All Exams', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267042' },
-  { id: 3, name: 'Hanna Mengesha', studentId: 'WU/2022/CS/015', email: 'hanna.mengesha@wollo.edu.et', section: 'CS-304-A', completed: 3, total: 6, progress: 50, status: 'Pending Exams', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267043' },
-  { id: 4, name: 'Yonas Alemu', studentId: 'WU/2022/CS/018', email: 'yonas.alemu@wollo.edu.et', section: 'CS-304-A', completed: 1, total: 6, progress: 17, status: 'At Risk', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267044' },
-  { id: 5, name: 'Lidya Gebremedhin', studentId: 'WU/2022/CS/022', email: 'lidya.gebremedhin@wollo.edu.et', section: 'CS-304-A', completed: 2, total: 6, progress: 33, status: 'Pending Exams', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267045' },
-  { id: 6, name: 'Daniel Kassa', studentId: 'WU/2023/CS/031', email: 'daniel.kassa@wollo.edu.et', section: 'CS-304-A', completed: 0, total: 6, progress: 0, status: 'Inactive', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267046' },
-  { id: 7, name: 'Rahel Solomon', studentId: 'WU/2023/CS/032', email: 'rahel.solomon@wollo.edu.et', section: 'CS-304-A', completed: 1, total: 6, progress: 17, status: 'At Risk', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267047' },
-  { id: 8, name: 'Bereket Mulugeta', studentId: 'WU/2023/CS/035', email: 'bereket.mulugeta@wollo.edu.et', section: 'CS-304-A', completed: 0, total: 6, progress: 0, status: 'Inactive', avatar: 'https://i.pravatar.cc/150?u=a042581f4e290267048' },
-])
+onMounted(() => {
+  store.fetchStudents()
+})
 
 const getStatusStyles = (status: string) => {
   if (status === 'Active') return 'bg-emerald-50 text-emerald-600'
@@ -70,7 +65,7 @@ const getDotColor = (status: string) => {
         </div>
         <div class="flex flex-col">
           <span class="text-[10px] font-bold text-slate-500 uppercase">Total Students</span>
-          <span class="text-2xl font-black text-slate-800 leading-none my-1">48</span>
+          <span class="text-2xl font-black text-slate-800 leading-none my-1">{{ store.stats.total_students }}</span>
           <span class="text-[10px] font-medium text-slate-400">All enrolled students</span>
         </div>
       </div>
@@ -81,8 +76,8 @@ const getDotColor = (status: string) => {
         </div>
         <div class="flex flex-col">
           <span class="text-[10px] font-bold text-slate-500 uppercase">Active Students</span>
-          <span class="text-2xl font-black text-slate-800 leading-none my-1">42</span>
-          <span class="text-[10px] font-medium text-slate-400">87.5% of total students</span>
+          <span class="text-2xl font-black text-slate-800 leading-none my-1">{{ store.stats.active_students }}</span>
+          <span class="text-[10px] font-medium text-slate-400">{{ store.stats.total_students > 0 ? Math.round((store.stats.active_students / store.stats.total_students) * 100) : 0 }}% of total students</span>
         </div>
       </div>
 
@@ -91,9 +86,9 @@ const getDotColor = (status: string) => {
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
         </div>
         <div class="flex flex-col">
-          <span class="text-[10px] font-bold text-slate-500 uppercase">Students Completed Exams</span>
-          <span class="text-2xl font-black text-slate-800 leading-none my-1">28</span>
-          <span class="text-[10px] font-medium text-slate-400">58.3% of total students</span>
+          <span class="text-[10px] font-bold text-slate-500 uppercase">Average Score</span>
+          <span class="text-2xl font-black text-slate-800 leading-none my-1">{{ store.stats.average_score }}%</span>
+          <span class="text-[10px] font-medium text-slate-400">Class average</span>
         </div>
       </div>
 
@@ -102,9 +97,9 @@ const getDotColor = (status: string) => {
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
         <div class="flex flex-col">
-          <span class="text-[10px] font-bold text-slate-500 uppercase">Students Pending Exams</span>
-          <span class="text-2xl font-black text-slate-800 leading-none my-1">20</span>
-          <span class="text-[10px] font-medium text-slate-400">41.7% of total students</span>
+          <span class="text-[10px] font-bold text-slate-500 uppercase">Top Performers</span>
+          <span class="text-2xl font-black text-slate-800 leading-none my-1">{{ store.stats.top_performers }}</span>
+          <span class="text-[10px] font-medium text-slate-400">Students &ge; 85%</span>
         </div>
       </div>
 
@@ -114,7 +109,7 @@ const getDotColor = (status: string) => {
         </div>
         <div class="flex flex-col">
           <span class="text-[10px] font-bold text-slate-500 uppercase">Average Attendance</span>
-          <span class="text-2xl font-black text-slate-800 leading-none my-1">78.4%</span>
+          <span class="text-2xl font-black text-slate-800 leading-none my-1">--%</span>
           <span class="text-[10px] font-medium text-slate-400">Overall class attendance</span>
         </div>
       </div>
@@ -165,33 +160,45 @@ const getDotColor = (status: string) => {
                   <th class="py-4 pl-6 pr-3">Student</th>
                   <th class="py-4 px-3">ID Number</th>
                   <th class="py-4 px-3">Email</th>
-                  <th class="py-4 px-3">Section</th>
+                  <th class="py-4 px-3">Gender</th>
                   <th class="py-4 px-3 w-48">Exam Progress</th>
                   <th class="py-4 px-3">Status</th>
                   <th class="py-4 px-6 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="student in students" :key="student.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
+                <tr v-if="store.isLoading" class="border-b border-slate-50">
+                  <td colspan="7" class="py-10 text-center text-slate-500 text-sm">
+                    Loading students...
+                  </td>
+                </tr>
+                <tr v-else-if="store.students.length === 0" class="border-b border-slate-50">
+                  <td colspan="7" class="py-10 text-center text-slate-500 text-sm">
+                    No students found in this course/section context.
+                  </td>
+                </tr>
+                <tr v-else v-for="student in store.students" :key="student.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
                   <td class="py-4 pl-6 pr-3">
                     <div class="flex items-center gap-3">
-                      <img :src="student.avatar" class="w-8 h-8 rounded-full object-cover border border-slate-200" alt="Avatar" />
+                      <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 text-xs uppercase border border-slate-200">
+                        {{ student.name.substring(0, 2) }}
+                      </div>
                       <span class="text-[13px] font-bold text-slate-800">{{ student.name }}</span>
                     </div>
                   </td>
-                  <td class="py-4 px-3 text-[12px] font-semibold text-slate-600">{{ student.studentId }}</td>
+                  <td class="py-4 px-3 text-[12px] font-semibold text-slate-600">{{ student.id_number }}</td>
                   <td class="py-4 px-3 text-[12px] font-medium text-slate-500">{{ student.email }}</td>
-                  <td class="py-4 px-3 text-[12px] font-semibold text-slate-600">{{ student.section }}</td>
+                  <td class="py-4 px-3 text-[12px] font-semibold text-slate-600">{{ student.gender }}</td>
                   <td class="py-4 px-3">
                     <div class="flex flex-col gap-1 w-full max-w-[160px]">
                       <div class="flex items-center justify-between">
-                        <span class="text-[10px] font-bold text-slate-500">{{ student.completed }} of {{ student.total }} Exams Completed</span>
+                        <span class="text-[10px] font-bold text-slate-500">{{ student.exams_taken }} Exams Taken</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <div class="h-full rounded-full transition-all duration-500" :class="getProgressColor(student.status)" :style="`width: ${student.progress}%`"></div>
+                          <div class="h-full rounded-full transition-all duration-500 bg-[#5138ed]" :style="`width: ${student.average_score}%`"></div>
                         </div>
-                        <span class="text-[10px] font-bold text-slate-700 w-6 text-right">{{ student.progress }}%</span>
+                        <span class="text-[10px] font-bold text-slate-700 w-6 text-right">{{ student.average_score }}%</span>
                       </div>
                     </div>
                   </td>
@@ -238,7 +245,7 @@ const getDotColor = (status: string) => {
 
           <!-- Pagination -->
           <div class="mt-auto p-4 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-[11px] text-slate-500 font-medium">Showing 1 to 8 of 48 students</span>
+            <span class="text-[11px] text-slate-500 font-medium">Showing {{ store.students.length }} students</span>
             <div class="flex items-center gap-1">
               <button class="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
               <button class="w-7 h-7 flex items-center justify-center rounded-lg bg-[#5138ed] text-white font-bold text-[11px] shadow-sm">1</button>
