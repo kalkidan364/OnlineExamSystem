@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 export const useCreateExamStore = defineStore('createExam', () => {
   const title = ref('')
-  const courseCode = ref('') // We can leave it blank or default to SWE-301
+  const courseCode = ref('')
   const examType = ref('Mid Exam')
   const totalMarks = ref(100)
   const passingMarks = ref(60)
@@ -12,6 +12,9 @@ export const useCreateExamStore = defineStore('createExam', () => {
   const durationMinutes = ref(90)
   const scheduledDate = ref('')
   const scheduledTime = ref('09:00 AM')
+
+  // Editing an existing exam
+  const editingExamId = ref<number | null>(null)
 
   // Array to hold questions created during the exam creation flow
   const questions = ref<any[]>([])
@@ -54,6 +57,55 @@ export const useCreateExamStore = defineStore('createExam', () => {
     }
   }
 
+  // Load an existing exam into the form store for editing
+  const loadExamForEditing = (exam: any) => {
+    editingExamId.value = exam.id
+    title.value = exam.title || ''
+    courseCode.value = exam.course_code || ''
+    examType.value = exam.course_name || 'Mid Exam'
+    totalMarks.value = exam.total_marks || 100
+    durationMinutes.value = exam.duration_minutes || 90
+
+    // Parse scheduled_at back to date/time fields
+    if (exam.scheduled_at) {
+      const d = new Date(exam.scheduled_at)
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const year = d.getFullYear()
+      scheduledDate.value = `${month}/${day}/${year}`
+      let hours = d.getHours()
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      const ampm = hours >= 12 ? 'PM' : 'AM'
+      hours = hours % 12 || 12
+      scheduledTime.value = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`
+    }
+
+    // Load questions
+    questions.value = (exam.questions || []).map((q: any) => ({
+      ...q,
+      options: Array.isArray(q.options)
+        ? q.options.map((o: any) => (typeof o === 'string' ? o : o.text || o))
+        : [],
+    }))
+
+    // Load settings
+    const s = exam.settings || {}
+    shuffleQuestions.value = s.shuffleQuestions ?? s.shuffle_questions ?? true
+    showReviewScreen.value = s.showReviewScreen ?? s.show_review_screen ?? true
+    shuffleAnswers.value = s.shuffleAnswers ?? s.shuffle_answers ?? true
+    allowBacktracking.value = s.allowBacktracking ?? s.allow_backtracking ?? true
+    showOneQuestionAtATime.value = s.showOneQuestionAtATime ?? s.show_one_question_at_a_time ?? false
+    autoSubmitOnTimeFinish.value = s.autoSubmitOnTimeFinish ?? s.auto_submit_on_time_finish ?? true
+    enableFullscreenMode.value = s.enableFullscreenMode ?? s.enable_fullscreen_mode ?? true
+    enableBrowserTabMonitoring.value = s.enableBrowserTabMonitoring ?? s.enable_browser_tab_monitoring ?? true
+    disableRightClick.value = s.disableRightClick ?? s.disable_right_click ?? true
+    allowCalculator.value = s.allowCalculator ?? s.allow_calculator ?? false
+    disableCopyPaste.value = s.disableCopyPaste ?? s.disable_copy_paste ?? true
+    webcamMonitoring.value = s.webcamMonitoring ?? s.webcam_monitoring ?? false
+    maxAttempts.value = String(s.maxAttempts ?? s.max_attempts ?? '1')
+    timeZone.value = s.timeZone ?? s.time_zone ?? '(UTC+03:00) Addis Ababa, Nairobi'
+  }
+
   // Helpers to get ISO string
   const getScheduledAt = () => {
     if (!scheduledDate.value) return null
@@ -67,6 +119,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
   }
 
   const reset = () => {
+    editingExamId.value = null
     title.value = ''
     courseCode.value = ''
     examType.value = 'Mid Exam'
@@ -105,6 +158,8 @@ export const useCreateExamStore = defineStore('createExam', () => {
     scheduledDate,
     scheduledTime,
     questions,
+    editingExamId,
+    loadExamForEditing,
     shuffleQuestions,
     showReviewScreen,
     shuffleAnswers,

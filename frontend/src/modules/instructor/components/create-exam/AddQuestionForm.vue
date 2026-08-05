@@ -44,6 +44,15 @@ const previousInstructions = computed(() => {
   return [...new Set(instructions)] as string[]
 })
 
+// Auto-fill instruction when question type changes (or on mount)
+watch(mappedQuestionType, () => {
+  if (previousInstructions.value.length > 0) {
+    title.value = previousInstructions.value[previousInstructions.value.length - 1]
+  } else {
+    title.value = ''
+  }
+}, { immediate: true })
+
 // Multiple Choice (MCQ) State
 const options = ref([
   { id: Date.now(), label: 'A', text: '' },
@@ -277,7 +286,6 @@ const addQuestionToExam = () => {
       qData.max_words = saMaxLength.value
       break;
     case 'matching': {
-      const validPairs = matchPairs.value.filter(p => p.left.trim() && p.right.trim())
       const correct_answers: Record<string, string> = {}
       let colAIndex = 1
       matchPairs.value.forEach((p, i) => {
@@ -286,11 +294,23 @@ const addQuestionToExam = () => {
           colAIndex++
         }
       })
-      qData.column_a = validPairs.map(p => p.left)
-      qData.column_b = validPairs.map((p, i) => ({ label: getLetterLabel(i), text: p.right }))
+      
+      const column_a: string[] = []
+      const column_b: { label: string, text: string }[] = []
+      matchPairs.value.forEach((p, i) => {
+        if (p.left.replace(/<[^>]*>?/gm, '').trim() !== '') {
+          column_a.push(p.left.trim())
+        }
+        if (p.right.replace(/<[^>]*>?/gm, '').trim() !== '') {
+          column_b.push({ label: getLetterLabel(i), text: p.right.trim() })
+        }
+      })
+      
+      qData.column_a = column_a
+      qData.column_b = column_b
       qData.correct_answers = correct_answers
-      qData.pairs = validPairs.map(p => ({ left: p.left.trim(), right: p.right.trim() }))
-      qData.options = validPairs.map(p => ({ left: p.left.trim(), right: p.right.trim() }))
+      qData.pairs = matchPairs.value.map(p => ({ left: p.left.trim(), right: p.right.trim() }))
+      qData.options = matchPairs.value.map(p => ({ left: p.left.trim(), right: p.right.trim() }))
       qData.correct_answer = Object.entries(correct_answers).map(([k, v]) => `${k}-${v}`).join(',')
       qData.columnA = 'Column A'
       qData.columnB = 'Column B'

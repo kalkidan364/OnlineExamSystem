@@ -145,12 +145,24 @@ const MOCK_EXAMS: Exam[] = [
 ]
 
 export const useInstructorExamStore = defineStore('instructorExam', () => {
-  const exams = ref<Exam[]>([...MOCK_EXAMS])
-  const stats = ref<ExamStats>({ ...MOCK_STATS })
+  const exams = ref<Exam[]>([])
+  const stats = ref<ExamStats>({ total: 0, upcoming: 0, active: 0, completed: 0, draft: 0, archived: 0 })
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<string | null>(null)
   const usingMockData = ref(false)
+
+  const deriveStats = (examList: Exam[]): ExamStats => {
+    const now = new Date()
+    return {
+      total: examList.length,
+      upcoming: examList.filter(e => e.status === 'scheduled' && e.scheduled_at && new Date(e.scheduled_at) > now).length,
+      active: examList.filter(e => e.status === 'active').length,
+      completed: examList.filter(e => e.status === 'completed').length,
+      draft: examList.filter(e => e.status === 'draft').length,
+      archived: examList.filter(e => e.status === 'archived').length,
+    }
+  }
 
   const fetchExams = async () => {
     isLoading.value = true
@@ -158,12 +170,24 @@ export const useInstructorExamStore = defineStore('instructorExam', () => {
     usingMockData.value = false
 
     try {
-      // Force mock data as requested
+      const response = await apiClient.get('/instructor/exams')
+      const responseData = response.data?.data ?? response.data
+      
+      if (responseData && Array.isArray(responseData.exams)) {
+        exams.value = responseData.exams
+      } else if (Array.isArray(responseData)) {
+        exams.value = responseData
+      } else {
+        exams.value = []
+      }
+      
+      stats.value = deriveStats(exams.value)
+      usingMockData.value = false
+    } catch (err: any) {
+      // Fallback to mock data when backend is offline
       exams.value = [...MOCK_EXAMS]
       stats.value = { ...MOCK_STATS }
       usingMockData.value = true
-    } catch (err: any) {
-      error.value = 'Failed to load exams.'
     } finally {
       isLoading.value = false
     }
@@ -175,26 +199,29 @@ export const useInstructorExamStore = defineStore('instructorExam', () => {
 
     try {
       if (usingMockData.value) {
-        // Mock save
         const newExam: Exam = {
           id: Date.now(),
           title: examData.title || 'Untitled',
-          course_code: 'SWE-301',
-          course_name: 'Software Engineering',
+          course_code: examData.course_code || 'SWE-301',
+          course_name: examData.course_name || 'Software Engineering',
           duration_minutes: examData.duration_minutes || 60,
           total_marks: examData.total_marks || 100,
-          status: examData.status || 'draft',
+          status: (examData.status as any) || 'draft',
           students_count: 0,
+          questions_count: examData.questions?.length ?? 0,
           scheduled_at: examData.scheduled_at || null,
           created_at: new Date().toISOString(),
         }
         exams.value.unshift(newExam)
+        stats.value = deriveStats(exams.value)
         return newExam
       }
 
       const response = await apiClient.post('/instructor/exams', examData)
-      exams.value.unshift(response.data.data) // Prepend new exam
-      return response.data.data
+      const saved = response.data.data
+      exams.value.unshift(saved)
+      stats.value = deriveStats(exams.value)
+      return saved
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to create exam.'
       throw err
@@ -207,14 +234,29 @@ export const useInstructorExamStore = defineStore('instructorExam', () => {
     try {
       if (usingMockData.value) {
         exams.value = exams.value.filter(e => e.id !== id)
+        stats.value = deriveStats(exams.value)
         return
       }
-      
       await apiClient.delete(`/instructor/exams/${id}`)
       exams.value = exams.value.filter(e => e.id !== id)
+      stats.value = deriveStats(exams.value)
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to delete exam.'
       throw err
+    }
+  }
+
+  const fetchExamDetails = async (id: number) => {
+    // Use a local flag — never touch the shared isLoading so the exam list table stays unaffected
+    try {
+      if (usingMockData.value) {
+        return exams.value.find(e => e.id === id) || null
+      }
+      const response = await apiClient.get(`/instructor/exams/${id}`)
+      return response.data?.data ?? response.data
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to fetch exam details.'
+      return null
     }
   }
 
@@ -226,6 +268,7 @@ export const useInstructorExamStore = defineStore('instructorExam', () => {
     error,
     usingMockData,
     fetchExams,
+    fetchExamDetails,
     createExam,
     deleteExam,
   }

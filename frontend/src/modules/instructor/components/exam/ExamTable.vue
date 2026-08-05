@@ -9,6 +9,86 @@ const selectedStatus = ref('All Status')
 const selectedSemester = ref('Semester I, 2025/2026')
 const sortBy = ref('Exam Date')
 
+// Modal state
+const showDetailsModal = ref(false)
+const selectedExam = ref<any>(null)
+const isLoadingDetails = ref(false)
+
+const showDeleteModal = ref(false)
+const examToDelete = ref<number | null>(null)
+const isDeleting = ref(false)
+
+const confirmDelete = (id: number) => {
+  examToDelete.value = id
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (examToDelete.value) {
+    isDeleting.value = true
+    try {
+      await examStore.deleteExam(examToDelete.value)
+    } finally {
+      isDeleting.value = false
+      showDeleteModal.value = false
+      examToDelete.value = null
+    }
+  }
+}
+
+const openExamDetails = async (exam: any) => {
+  selectedExam.value = exam
+  showDetailsModal.value = true
+  
+  isLoadingDetails.value = true
+  const details = await examStore.fetchExamDetails(exam.id)
+  if (details) {
+    selectedExam.value = details
+  }
+  isLoadingDetails.value = false
+}
+
+const getDisplayType = (type: string) => {
+  let displayType = (type || '').toUpperCase()
+  if (type === 'multiple_choice' || type === 'mcq') displayType = 'MULTIPLE CHOICE'
+  if (type === 'true_false' || type === 'true/false') displayType = 'TRUE / FALSE'
+  if (type === 'short_answer') displayType = 'SHORT ANSWER'
+  if (type === 'fill_blank' || type === 'fill_in_the_blank') displayType = 'FILL IN THE BLANK'
+  if (type === 'matching' || type === 'Matching') displayType = 'MATCHING'
+  if (type === 'essay' || type === 'Essay') displayType = 'ESSAY'
+  return displayType
+}
+
+const getQuestionIndexWithinType = (q: any) => {
+  if (!selectedExam.value?.questions) return 0
+  const targetType = getDisplayType(q.type)
+  const sameTypeQuestions = selectedExam.value.questions.filter((x: any) => getDisplayType(x.type) === targetType)
+  return sameTypeQuestions.findIndex((x: any) => x === q || x.id === q.id) + 1
+}
+
+const groupedQuestions = computed(() => {
+  if (!selectedExam.value?.questions) return []
+  const groups: any[] = []
+  selectedExam.value.questions.forEach((q: any) => {
+    let displayType = getDisplayType(q.type)
+
+    let typeGroup = groups.find((g: any) => g.questionType === displayType)
+    if (!typeGroup) {
+       typeGroup = { questionType: displayType, instructionGroups: [] }
+       groups.push(typeGroup)
+    }
+
+    const instructionStr = q.instruction || ''
+    let instGroup = typeGroup.instructionGroups.find((ig: any) => ig.instruction === instructionStr)
+    if (!instGroup) {
+       instGroup = { instruction: instructionStr, questions: [] }
+       typeGroup.instructionGroups.push(instGroup)
+    }
+    instGroup.questions.push(q)
+  })
+  return groups
+})
+
 const resetFilters = () => {
   searchQuery.value = ''
   selectedStatus.value = 'All Status'
@@ -211,17 +291,17 @@ const iconStyles = [
             </td>
             <td class="py-4 pl-4 text-center">
               <div class="flex items-center justify-center gap-1 text-slate-400">
-                <button class="p-1.5 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="View">
+                <button @click="openExamDetails(exam)" class="p-1.5 hover:text-[#5138ed] hover:bg-indigo-50 rounded-lg transition-colors" title="View">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </button>
-                <button class="p-1.5 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="Edit">
+                <router-link :to="`/instructor/exams/edit/${exam.id}`" class="p-1.5 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="Edit">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                </button>
-                <!-- CREATE ICON -->
-                <router-link to="/instructor/exams/create" class="p-1.5 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Create Exam">
+                </router-link>
+                <!-- ADD QUESTION ICON -->
+                <router-link :to="`/instructor/exams/edit/${exam.id}?step=2`" class="p-1.5 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Add Question">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 </router-link>
-                <button @click="examStore.deleteExam(exam.id)" :disabled="examStore.isSaving" class="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50" title="Delete">
+                <button @click="confirmDelete(exam.id)" :disabled="examStore.isSaving" class="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50" title="Delete">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
               </div>
@@ -233,7 +313,9 @@ const iconStyles = [
     
     <!-- Pagination -->
     <div class="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-      <span class="text-[13px] text-slate-500 font-medium">Showing 1 to 9 of 18 exams</span>
+      <span class="text-[13px] text-slate-500 font-medium">
+        Showing {{ filteredExams.length > 0 ? 1 : 0 }} to {{ filteredExams.length }} of {{ examStore.exams.length }} exams
+      </span>
       <div class="flex items-center gap-2">
         <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
@@ -257,4 +339,228 @@ const iconStyles = [
       </div>
     </div>
   </div>
+
+  <!-- Exam Details Modal -->
+  <Teleport to="body">
+    <Transition name="modal-fade">
+      <div v-if="showDetailsModal" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" @keydown.escape="showDetailsModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" @click.stop>
+          
+          <!-- Header -->
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-indigo-50 text-[#5138ed] flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              </div>
+              <div>
+                <h3 class="text-[16px] font-bold text-slate-800">{{ selectedExam?.title || 'Exam Details' }}</h3>
+                <p class="text-[12px] text-slate-500">{{ selectedExam?.course_code }} - {{ selectedExam?.course_name }}</p>
+              </div>
+            </div>
+            <button @click="showDetailsModal = false" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-6 overflow-y-auto bg-slate-50 relative">
+            <div v-if="isLoadingDetails" class="absolute inset-0 bg-slate-50/80 backdrop-blur-sm z-10 flex items-center justify-center">
+              <div class="flex flex-col items-center gap-3">
+                <svg class="w-8 h-8 text-[#5138ed] animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span class="text-sm font-bold text-slate-500">Loading exam details...</span>
+              </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6">
+              <h4 class="text-[14px] font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Exam Information
+              </h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status</p>
+                  <span class="px-2.5 py-1 text-[11px] font-bold rounded-md capitalize inline-block" :class="getStatusColor(selectedExam?.status || '')">
+                    {{ selectedExam?.status }}
+                  </span>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date & Time</p>
+                  <p class="text-[13px] font-semibold text-slate-700">
+                    {{ formatDate(selectedExam?.scheduled_at) }}<br/>
+                    <span class="text-slate-400 font-normal">{{ formatTime(selectedExam?.scheduled_at) }}</span>
+                  </p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Duration</p>
+                  <p class="text-[13px] font-semibold text-slate-700">{{ selectedExam?.duration_minutes }} Minutes</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Marks</p>
+                  <p class="text-[13px] font-semibold text-slate-700">{{ selectedExam?.total_marks }} Points</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Questions</p>
+                  <p class="text-[13px] font-semibold text-slate-700">{{ selectedExam?.questions_count !== undefined ? selectedExam?.questions_count : '-' }} Questions</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Assigned Students</p>
+                  <p class="text-[13px] font-semibold text-slate-700">{{ selectedExam?.students_count !== undefined ? selectedExam?.students_count : '-' }} Students</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Settings Summary (if available) -->
+            <div v-if="selectedExam?.settings" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6">
+              <h4 class="text-[14px] font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Exam Security & Settings
+              </h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="px-4 py-3 bg-slate-50 rounded-xl flex justify-between items-center border border-slate-100">
+                  <span class="text-[13px] font-medium text-slate-600">Shuffle Questions</span>
+                  <span class="text-[12px] font-bold" :class="selectedExam.settings.shuffle_questions ? 'text-emerald-600' : 'text-slate-400'">{{ selectedExam.settings.shuffle_questions ? 'Enabled' : 'Disabled' }}</span>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 rounded-xl flex justify-between items-center border border-slate-100">
+                  <span class="text-[13px] font-medium text-slate-600">Allow Calculator</span>
+                  <span class="text-[12px] font-bold" :class="selectedExam.settings.allow_calculator ? 'text-emerald-600' : 'text-slate-400'">{{ selectedExam.settings.allow_calculator ? 'Enabled' : 'Disabled' }}</span>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 rounded-xl flex justify-between items-center border border-slate-100">
+                  <span class="text-[13px] font-medium text-slate-600">Browser Tab Monitoring</span>
+                  <span class="text-[12px] font-bold" :class="selectedExam.settings.enable_browser_tab_monitoring ? 'text-emerald-600' : 'text-slate-400'">{{ selectedExam.settings.enable_browser_tab_monitoring ? 'Enabled' : 'Disabled' }}</span>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 rounded-xl flex justify-between items-center border border-slate-100">
+                  <span class="text-[13px] font-medium text-slate-600">Show Results After</span>
+                  <span class="text-[12px] font-bold" :class="selectedExam.settings.show_results_after ? 'text-emerald-600' : 'text-slate-400'">{{ selectedExam.settings.show_results_after ? 'Enabled' : 'Disabled' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Questions List Grouped by Type -->
+            <div v-if="selectedExam?.questions && selectedExam.questions.length > 0" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <h4 class="text-[14px] font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                Questions ({{ selectedExam.questions.length }})
+              </h4>
+              
+              <div class="space-y-12">
+                <!-- Iterate over Question Types -->
+                <div v-for="(typeGroup, typeIdx) in groupedQuestions" :key="typeGroup.questionType">
+                  <!-- TYPE HEADER -->
+                  <div class="mb-5 border-b-2 border-slate-100 pb-3">
+                    <h2 class="text-[14px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-3">
+                      <span class="w-1.5 h-5 bg-[#5138ed] rounded-full inline-block shadow-[0_0_10px_rgba(81,56,237,0.4)]"></span>
+                      {{ typeGroup.questionType }}
+                    </h2>
+                  </div>
+
+                  <!-- Iterate over Instructions within Type -->
+                  <div class="space-y-8 pl-0 sm:pl-5 border-l-[3px] border-slate-50 ml-1">
+                    <div v-for="(instGroup, instIdx) in typeGroup.instructionGroups" :key="instIdx">
+                      
+                      <!-- INSTRUCTION HEADER -->
+                      <div class="mb-4 relative">
+                        <div class="absolute -left-[28px] top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-[3px] border-indigo-400 rounded-full"></div>
+                        <div v-if="instGroup.instruction">
+                          <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Instructor Instruction:</span>
+                          <h3 class="text-[13px] font-bold text-slate-700 italic px-2">"{{ instGroup.instruction }}"</h3>
+                        </div>
+                        <div v-else>
+                          <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Instructor Instruction:</span>
+                          <h3 class="text-[12px] font-bold text-slate-400 italic px-2">No specific instruction provided.</h3>
+                        </div>
+                      </div>
+
+                      <!-- Questions for this Instruction -->
+                      <div class="flex flex-col gap-3 pl-3">
+                        <div v-for="(q, qIdx) in instGroup.questions" :key="q.id || qIdx" class="p-4 bg-slate-50 border border-slate-100 rounded-xl relative">
+                          <div class="flex justify-between items-start gap-4 mb-3">
+                            <div class="flex items-center gap-2">
+                              <span class="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[11px] font-bold text-indigo-600 shadow-sm">{{ getQuestionIndexWithinType(q) }}</span>
+                              <span class="px-2 py-0.5 bg-indigo-50 text-[#5138ed] text-[10px] font-bold uppercase rounded">{{ q.type.replace(/_/g, ' ') }}</span>
+                            </div>
+                            <span class="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">{{ q.marks || 1 }} Marks</span>
+                          </div>
+                          
+                          <p class="text-[13px] text-slate-700 font-medium leading-relaxed mb-3" v-html="q.text"></p>
+                          
+                          <div v-if="q.options && q.options.length > 0" class="flex flex-col gap-2 mb-4 ml-2">
+                            <div v-for="(opt, oIdx) in q.options" :key="oIdx" class="flex items-start gap-2">
+                              <span class="text-[11px] font-bold text-slate-400 mt-0.5">{{ String.fromCharCode(65 + oIdx) }}.</span>
+                              <p class="text-[12px] text-slate-600" v-html="typeof opt === 'string' ? opt : (opt.text || opt)"></p>
+                            </div>
+                          </div>
+
+                          <!-- Display Answer Based on Type -->
+                          <div class="pl-3 border-l-2 border-emerald-400">
+                            <p class="text-[10px] font-bold text-emerald-600 mb-1 uppercase tracking-wider">Correct Answer</p>
+                            <p class="text-[12px] text-slate-700 font-medium bg-white px-3 py-1.5 rounded-lg border border-emerald-100 inline-block" v-html="q.correct_answer || 'N/A'"></p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="!isLoadingDetails" class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+              <div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+              </div>
+              <p class="text-[13px] font-bold text-slate-500">No questions found for this exam.</p>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+            <button @click="showDetailsModal = false" class="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-white transition-colors shadow-sm">
+              Close
+            </button>
+            <router-link :to="`/instructor/exams/edit/${selectedExam?.id}`" class="px-5 py-2.5 bg-[#5138ed] text-white font-bold text-[13px] rounded-xl hover:bg-indigo-600 transition-colors shadow-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+              Edit Exam
+            </router-link>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- Delete Confirmation Modal -->
+  <Teleport to="body">
+    <Transition name="modal-fade">
+      <div v-if="showDeleteModal" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" @keydown.escape="showDeleteModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" @click.stop>
+          <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </div>
+            <h3 class="text-[18px] font-bold text-slate-800 mb-2">Delete Exam</h3>
+            <p class="text-[13px] text-slate-500 mb-6">Are you sure you want to delete this exam? This action cannot be undone.</p>
+            
+            <div class="flex gap-3">
+              <button @click="showDeleteModal = false" class="flex-1 px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button @click="executeDelete" :disabled="isDeleting" class="flex-1 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[13px] rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                <span v-if="isDeleting">Deleting...</span>
+                <span v-else>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+</style>

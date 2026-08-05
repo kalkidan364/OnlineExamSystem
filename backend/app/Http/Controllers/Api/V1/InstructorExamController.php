@@ -19,7 +19,7 @@ class InstructorExamController extends Controller
 
         // Scope to instructor's single assigned course
         $exams = Exam::where('user_id', $instructor->id)
-            ->withCount('students')
+            ->withCount(['students', 'questions'])
             ->latest()
             ->get();
 
@@ -40,6 +40,7 @@ class InstructorExamController extends Controller
                     'duration_minutes' => $exam->duration_minutes,
                     'total_marks'      => $exam->total_marks,
                     'students_count'   => $exam->students_count,
+                    'questions_count'  => $exam->questions_count,
                     'scheduled_at'     => $exam->scheduled_at?->toISOString(),
                     'settings'         => $exam->settings,
                     'created_at'       => $exam->created_at->toISOString(),
@@ -105,9 +106,24 @@ class InstructorExamController extends Controller
             \Log::warning('No questions array found in request.');
         }
 
+        $exam->loadCount(['questions', 'students']);
+
         return response()->json([
             'message' => 'Exam created successfully',
-            'data'    => $exam
+            'data'    => [
+                'id'               => $exam->id,
+                'title'            => $exam->title,
+                'course_code'      => $exam->course_code,
+                'course_name'      => $exam->course_name,
+                'status'           => $exam->status,
+                'duration_minutes' => $exam->duration_minutes,
+                'total_marks'      => $exam->total_marks,
+                'students_count'   => $exam->students_count,
+                'questions_count'  => $exam->questions_count,
+                'scheduled_at'     => $exam->scheduled_at?->toISOString(),
+                'settings'         => $exam->settings,
+                'created_at'       => $exam->created_at->toISOString(),
+            ]
         ], 201);
     }
 
@@ -119,8 +135,8 @@ class InstructorExamController extends Controller
         $instructor = $request->user();
         
         $exam = Exam::where('user_id', $instructor->id)
-            ->where('course_code', $instructor->course_code)
             ->where('id', $id)
+            ->with('questions')
             ->withCount('students')
             ->firstOrFail();
 
@@ -143,11 +159,14 @@ class InstructorExamController extends Controller
 
         $validated = $request->validate([
             'title'            => 'sometimes|string|max:255',
+            'course_code'      => 'nullable|string|max:50',
+            'course_name'      => 'nullable|string|max:255',
             'duration_minutes' => 'sometimes|integer|min:1',
             'total_marks'      => 'sometimes|integer|min:1',
             'status'           => 'sometimes|in:draft,published,scheduled,completed',
             'scheduled_at'     => 'nullable|date',
-            'settings'         => 'sometimes|array',
+            'settings'         => 'nullable|array',
+            'questions'        => 'nullable|array',
         ]);
 
         if (isset($validated['scheduled_at'])) {
@@ -156,9 +175,45 @@ class InstructorExamController extends Controller
 
         $exam->update($validated);
 
+        if ($request->has('questions') && is_array($request->input('questions'))) {
+            // Remove existing questions for this exam
+            $exam->questions()->delete();
+            
+            // Insert updated questions
+            foreach ($request->input('questions') as $q) {
+                $exam->questions()->create([
+                    'type'           => $q['type'] ?? 'multiple_choice',
+                    'instruction'    => $q['instruction'] ?? null,
+                    'text'           => $q['text'] ?? 'Untitled Question',
+                    'options'        => collect($q['options'] ?? [])->map(function ($opt) { return is_string($opt) ? ['text' => $opt] : $opt; })->toArray(),
+                    'correct_answer' => $q['correct_answer'] ?? null,
+                    'marks'          => $q['marks'] ?? 5,
+                    'difficulty'     => 'Medium',
+                    'status'         => 1,
+                ]);
+            }
+        }
+
+        $exam->loadCount(['questions', 'students']);
+        $exam->load('questions');
+
         return response()->json([
             'message' => 'Exam updated successfully',
-            'data'    => $exam
+            'data'    => [
+                'id'               => $exam->id,
+                'title'            => $exam->title,
+                'course_code'      => $exam->course_code,
+                'course_name'      => $exam->course_name,
+                'status'           => $exam->status,
+                'duration_minutes' => $exam->duration_minutes,
+                'total_marks'      => $exam->total_marks,
+                'students_count'   => $exam->students_count,
+                'questions_count'  => $exam->questions_count,
+                'scheduled_at'     => $exam->scheduled_at?->toISOString(),
+                'settings'         => $exam->settings,
+                'created_at'       => $exam->created_at->toISOString(),
+                'questions'        => $exam->questions,
+            ]
         ]);
     }
 

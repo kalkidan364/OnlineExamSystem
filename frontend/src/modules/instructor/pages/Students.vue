@@ -122,13 +122,13 @@ const getDotColor = (status: string) => {
     </div>
 
     <!-- Main Content Layout -->
-    <div class="flex flex-col xl:flex-row gap-6">
+    <div class="flex flex-col gap-6">
 
-      <!-- Left Column (Table) -->
-      <div class="flex-1 min-w-0 flex flex-col">
+      <!-- Main Column (Table) -->
+      <div class="w-full flex flex-col">
         
         <!-- Search & Filter Bar -->
-        <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 flex-wrap mb-6">
+        <div class="bg-white border border-slate-100 rounded-2xl px-4 py-2.5 shadow-sm flex items-center gap-4 flex-wrap mb-4">
           <div class="relative flex-1 min-w-[200px]">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -202,7 +202,7 @@ const getDotColor = (status: string) => {
                     </span>
                   </td>
                   <td class="py-4 px-6">
-                    <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div class="flex items-center justify-end gap-1 opacity-100 transition-opacity">
                       <button @click="router.push(`/instructor/students/${student.id}`)" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] hover:bg-indigo-50 transition-colors" title="View Details">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                       </button>
@@ -251,10 +251,10 @@ const getDotColor = (status: string) => {
           </div>
         </div>
 
-      </div>
+      </div> <!-- End Main Column (Table) -->
 
-      <!-- Right Sidebar -->
-      <div class="w-full xl:w-[280px] shrink-0 space-y-4">
+      <!-- Bottom Section: Course Overview, Progress, Quick Actions -->
+      <div class="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         <!-- Course Overview -->
         <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">

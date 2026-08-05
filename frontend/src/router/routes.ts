@@ -107,6 +107,11 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/CreateExam.vue')
       },
       {
+        path: 'exams/edit/:id',
+        name: 'EditExam',
+        component: () => import('../modules/instructor/pages/EditExam.vue')
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('../modules/instructor/pages/Profile.vue')
