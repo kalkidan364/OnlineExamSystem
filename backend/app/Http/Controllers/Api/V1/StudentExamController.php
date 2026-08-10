@@ -30,10 +30,14 @@ class StudentExamController extends Controller
             ->whereNotNull('percentage')
             ->avg('percentage');
 
-        // Count upcoming published exams for student's course that haven't been attempted
+        // Count upcoming published exams for student's department & year_level that haven't been attempted
         $attemptedExamIds = ExamAttempt::where('user_id', $student->id)->pluck('exam_id');
 
         $upcomingCount = Exam::where('status', 'published')
+            ->whereHas('instructor', function ($query) use ($student) {
+                $query->where('department_id', $student->department_id)
+                      ->where('year_level', $student->year_level);
+            })
             ->whereNotIn('id', $attemptedExamIds)
             ->count();
 
@@ -54,8 +58,12 @@ class StudentExamController extends Controller
     {
         $student = $request->user();
 
-        // Get all published exams
+        // Get all published exams for the student's department & year_level
         $exams = Exam::where('status', 'published')
+            ->whereHas('instructor', function ($query) use ($student) {
+                $query->where('department_id', $student->department_id)
+                      ->where('year_level', $student->year_level);
+            })
             ->with('instructor:id,name')
             ->latest('scheduled_at')
             ->get();
@@ -92,18 +100,22 @@ class StudentExamController extends Controller
                 $completedExamIds[] = $exam->id;
             } else {
                 // Not yet attempted — show as upcoming
+                // Send scheduled_at as ISO string so frontend can do exact datetime math
+                $scheduledIso = $exam->scheduled_at ? $exam->scheduled_at->toISOString() : null;
                 $upcomingExams[] = [
                     'id'              => $exam->id,
-                    'courseCode'       => $exam->course_code,
+                    'courseCode'      => $exam->course_code,
                     'courseName'      => $exam->course_name,
                     'instructor'      => $exam->instructor->name ?? 'Unknown',
                     'examType'        => $exam->title,
-                    'scheduledDate'   => $exam->scheduled_at ? $exam->scheduled_at->format('M d, Y') : 'TBD',
+                    'scheduledAt'     => $scheduledIso,
+                    // Keep legacy fields for backward compat
+                    'scheduledDate'   => $scheduledIso,
                     'startTime'       => $exam->scheduled_at ? $exam->scheduled_at->format('h:i A') : 'TBD',
                     'durationMinutes' => $exam->duration_minutes,
                     'totalMarks'      => $exam->total_marks,
                     'totalQuestions'  => $exam->questions()->count(),
-                    'status'          => 'Ready',
+                    'status'          => 'Upcoming',
                 ];
             }
         }
@@ -126,6 +138,25 @@ class StudentExamController extends Controller
         // Verify exam is published
         if ($exam->status !== 'published') {
             return response()->json(['message' => 'This exam is not available.'], 403);
+        }
+
+        // Enforce time window: student cannot start before scheduled_at or after the exam ends
+        if ($exam->scheduled_at) {
+            $now = Carbon::now();
+            $examStart = $exam->scheduled_at;
+            $examEnd = $exam->scheduled_at->copy()->addMinutes($exam->duration_minutes);
+
+            if ($now->lt($examStart)) {
+                return response()->json([
+                    'message' => 'This exam has not started yet. It starts at ' . $examStart->format('g:i A') . '.'
+                ], 403);
+            }
+
+            if ($now->gte($examEnd)) {
+                return response()->json([
+                    'message' => 'This exam has already ended.'
+                ], 403);
+            }
         }
 
         // Check if student already has an attempt

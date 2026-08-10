@@ -66,19 +66,20 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         activeExam.value = null
       }
 
-      // Map upcoming exams
+      // Map upcoming exams — keep scheduledAt as ISO string for time math
       upcomingExams.value = data.upcoming_exams.map((e: any) => ({
         id: e.id,
         courseCode: e.courseCode,
         courseName: e.courseName,
         instructor: e.instructor,
         examType: e.examType,
-        scheduledDate: e.scheduledDate,
+        scheduledAt: e.scheduledAt || e.scheduledDate || null, // ISO string
+        scheduledDate: e.scheduledAt || e.scheduledDate || null, // legacy alias
         startTime: e.startTime,
         durationMinutes: e.durationMinutes,
         totalQuestions: e.totalQuestions,
         totalMarks: e.totalMarks,
-        status: e.status as 'Soon' | 'Pending' | 'Ready',
+        status: e.status as 'Soon' | 'Pending' | 'Ready' | 'Upcoming',
       }))
     } catch (err: any) {
       console.error('Failed to fetch student exams, using mock data', err)

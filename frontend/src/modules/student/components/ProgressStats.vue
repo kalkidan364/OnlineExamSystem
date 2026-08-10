@@ -1,134 +1,140 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { StudentProfile } from '../types'
 
 const props = defineProps<{
+  profile: StudentProfile
   completedCount: number
   remainingCount: number
   averageScore: number
   passRate: number
 }>()
 
-const radius = 30
+const overallCGPA = computed(() => props.profile.cgpa || 3.84)
+const cgpaPercentage = computed(() => (overallCGPA.value / 4.00) * 100)
+const creditsCompleted = computed(() => props.profile.creditsCompleted || 112)
+const creditsRequired = 130
+const creditPercentage = computed(() => (creditsCompleted.value / creditsRequired) * 100)
+const attendanceRate = 91 // Mocked or fetched from elsewhere
+const assignmentCompletion = 89 // Mocked
+
+// Use averageScore as overallPerformance for real data integration
+const overallPerformance = computed(() => props.averageScore || 91)
+
+// Circular progress logic
+const radius = 40
 const circumference = 2 * Math.PI * radius
-
-const averageScoreDashoffset = computed(() => {
-  return circumference - (props.averageScore / 100) * circumference
-})
-
-const passRateDashoffset = computed(() => {
-  return circumference - (props.passRate / 100) * circumference
+const dashoffset = computed(() => {
+  return circumference - (overallPerformance.value / 100) * circumference
 })
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div>
-      <h3 class="text-lg font-bold text-slate-900">Academic Progress Overview</h3>
-      <p class="text-xs text-slate-500 font-medium">Real-time status of your term performance</p>
+  <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm h-full flex flex-col justify-between">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="text-base font-bold text-slate-900">Academic Progress</h3>
+      <button class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">
+        View Analytics >
+      </button>
     </div>
 
-    <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
-      <!-- Card 1: Completed Exams -->
-      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:shadow-md transition-shadow">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Completed</span>
-          <div class="rounded-lg bg-indigo-50 p-1.5 text-indigo-600">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          </div>
-        </div>
-        <div class="mt-3 flex items-baseline gap-1.5">
-          <span class="text-2xl font-black text-slate-900">{{ completedCount }}</span>
-          <span class="text-xs font-medium text-slate-400">Courses done</span>
-        </div>
-        <div class="mt-2 text-[10px] font-semibold text-emerald-600">100% submission rating</div>
-      </div>
-
-      <!-- Card 2: Remaining Exams -->
-      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:shadow-md transition-shadow">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Remaining</span>
-          <div class="rounded-lg bg-amber-50 p-1.5 text-amber-600">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v4M12 15h2"></path></svg>
-          </div>
-        </div>
-        <div class="mt-3 flex items-baseline gap-1.5">
-          <span class="text-2xl font-black text-slate-900">{{ remainingCount }}</span>
-          <span class="text-xs font-medium text-slate-400">Scheduled papers</span>
-        </div>
-        <div class="mt-2 text-[10px] font-semibold text-indigo-600">Active preparation stage</div>
-      </div>
-
-      <!-- Card 3: Average Score -->
-      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:shadow-md transition-shadow flex items-center justify-between gap-2">
+    <div class="flex flex-col lg:flex-row gap-6 h-full items-center">
+      
+      <!-- Linear Bars -->
+      <div class="flex-1 w-full space-y-5">
+        
+        <!-- Overall CGPA -->
         <div>
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Grade Point</span>
-          <div class="mt-2 flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900">{{ averageScore }}%</span>
+          <div class="flex items-end justify-between mb-1.5">
+            <div>
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Overall CGPA</p>
+              <p class="text-[13px] font-bold text-slate-900 leading-none">{{ overallCGPA }} <span class="text-[10px] text-slate-400 font-medium">/ 4.00</span></p>
+            </div>
+            <span class="text-[11px] font-bold text-slate-600 leading-none">{{ Math.round(cgpaPercentage) }}%</span>
           </div>
-          <span class="text-[10px] font-semibold text-emerald-600 block mt-1">Excellent (A Grade Average)</span>
+          <div class="w-full bg-slate-100 rounded-full h-1.5">
+            <div class="bg-indigo-600 h-1.5 rounded-full" :style="`width: ${cgpaPercentage}%`"></div>
+          </div>
         </div>
-        <!-- Circular Indicator for Average Score -->
-        <div class="relative flex h-16 w-16 items-center justify-center">
-          <svg class="absolute top-0 left-0 h-16 w-16 -rotate-90">
+
+        <!-- Credit Completion -->
+        <div>
+          <div class="flex items-end justify-between mb-1.5">
+            <div>
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Credit Completion</p>
+              <p class="text-[13px] font-bold text-slate-900 leading-none">{{ creditsCompleted }} <span class="text-[10px] text-slate-400 font-medium">/ {{ creditsRequired }}</span></p>
+            </div>
+            <span class="text-[11px] font-bold text-slate-600 leading-none">{{ Math.round(creditPercentage) }}%</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-1.5">
+            <div class="bg-emerald-500 h-1.5 rounded-full" :style="`width: ${creditPercentage}%`"></div>
+          </div>
+        </div>
+
+        <!-- Attendance Rate -->
+        <div>
+          <div class="flex items-end justify-between mb-1.5">
+            <div>
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Attendance Rate</p>
+              <p class="text-[13px] font-bold text-slate-900 leading-none">{{ attendanceRate }}%</p>
+            </div>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-1.5">
+            <div class="bg-amber-500 h-1.5 rounded-full" :style="`width: ${attendanceRate}%`"></div>
+          </div>
+        </div>
+
+        <!-- Assignment Completion -->
+        <div>
+          <div class="flex items-end justify-between mb-1.5">
+            <div>
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Assignment Completion</p>
+              <p class="text-[13px] font-bold text-slate-900 leading-none">{{ assignmentCompletion }}%</p>
+            </div>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-1.5">
+            <div class="bg-blue-500 h-1.5 rounded-full" :style="`width: ${assignmentCompletion}%`"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Circular Chart -->
+      <div class="flex-shrink-0 flex items-center justify-center pt-2">
+        <div class="relative w-32 h-32 flex items-center justify-center">
+          <svg class="w-32 h-32 transform -rotate-90">
+            <!-- Background circle -->
             <circle
-              cx="32"
-              cy="32"
-              :r="radius"
-              class="text-slate-100 stroke-current"
-              stroke-width="5"
+              class="text-indigo-50"
+              stroke-width="8"
+              stroke="currentColor"
               fill="transparent"
+              r="40"
+              cx="64"
+              cy="64"
             />
+            <!-- Progress circle -->
             <circle
-              cx="32"
-              cy="32"
-              :r="radius"
-              class="text-indigo-600 stroke-current transition-all duration-500"
-              stroke-width="5"
-              :stroke-dasharray="circumference"
-              :stroke-dashoffset="averageScoreDashoffset"
+              class="text-indigo-600 transition-all duration-1000 ease-out"
+              stroke-width="8"
               stroke-linecap="round"
+              stroke="currentColor"
               fill="transparent"
+              r="40"
+              cx="64"
+              cy="64"
+              :stroke-dasharray="circumference"
+              :stroke-dashoffset="dashoffset"
             />
           </svg>
-          <span class="font-mono text-xs font-bold text-slate-800">{{ averageScore }}%</span>
+          <!-- Inner Text -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span class="text-2xl font-black text-slate-900 leading-none">{{ overallPerformance }}%</span>
+            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Overall<br>Performance</span>
+          </div>
         </div>
       </div>
 
-      <!-- Card 4: Pass Rate -->
-      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:shadow-md transition-shadow flex items-center justify-between gap-2">
-        <div>
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Pass Rate</span>
-          <div class="mt-2 flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900">{{ passRate }}%</span>
-          </div>
-          <span class="text-[10px] font-semibold text-emerald-600 block mt-1">Safe Zone (No failures)</span>
-        </div>
-        <!-- Circular Indicator for Pass Rate -->
-        <div class="relative flex h-16 w-16 items-center justify-center">
-          <svg class="absolute top-0 left-0 h-16 w-16 -rotate-90">
-            <circle
-              cx="32"
-              cy="32"
-              :r="radius"
-              class="text-slate-100 stroke-current"
-              stroke-width="5"
-              fill="transparent"
-            />
-            <circle
-              cx="32"
-              cy="32"
-              :r="radius"
-              class="text-emerald-500 stroke-current transition-all duration-500"
-              stroke-width="5"
-              :stroke-dasharray="circumference"
-              :stroke-dashoffset="passRateDashoffset"
-              stroke-linecap="round"
-              fill="transparent"
-            />
-          </svg>
-          <span class="font-mono text-xs font-bold text-slate-800">{{ passRate }}%</span>
-        </div>
-      </div>
     </div>
   </div>
 </template>

@@ -1,37 +1,37 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { initialStudentProfile, sampleAnnouncements, sampleCalendarEvents } from '../data/mockData'
+import { useRouter } from 'vue-router'
+import { sampleAnnouncements, sampleCalendarEvents } from '../data/mockData'
 import type { StudentProfile, UpcomingExam, RecentResult } from '../types'
 import { useStudentExamStore } from '../store/studentExamStore'
+import { useStudentProfile } from '../composables/useStudentProfile'
 
 // Component imports
 import Header from '../components/Header.vue'
 import HeroSection from '../components/HeroSection.vue'
-import ActiveExamCard from '../components/ActiveExamCard.vue'
 import UpcomingExams from '../components/UpcomingExams.vue'
 import ProgressStats from '../components/ProgressStats.vue'
 import RecentResults from '../components/RecentResults.vue'
 import Announcements from '../components/Announcements.vue'
 import CalendarSection from '../components/CalendarSection.vue'
 import QuickActions from '../components/QuickActions.vue'
-import ExamConsole from '../components/ExamConsole.vue'
 import ResultReviewModal from '../components/ResultReviewModal.vue'
 import DownloadTranscriptModal from '../components/DownloadTranscriptModal.vue'
 import ProfileModal from '../components/ProfileModal.vue'
+import StudentSidebar from '../components/StudentSidebar.vue'
+import TodayExamCard from '../components/TodayExamCard.vue'
 
-// Store
+// Store & Router
 const examStore = useStudentExamStore()
+const router = useRouter()
 
-// Navigation & Screen routing state
-const currentView = ref<'dashboard' | 'exam-console'>('dashboard')
-
-// Profile stays local (no API for it yet)
-const profile = ref<StudentProfile>({ ...initialStudentProfile })
+// Real profile from auth store / backend
+const { profile, fetchProfile } = useStudentProfile()
 
 // Connect to store data via computed refs for reactivity
-const activeExam = computed(() => examStore.activeExam)
 const upcomingExams = computed(() => examStore.upcomingExams)
 const results = computed(() => examStore.results)
+const activeExam = computed(() => examStore.activeExam)
 
 // Overlay controller states
 const selectedResultForReview = ref<RecentResult | null>(null)
@@ -40,78 +40,92 @@ const windowRef = window
 const isTranscriptOpen = ref<boolean>(false)
 const isProfileOpen = ref<boolean>(false)
 const upcomingGuidelines = ref<UpcomingExam | null>(null)
+const isSidebarOpen = ref<boolean>(false)
 
-// Stats calculation (dynamic updates from store!)
-const completedCount = computed(() => results.value.length)
-const remainingCount = computed(() => upcomingExams.value.length + (activeExam.value ? 1 : 0))
+// Reactive timer for Dashboard
+const currentTime = ref(Date.now())
+let dashboardTimer: number | null = null
 
-// Calculate average score based on existing results
-const averageScore = computed(() => {
-  if (results.value.length === 0) return 0
-  return Math.round(results.value.reduce((acc, curr) => acc + curr.percentage, 0) / results.value.length)
-})
-const passRate = 100 // Hardcoded simulation for simplicity
-
-// Fetch real data on mount
 onMounted(async () => {
+  dashboardTimer = window.setInterval(() => {
+    currentTime.value = Date.now()
+  }, 1000)
+
   await Promise.all([
+    fetchProfile(),           // ← real user data from backend
     examStore.fetchExams(),
     examStore.fetchResults(),
     examStore.fetchDashboard(),
   ])
 })
 
+import { onUnmounted } from 'vue'
+onUnmounted(() => {
+  if (dashboardTimer) {
+    clearInterval(dashboardTimer)
+    dashboardTimer = null
+  }
+})
+
+// Today's Exam Logic — show 10 min before start until end of exam
+const todayExam = computed(() => {
+  if (upcomingExams.value.length === 0) return null
+  const now = currentTime.value
+  const TEN_MIN = 10 * 60 * 1000
+
+  // Find the first exam that is in the ready/ongoing window
+  return upcomingExams.value.find(exam => {
+    const rawDate = (exam as any).scheduledAt || exam.scheduledDate
+    if (!rawDate) return false
+    const startMs = new Date(rawDate).getTime()
+    const endMs = startMs + (exam.durationMinutes * 60 * 1000)
+    // Show card 10 minutes before start until exam ends
+    return now >= startMs - TEN_MIN && now < endMs
+  }) || null
+})
+
+const filteredUpcomingExams = computed(() => {
+  if (!todayExam.value) return upcomingExams.value
+  return upcomingExams.value.filter(exam => exam.id !== todayExam.value!.id)
+})
+
+// Stats calculation
+const completedCount = computed(() => results.value.length)
+const remainingCount = computed(() => upcomingExams.value.length + (activeExam.value ? 1 : 0))
+
+const averageScore = computed(() => {
+  if (results.value.length === 0) return 0
+  return Math.round(results.value.reduce((acc, curr) => acc + curr.percentage, 0) / results.value.length)
+})
+const passRate = 100
+
+// Dynamic Gamification
+const encouragementData = computed(() => {
+  if (averageScore.value >= 85) return { title: "You're Doing<br>Great!", subtitle: "Keep up the excellent work and achieve your goals.", emoji: "🏆" }
+  if (averageScore.value >= 70) return { title: "Keep<br>Pushing!", subtitle: "You are on the right track, keep up the effort.", emoji: "🚀" }
+  if (averageScore.value > 0) return { title: "You Can<br>Do It!", subtitle: "Don't give up, keep studying to improve your scores.", emoji: "💪" }
+  return { title: "Welcome<br>Aboard!", subtitle: "Complete your first exam to see your progress here.", emoji: "👋" }
+})
+
+// Real data is fetched in the timer onMounted hook above
+
 // Action helper when the student starts an exam from the upcoming list
 const handleStartUpcomingExam = async (examId: number) => {
   try {
     await examStore.startExam(examId)
-    currentView.value = 'exam-console'
+    router.push('/student/exam/take')
   } catch (err: any) {
     windowRef.alert(err.message || 'Failed to start exam')
   }
 }
 
-// Action helper when the student submits an exam in ExamConsole
-const handleExamCompleted = async (
-  answers: Record<number, string>,
-  _scoredMarks: number,
-  percentage: number
-) => {
-  if (!activeExam.value) return
-
-  const examName = activeExam.value.courseName
-  const examId = activeExam.value.id
-
-  try {
-    // Submit to backend for real grading
-    const result = await examStore.submitExam(examId, answers)
-
-    // Dynamically bump student profile metrics
-    profile.value.creditsCompleted += 5
-    profile.value.cgpa = Math.min(4.00, Number((profile.value.cgpa + 0.02).toFixed(2)))
-
-    // Route back to dashboard
-    currentView.value = 'dashboard'
-
-    // Show congratulations
-    setTimeout(() => {
-      windowRef.alert(`CONGRATULATIONS!\nYou have completed: ${examName} successfully!\nYour score is ${result.percentage}% (${result.grade}). Your CGPA has been adjusted to ${profile.value.cgpa} and 5 credits have been officially recorded.`)
-    }, 400)
-  } catch (err: any) {
-    // Fallback: If API fails, still handle locally so the UI doesn't break
-    currentView.value = 'dashboard'
-    windowRef.alert(`Exam submitted. Score: ${percentage}%`)
-  }
-}
-
 // Quick Action Click Router
-const handleQuickAction = (actionKey: 'take-exam' | 'view-results' | 'download-results' | 'update-profile' | 'academic-calendar') => {
+const handleQuickAction = (actionKey: 'take-exam' | 'view-results' | 'download-results' | 'schedule' | 'academic-calendar' | 'update-profile') => {
   switch (actionKey) {
     case 'take-exam':
       if (activeExam.value) {
-        currentView.value = 'exam-console'
+        router.push('/student/exam/take')
       } else if (upcomingExams.value.length > 0) {
-        // Auto-start the first upcoming exam
         handleStartUpcomingExam(upcomingExams.value[0].id)
       } else {
         windowRef.alert("All current scheduled examinations have been completed. Please check back next week.")
@@ -123,128 +137,167 @@ const handleQuickAction = (actionKey: 'take-exam' | 'view-results' | 'download-r
     case 'download-results':
       isTranscriptOpen.value = true
       break
-    case 'update-profile':
-      isProfileOpen.value = true
+    case 'schedule':
+      document.getElementById('upcoming-exams-section')?.scrollIntoView({ behavior: 'smooth' })
       break
     case 'academic-calendar':
       document.getElementById('calendar-section')?.scrollIntoView({ behavior: 'smooth' })
+      break
+    case 'update-profile':
+      isProfileOpen.value = true
       break
   }
 }
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white pb-16">
+  <div class="min-h-screen bg-[#f8f9fc] font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white flex flex-col">
     
-    <!-- 1. RENDER LIVE EXAM CONSOLE (FULLSCREEN OVERLAY) -->
-    <ExamConsole
-      v-if="currentView === 'exam-console' && activeExam"
-      :exam="activeExam"
-      @cancel="currentView = 'dashboard'"
-      @submit-exam="handleExamCompleted"
+    <!-- Top Navigation Header -->
+    <Header
+      :profile="profile"
+      :announcements="sampleAnnouncements"
+      @open-profile="isProfileOpen = true"
+      @open-notifications="isNotificationsOpen = true"
+      @toggle-sidebar="isSidebarOpen = !isSidebarOpen"
     />
-    
-    <!-- 2. RENDER MAIN PORTAL DASHBOARD -->
-    <div v-else class="space-y-8 animate-in fade-in duration-300">
-      
-      <!-- Header element -->
-      <Header
-        :profile="profile"
-        :announcements="sampleAnnouncements"
-        @open-profile="isProfileOpen = true"
-        @open-notifications="isNotificationsOpen = true"
-      />
 
-      <!-- Core container centering the grid -->
-      <main class="mx-auto max-w-7xl px-6 space-y-8">
-        
-        <!-- Row 1: Academic Hero Welcome Section -->
-        <HeroSection :profile="profile" />
+    <!-- Off-Canvas Sidebar Drawer (Displays only when ≡ is clicked) -->
+    <StudentSidebar 
+      :profile="profile" 
+      :isOpen="isSidebarOpen" 
+      @close="isSidebarOpen = false" 
+    />
 
-        <!-- Row 2: Secondary Quick Actions Rail -->
-        <QuickActions @action="handleQuickAction" />
+    <!-- Row 1: Full-Width Hero Banner (Placed flush right under header, no top/side margins) -->
+    <HeroSection 
+      :profile="profile" 
+      :stats="{ examsCompleted: completedCount, upcomingExams: upcomingExams.length }" 
+    />
 
-        <!-- Row 3: Primary Core Grid Layout (Active Exam vs. Upcoming Exams) -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          <!-- Left Column (Active Exam Area - Dominates with 7 cols) -->
-          <div class="lg:col-span-7 space-y-8">
-            <div v-if="activeExam">
-              <div class="mb-4">
-                <h3 class="text-lg font-bold text-slate-900">Current Evaluation Target</h3>
-                <p class="text-xs text-slate-500 font-medium">Sit for your scheduled paper before the portal closes</p>
-              </div>
-              <ActiveExamCard
-                :exam="activeExam"
-                @start-exam="currentView = 'exam-console'"
-              />
-            </div>
-            <div v-else class="rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/20 p-8 text-center space-y-4">
-              <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              </div>
-              <div>
-                <h4 class="text-base font-bold text-slate-950">You Are Fully Up-to-Date!</h4>
-                <p class="text-xs text-slate-600 mt-1 max-w-md mx-auto leading-relaxed">
-                  Excellent job! You have submitted all active examination papers for the Semester II syllabus. Your responses are stored securely in the Wollo University main record server.
-                </p>
-              </div>
-            </div>
+    <!-- Main Content Body (Padded content below full-width hero section) -->
+    <main class="flex-1 w-full mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-in fade-in duration-300">
 
-            <!-- Upcoming exams list -->
-            <UpcomingExams
-              :exams="upcomingExams"
-              @start-exam="handleStartUpcomingExam"
-              @view-details="(exam) => upcomingGuidelines = exam"
-            />
-          </div>
+      <!-- Row 2: Quick Action Buttons Grid -->
+      <QuickActions @action="handleQuickAction" />
 
-          <!-- Right Column (Side-rails for secondary information - 5 cols) -->
-          <div class="lg:col-span-5 space-y-8">
-            
-            <!-- Visual Calendar Component -->
-            <div id="calendar-section">
-              <CalendarSection :events="sampleCalendarEvents" />
-            </div>
+      <!-- Today's Exam Card (Dynamically displayed if an exam is today) -->
+      <div v-if="todayExam" class="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <TodayExamCard 
+          :exam="todayExam" 
+          @start-exam="handleStartUpcomingExam" 
+        />
+      </div>
 
-            <!-- Official Announcements -->
-            <Announcements :announcements="sampleAnnouncements" />
-
-          </div>
-
+      <!-- Row 3: 3-Column Grid (Upcoming Exams, Academic Calendar, Academic Progress) -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <!-- Col 1: Upcoming Exams -->
+        <div id="upcoming-exams-section" class="h-full">
+          <UpcomingExams
+            :exams="filteredUpcomingExams"
+            @start-exam="handleStartUpcomingExam"
+            @view-details="(exam) => upcomingGuidelines = exam"
+          />
         </div>
 
-        <!-- Row 4: Term Performance & Circular Metrics -->
-        <ProgressStats
-          :completedCount="completedCount"
-          :remainingCount="remainingCount"
-          :averageScore="averageScore"
-          :passRate="passRate"
-        />
+        <!-- Col 2: Academic Calendar -->
+        <div id="calendar-section" class="h-full">
+          <CalendarSection :events="sampleCalendarEvents" />
+        </div>
 
-        <!-- Row 5: Detailed Scoreboard Section -->
-        <div id="recent-results-section">
+        <!-- Col 3: Academic Progress -->
+        <div class="h-full">
+          <ProgressStats
+            :profile="profile"
+            :completedCount="completedCount"
+            :remainingCount="remainingCount"
+            :averageScore="averageScore"
+            :passRate="passRate"
+          />
+        </div>
+      </div>
+
+      <!-- Row 4: 4-Column Bottom Grid (Latest Results, Official Notices, Need Help, Gamification) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+
+        <!-- Col 1: Latest Results -->
+        <div id="recent-results-section" class="h-full">
           <RecentResults
             :results="results"
             @view-result="(res) => selectedResultForReview = res"
             @download-transcript="isTranscriptOpen = true"
           />
         </div>
+        
+        <!-- Col 2: Official Notices -->
+        <div class="h-full">
+          <Announcements :announcements="sampleAnnouncements" />
+        </div>
 
-      </main>
+        <!-- Col 3: Need Help? — Light flat card, full height -->
+        <div class="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm h-full flex flex-col">
+          <h3 class="text-base font-bold text-slate-900">Need Help?</h3>
+          <p class="text-xs text-slate-500 mt-0.5">We're here to support you</p>
 
-    </div>
+          <div class="mt-5 space-y-3 flex-1 overflow-y-auto">
+            <!-- Help Center Item -->
+            <div class="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer">
+              <div class="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-[13px] font-bold text-slate-900">Help Center</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Find answers to common questions</p>
+              </div>
+            </div>
 
-    <!-- ----------------- GLOBAL PORTAL OVERLAY DRAWERS & MODALS ----------------- -->
+            <!-- Contact Support Item -->
+            <div class="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer">
+              <div class="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-[13px] font-bold text-slate-900">Contact Support</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Reach our support team directly</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
-    <!-- A. Result Review Modal (Displays detailed answers/explanations) -->
+        <!-- Col 4: You're Doing Great — Trophy image on right, text on left -->
+        <div class="bg-slate-50 rounded-2xl border border-slate-100 p-12 shadow-sm relative overflow-hidden h-full flex flex-col justify-between">
+          <!-- Trophy image on the right -->
+          <div class="absolute right-2 top-1/2 -translate-y-1/2">
+            <span class="text-6xl select-none">{{ encouragementData.emoji }}</span>
+          </div>
+
+          <!-- Text on the left -->
+          <div class="pr-16">
+            <p class="text-sm font-black text-slate-900 leading-snug" v-html="encouragementData.title"></p>
+            <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+              {{ encouragementData.subtitle }}
+            </p>
+            <button class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors shadow-sm">
+              View Achievements
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Global Modals / Drawers -->
     <ResultReviewModal
       v-if="selectedResultForReview"
       :result="selectedResultForReview"
       @close="selectedResultForReview = null"
     />
 
-    <!-- B. Official printable transcript Record slip -->
     <DownloadTranscriptModal
       v-if="isTranscriptOpen"
       :profile="profile"
@@ -252,117 +305,15 @@ const handleQuickAction = (actionKey: 'take-exam' | 'view-results' | 'download-r
       @close="isTranscriptOpen = false"
     />
 
-    <!-- C. Registered profile credentials editor -->
     <ProfileModal
       v-if="isProfileOpen"
       :profile="profile"
       @close="isProfileOpen = false"
       @update-profile="(updated) => {
         profile = updated;
-        windowRef.alert('SUCCESS:\nYour registry credentials have been updated successfully on the secure server.');
+        windowRef.alert('SUCCESS:\nYour registry credentials have been updated successfully.');
       }"
     />
-
-    <!-- D. Upcoming Exam Guidelines drawer -->
-    <div v-if="upcomingGuidelines" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in">
-      <div class="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <button
-          @click="upcomingGuidelines = null"
-          class="absolute top-4 right-4 rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-        >
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-        </button>
-
-        <div class="flex items-center gap-3 mb-4">
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          </div>
-          <div>
-            <span class="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest">{{ upcomingGuidelines.courseCode }}</span>
-            <h3 class="text-sm font-black text-slate-900">Guidelines & Scope</h3>
-          </div>
-        </div>
-
-        <h4 class="text-xs font-bold text-slate-800">{{ upcomingGuidelines.courseName }}</h4>
-        <p class="text-xs text-slate-500 mt-1">Instructor: {{ upcomingGuidelines.instructor }}</p>
-
-        <hr class="my-4 border-slate-100" />
-
-        <div class="space-y-3 font-sans text-xs text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <p class="font-bold text-slate-900">Syllabus Chapters Covered:</p>
-          <ul class="list-disc list-inside space-y-1.5 pl-1">
-            <li>Lecture units 1-5 (Core theory & diagnostics)</li>
-            <li>Performance metrics and case evaluations</li>
-            <li>Design patterns and automated unit suites</li>
-          </ul>
-          <p class="font-bold text-slate-900 mt-3">Expected Deliverables:</p>
-          <p class="pl-1">
-            20 Multiple choice items (1 mark each) and 2 logical essays (5 marks each). Strict proctoring restrictions apply.
-          </p>
-        </div>
-
-        <button
-          @click="upcomingGuidelines = null"
-          class="mt-6 w-full rounded-xl bg-slate-900 py-3 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
-        >
-          Acknowledge & Close
-        </button>
-      </div>
-    </div>
-
-    <!-- E. Floating live notifications drawer -->
-    <div v-if="isNotificationsOpen" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col justify-between animate-in slide-in-from-right duration-250">
-      <div class="p-6 overflow-y-auto space-y-6">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div class="flex items-center gap-2">
-            <svg class="h-5 w-5 text-indigo-600 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-            <h3 class="text-base font-black text-slate-900">Active Notifications</h3>
-          </div>
-          <button
-            @click="isNotificationsOpen = false"
-            class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
-        </div>
-
-        <!-- Simulated Alerts list -->
-        <div class="space-y-4 font-sans text-xs text-slate-600 leading-relaxed">
-          <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-1.5">
-            <p class="font-bold text-rose-800 flex items-center gap-1">
-              <svg class="h-4 w-4 shrink-0 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-              Live Proctoring Alert
-            </p>
-            <p class="text-rose-700">
-              Ensure your microphone is calibrated. The system logs background noises during the live assessment window.
-            </p>
-          </div>
-
-          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-1.5">
-            <p class="font-bold text-indigo-800">Candidacy Cleared</p>
-            <p class="text-indigo-700">
-              Your registration status for course **Compiler Design (SWE-422)** has been cleared by the Registrar.
-            </p>
-          </div>
-
-          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
-            <p class="font-bold text-amber-800">Senate Warning</p>
-            <p class="text-amber-700">
-              All make-up examinations must be applied for within 48 hours of schedule release. No exceptions.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-center">
-        <button
-          @click="isNotificationsOpen = false"
-          class="w-full rounded-xl bg-slate-900 hover:bg-slate-800 py-3 text-xs font-bold text-white transition-colors"
-        >
-          Close Alerts Drawer
-        </button>
-      </div>
-    </div>
 
   </div>
 </template>

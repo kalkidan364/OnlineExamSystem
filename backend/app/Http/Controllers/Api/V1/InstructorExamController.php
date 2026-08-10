@@ -11,6 +11,39 @@ use Illuminate\Support\Carbon;
 class InstructorExamController extends Controller
 {
     /**
+     * Check for scheduling conflicts with other exams in the same department and year level.
+     */
+    private function checkSchedulingConflict($instructor, $scheduledAt, $durationMinutes, $excludeExamId = null)
+    {
+        if (!$scheduledAt) {
+            return null;
+        }
+
+        $newStart = Carbon::parse($scheduledAt);
+        $newEnd = $newStart->copy()->addMinutes($durationMinutes);
+
+        return Exam::whereIn('status', ['published', 'scheduled'])
+            ->whereHas('instructor', function ($query) use ($instructor) {
+                $query->where('department_id', $instructor->department_id)
+                      ->where('year_level', $instructor->year_level);
+            })
+            ->when($excludeExamId, function ($query) use ($excludeExamId) {
+                return $query->where('id', '!=', $excludeExamId);
+            })
+            ->get()
+            ->first(function ($exam) use ($newStart, $newEnd) {
+                if (!$exam->scheduled_at) {
+                    return false;
+                }
+                $existingStart = Carbon::parse($exam->scheduled_at);
+                $existingEnd = $existingStart->copy()->addMinutes($exam->duration_minutes);
+
+                // Overlap condition: Start A < End B && End A > Start B
+                return $newStart->lt($existingEnd) && $newEnd->gt($existingStart);
+            });
+    }
+
+    /**
      * Display a listing of the exams for the instructor's assigned course.
      */
     public function index(Request $request): JsonResponse
@@ -73,6 +106,18 @@ class InstructorExamController extends Controller
             'settings'         => 'nullable|array',
             'questions'        => 'nullable|array',
         ]);
+
+        if (in_array($validated['status'], ['published', 'scheduled']) && isset($validated['scheduled_at'])) {
+            $conflict = $this->checkSchedulingConflict($instructor, $validated['scheduled_at'], $validated['duration_minutes']);
+            if ($conflict) {
+                return response()->json([
+                    'message' => 'Scheduling Conflict: Another exam is already scheduled during this time in your department and year level.',
+                    'errors' => [
+                        'scheduled_at' => ['An exam titled "' . $conflict->title . '" is scheduled from ' . Carbon::parse($conflict->scheduled_at)->format('g:i A') . ' to ' . Carbon::parse($conflict->scheduled_at)->addMinutes($conflict->duration_minutes)->format('g:i A') . '. Please choose a time after this exam finishes.']
+                    ]
+                ], 409);
+            }
+        }
 
         $exam = Exam::create([
             'user_id'          => $instructor->id,
@@ -171,6 +216,22 @@ class InstructorExamController extends Controller
 
         if (isset($validated['scheduled_at'])) {
             $validated['scheduled_at'] = Carbon::parse($validated['scheduled_at']);
+        }
+
+        $newStatus = $validated['status'] ?? $exam->status;
+        $newScheduledAt = $validated['scheduled_at'] ?? $exam->scheduled_at;
+        $newDuration = $validated['duration_minutes'] ?? $exam->duration_minutes;
+
+        if (in_array($newStatus, ['published', 'scheduled']) && $newScheduledAt) {
+            $conflict = $this->checkSchedulingConflict($instructor, $newScheduledAt, $newDuration, $exam->id);
+            if ($conflict) {
+                return response()->json([
+                    'message' => 'Scheduling Conflict: Another exam is already scheduled during this time in your department and year level.',
+                    'errors' => [
+                        'scheduled_at' => ['An exam titled "' . $conflict->title . '" is scheduled from ' . Carbon::parse($conflict->scheduled_at)->format('g:i A') . ' to ' . Carbon::parse($conflict->scheduled_at)->addMinutes($conflict->duration_minutes)->format('g:i A') . '. Please choose a time after this exam finishes.']
+                    ]
+                ], 409);
+            }
         }
 
         $exam->update($validated);

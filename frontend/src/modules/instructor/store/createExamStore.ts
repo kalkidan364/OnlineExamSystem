@@ -11,7 +11,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
   
   const durationMinutes = ref(90)
   const scheduledDate = ref('')
-  const scheduledTime = ref('09:00 AM')
+  const scheduledTime = ref('09:00')
 
   // Editing an existing exam
   const editingExamId = ref<number | null>(null)
@@ -72,12 +72,13 @@ export const useCreateExamStore = defineStore('createExam', () => {
       const month = String(d.getMonth() + 1).padStart(2, '0')
       const day = String(d.getDate()).padStart(2, '0')
       const year = d.getFullYear()
-      scheduledDate.value = `${month}/${day}/${year}`
-      let hours = d.getHours()
+      // <input type="date"> expects YYYY-MM-DD
+      scheduledDate.value = `${year}-${month}-${day}`
+      
+      const hours = String(d.getHours()).padStart(2, '0')
       const minutes = String(d.getMinutes()).padStart(2, '0')
-      const ampm = hours >= 12 ? 'PM' : 'AM'
-      hours = hours % 12 || 12
-      scheduledTime.value = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`
+      // <input type="time"> expects HH:mm (24-hour format)
+      scheduledTime.value = `${hours}:${minutes}`
     }
 
     // Load questions
@@ -106,15 +107,45 @@ export const useCreateExamStore = defineStore('createExam', () => {
     timeZone.value = s.timeZone ?? s.time_zone ?? '(UTC+03:00) Addis Ababa, Nairobi'
   }
 
-  // Helpers to get ISO string
-  const getScheduledAt = () => {
-    if (!scheduledDate.value) return null
-    // A simplified conversion assuming date is mm/dd/yyyy and time is hh:mm AM/PM
+  // Build an ISO string from the separate date + time fields.
+  // We parse manually to avoid browser-specific behavior with `new Date(string)`.
+  const getScheduledAt = (): string | null => {
+    if (!scheduledDate.value || !scheduledTime.value) return null
     try {
-      const d = new Date(`${scheduledDate.value} ${scheduledTime.value}`)
+      // <input type="date"> uses YYYY-MM-DD format
+      let year, month, day
+      if (scheduledDate.value.includes('-')) {
+        [year, month, day] = scheduledDate.value.split('-').map(Number)
+      } else if (scheduledDate.value.includes('/')) {
+        [month, day, year] = scheduledDate.value.split('/').map(Number)
+      } else {
+        return null
+      }
+      
+      // scheduledTime is HH:MM AM/PM (or HH:MM from <input type="time">)
+      let hour = 0, rawMin = 0
+      
+      // <input type="time"> uses 24-hour format HH:MM
+      if (scheduledTime.value.includes('AM') || scheduledTime.value.includes('PM')) {
+        const [timePart, meridiem] = scheduledTime.value.trim().split(' ')
+        const [rawHour, min] = timePart.split(':').map(Number)
+        hour = rawHour
+        rawMin = min
+        if (meridiem?.toUpperCase() === 'PM' && hour !== 12) hour += 12
+        if (meridiem?.toUpperCase() === 'AM' && hour === 12) hour = 0
+      } else {
+        // 24-hour format from input type="time"
+        const [rawHour, min] = scheduledTime.value.trim().split(':').map(Number)
+        hour = rawHour
+        rawMin = min
+      }
+
+      // Build as a local Date so it matches what the instructor sees on screen
+      const d = new Date(year, month - 1, day, hour, rawMin, 0, 0)
+      if (isNaN(d.getTime())) return null
       return d.toISOString()
     } catch {
-      return new Date().toISOString()
+      return null
     }
   }
 
@@ -128,7 +159,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
     description.value = ''
     durationMinutes.value = 90
     scheduledDate.value = ''
-    scheduledTime.value = '09:00 AM'
+    scheduledTime.value = '09:00'
     questions.value = []
     
     shuffleQuestions.value = true

@@ -46,12 +46,13 @@ export interface UpcomingExam {
   courseName: string;
   instructor: string;
   examType: string;
-  scheduledDate: string;
+  scheduledAt?: string | null;   // ISO datetime string (primary)
+  scheduledDate: string;          // ISO datetime string (legacy alias)
   startTime: string;
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
-  status: 'Soon' | 'Pending' | 'Ready';
+  status: 'Soon' | 'Pending' | 'Ready' | 'Upcoming';
 }
 
 export interface RecentResult {

@@ -18,6 +18,14 @@ const showQuestionsFullscreen = ref(false)
 const isEditModeFullscreen = ref(false)
 const showPublishConfirm = ref(false)
 
+// Conflict / error state
+const conflictError = ref<{
+  title: string
+  message: string
+  conflictingExam: string
+} | null>(null)
+const generalError = ref<string | null>(null)
+
 const showSingleEditModal = ref(false)
 const editingQuestionIndex = ref(-1)
 const editingQuestionData = ref<any>(null)
@@ -261,7 +269,11 @@ const openQuestionsModal = (editMode = false) => {
 }
 
 const handlePublish = async () => {
+  if (isSubmitting.value) return // prevent duplicate submission
   isSubmitting.value = true
+  conflictError.value = null
+  generalError.value = null
+
   try {
     const payload = {
       title: formStore.title || 'Untitled Exam',
@@ -286,10 +298,27 @@ const handlePublish = async () => {
       await examStore.createExam(payload)
     }
 
+    // SUCCESS: navigate away and clean up
     formStore.reset()
     router.push('/instructor/exams')
-  } catch (err) {
-    console.error('Failed to create exam:', err)
+  } catch (err: any) {
+    // FAILURE: stay on page and show the error
+    const status = err.response?.status
+    const data = err.response?.data
+
+    if (status === 409 || status === 422) {
+      // Scheduling conflict or validation error
+      const scheduledAtErrors = data?.errors?.scheduled_at
+      const conflictDetail = Array.isArray(scheduledAtErrors) ? scheduledAtErrors[0] : null
+      conflictError.value = {
+        title: 'Exam Schedule Conflict',
+        message: data?.message || 'This exam cannot be published because another exam is already scheduled during this time.',
+        conflictingExam: conflictDetail || 'Please choose a different examination time.'
+      }
+    } else {
+      generalError.value = data?.message || 'Something went wrong. Please try again.'
+    }
+    // Keep confirm modal open so the instructor sees the error inline
   } finally {
     isSubmitting.value = false
   }
@@ -704,9 +733,44 @@ const handlePublish = async () => {
   <!-- Publish Confirmation Modal -->
   <Teleport to="body">
     <Transition name="modal-fade">
-      <div v-if="showPublishConfirm" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" @keydown.escape="showPublishConfirm = false">
+      <div v-if="showPublishConfirm" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" @keydown.escape="showPublishConfirm = false; conflictError = null; generalError = null">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" @click.stop>
-          <div class="p-6 text-center">
+
+          <!-- CONFLICT STATE -->
+          <div v-if="conflictError" class="p-6">
+            <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-[18px] font-bold text-slate-800 mb-2 text-center">{{ conflictError.title }}</h3>
+            <p class="text-[13px] text-slate-500 mb-4 text-center">{{ conflictError.message }}</p>
+            <div class="bg-red-50 border border-red-100 rounded-xl p-4 mb-5">
+              <p class="text-[12px] font-bold text-red-600 uppercase tracking-widest mb-1">Conflicting Exam Details</p>
+              <p class="text-[13px] text-slate-700">{{ conflictError.conflictingExam }}</p>
+            </div>
+            <p class="text-[12px] text-slate-400 text-center mb-4">Please go back to Step 3 and choose a different date/time for this exam.</p>
+            <button @click="showPublishConfirm = false; conflictError = null" class="w-full px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
+              Close &amp; Edit Schedule
+            </button>
+          </div>
+
+          <!-- GENERAL ERROR STATE -->
+          <div v-else-if="generalError" class="p-6">
+            <div class="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="text-[18px] font-bold text-slate-800 mb-2 text-center">Something Went Wrong</h3>
+            <p class="text-[13px] text-slate-500 mb-5 text-center">{{ generalError }}</p>
+            <div class="flex gap-3">
+              <button @click="showPublishConfirm = false; generalError = null" class="flex-1 px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+              <button @click="handlePublish" :disabled="isSubmitting" class="flex-1 px-5 py-2.5 bg-[#5138ed] hover:bg-indigo-600 text-white font-bold text-[13px] rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                <span v-if="isSubmitting">Retrying...</span>
+                <span v-else>Try Again</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- DEFAULT CONFIRM STATE -->
+          <div v-else class="p-6 text-center">
             <div class="w-16 h-16 bg-indigo-50 text-[#5138ed] rounded-full flex items-center justify-center mx-auto mb-4">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
             </div>
@@ -714,7 +778,6 @@ const handlePublish = async () => {
             <p class="text-[13px] text-slate-500 mb-6">
               {{ formStore.editingExamId ? 'Are you sure you want to save these changes to the exam?' : 'Are you sure you want to publish this exam? Once published, it will be available to assigned students according to the schedule.' }}
             </p>
-            
             <div class="flex gap-3">
               <button @click="showPublishConfirm = false" class="flex-1 px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
                 Cancel
@@ -725,6 +788,7 @@ const handlePublish = async () => {
               </button>
             </div>
           </div>
+
         </div>
       </div>
     </Transition>
