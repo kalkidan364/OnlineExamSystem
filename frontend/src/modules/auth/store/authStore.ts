@@ -141,7 +141,7 @@ export const useAuthStore = defineStore('auth', () => {
       selectedContext.value = null
       localStorage.removeItem('auth_token')
       localStorage.removeItem('instructor_context')
-      router.push('/')
+      router.push('/login')
     }
   }
 

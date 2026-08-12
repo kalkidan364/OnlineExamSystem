@@ -80,12 +80,16 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         totalQuestions: e.totalQuestions,
         totalMarks: e.totalMarks,
         status: e.status as 'Soon' | 'Pending' | 'Ready' | 'Upcoming',
+        // Attempt tracking — drives Ready Card button state
+        attemptStatus: e.attemptStatus as 'in_progress' | null | undefined,
+        attemptId: e.attemptId as number | null | undefined,
+        attemptStartedAt: e.attemptStartedAt as string | null | undefined,
       }))
     } catch (err: any) {
-      console.error('Failed to fetch student exams, using mock data', err)
-      usingMockData.value = true
-      activeExam.value = sampleActiveExam ? { ...sampleActiveExam } : null
-      upcomingExams.value = [...sampleUpcomingExams]
+      console.error('Failed to fetch student exams', err)
+      usingMockData.value = false
+      activeExam.value = null
+      upcomingExams.value = []
     } finally {
       isLoading.value = false
     }
@@ -98,6 +102,12 @@ export const useStudentExamStore = defineStore('studentExam', () => {
     try {
       const response = await apiClient.post(`/student/exams/${examId}/start`)
       const data = response.data.data
+
+      // Helper to remove <p> tags from rich text editor outputs
+      const removePTags = (text: string) => {
+        if (!text) return ''
+        return String(text).replace(/<\/?p[^>]*>/gi, '')
+      }
 
       // Build ActiveExam with real questions
       const examData: any = {
@@ -112,22 +122,43 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         totalQuestions: data.questions.length,
         totalMarks: data.total_marks,
         settings: data.settings || {},
+        // Attempt tracking — exam page uses started_at to calculate true time remaining
+        attemptId: data.attempt_id,
+        startedAt: data.started_at,  // ISO string of when attempt actually started
         questions: data.questions.map((q: any) => ({
           id: q.id,
-          text: q.text,
+          text: removePTags(q.text),
           instruction: q.instruction || null,
           type: q.type,
           options: (q.options || []).map((o: any) => {
             if (!o) return ''
-            return typeof o === 'string' ? o : (o.text || '')
+            const optText = typeof o === 'string' ? o : (o.text || '')
+            return removePTags(optText)
           }),
-          pairs: q.pairs || null,
+          pairs: q.pairs ? q.pairs.map((p: any) => ({
+            ...p,
+            left: removePTags(p.left),
+            right: removePTags(p.right)
+          })) : null,
           columnA: q.columnA || null,
           columnB: q.columnB || null,
+          marks: q.marks || 0,
         })),
       }
 
       activeExam.value = examData
+
+      // Mark this exam as in_progress in upcomingExams so the Ready Card shows "Continue Exam"
+      const idx = upcomingExams.value.findIndex(e => e.id === examId)
+      if (idx !== -1) {
+        upcomingExams.value[idx] = {
+          ...upcomingExams.value[idx],
+          attemptStatus: 'in_progress',
+          attemptId: data.attempt_id,
+          attemptStartedAt: data.started_at,
+        }
+      }
+
       return { attemptId: data.attempt_id, exam: examData }
     } catch (err: any) {
       const message = err.response?.data?.message || 'Failed to start exam'
@@ -144,24 +175,44 @@ export const useStudentExamStore = defineStore('studentExam', () => {
       const response = await apiClient.post(`/student/exams/${examId}/submit`, { answers })
       const data = response.data.data
 
+      const hasPending  = data.has_pending as boolean
+      const autoScore   = data.auto_score  as number
+      const autoTotal   = data.auto_total  as number
+      const pendingTotal = data.pending_total as number
+
+      // Status: pending if manual questions exist
+      const status = hasPending
+        ? 'Pending'
+        : (data.percentage >= 50 ? 'Passed' : 'Failed')
+
       // Build a RecentResult from the response
       const result: RecentResult = {
         id: data.attempt_id,
         courseCode: data.course_code,
         courseName: data.course_name,
         examTitle: data.exam_title,
-        score: data.score,
+        score: autoScore,
         totalMarks: data.total_marks,
-        percentage: data.percentage,
+        percentage: data.percentage ?? 0,
         grade: data.grade,
-        status: data.percentage >= 50 ? 'Passed' : 'Failed',
+        status: status as any,
         completedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        questionsReview: data.questionsReview.map((q: any) => ({
-          questionText: q.questionText,
-          studentAnswer: q.studentAnswer || 'Not answered',
-          correctAnswer: q.correctAnswer || 'N/A',
-          explanation: q.explanation || '',
-          isCorrect: q.isCorrect,
+        // Extra breakdown fields
+        autoScore,
+        autoTotal,
+        pendingTotal,
+        hasPending,
+        typeBreakdown: data.type_breakdown ?? {},
+        questionsReview: (data.questionsReview ?? []).map((q: any) => ({
+          questionText:  q.questionText,
+          type:          q.type,
+          gradingStatus: q.gradingStatus,   // 'graded' | 'pending'
+          studentAnswer: q.studentAnswer ?? 'Not answered',
+          correctAnswer: q.correctAnswer ?? null,
+          explanation:   q.explanation ?? '',
+          isCorrect:     q.isCorrect,       // null if pending
+          marks:         q.marks,
+          earnedMarks:   q.earnedMarks,     // null if pending
         })),
       }
 
@@ -201,10 +252,8 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         questionsReview: r.questionsReview || [],
       }))
     } catch (err: any) {
-      console.error('Failed to fetch results, using mock data', err)
-      if (usingMockData.value) {
-        results.value = [...sampleRecentResults]
-      }
+      console.error('Failed to fetch results', err)
+      results.value = []
     }
   }
 

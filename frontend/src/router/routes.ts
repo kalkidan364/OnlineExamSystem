@@ -3,6 +3,11 @@ import type { RouteRecordRaw } from 'vue-router'
 export const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
+    name: 'Landing',
+    component: () => import('../modules/auth/pages/LandingPage.vue')
+  },
+  {
+    path: '/login',
     name: 'Login',
     component: () => import('../modules/auth/pages/Login.vue')
   },

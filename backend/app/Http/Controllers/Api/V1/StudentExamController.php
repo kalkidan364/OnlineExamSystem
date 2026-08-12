@@ -52,7 +52,8 @@ class StudentExamController extends Controller
 
     /**
      * List all published exams for the student's course.
-     * Separates into "active" (in-progress attempt) and "upcoming" (not yet attempted).
+     * Returns ALL non-submitted exams in "upcoming_exams" with an attemptStatus field.
+     * The frontend Ready Card decides what to show based on time window + attemptStatus.
      */
     public function index(Request $request): JsonResponse
     {
@@ -68,61 +69,68 @@ class StudentExamController extends Controller
             ->latest('scheduled_at')
             ->get();
 
-        // Get all attempts by this student
+        // Get all attempts by this student, keyed by exam_id
         $attempts = ExamAttempt::where('user_id', $student->id)
             ->get()
             ->keyBy('exam_id');
 
-        $activeExam = null;
         $upcomingExams = [];
-        $completedExamIds = [];
 
         foreach ($exams as $exam) {
             $attempt = $attempts->get($exam->id);
+            $attemptStatus = $attempt ? $attempt->status : null; // null | 'in_progress' | 'submitted' | 'graded'
 
-            if ($attempt && $attempt->status === 'in_progress') {
-                // Student has an active in-progress attempt
-                $activeExam = [
-                    'id'              => $exam->id,
-                    'attempt_id'      => $attempt->id,
-                    'courseCode'       => $exam->course_code,
-                    'courseName'      => $exam->course_name,
-                    'examTitle'       => $exam->title,
-                    'instructor'      => $exam->instructor->name ?? 'Unknown',
-                    'date'            => $exam->scheduled_at ? $exam->scheduled_at->format('M d, Y') : now()->format('M d, Y'),
-                    'time'            => $exam->scheduled_at ? $exam->scheduled_at->format('h:i A') : '',
-                    'durationMinutes' => $exam->duration_minutes,
-                    'totalMarks'      => $exam->total_marks,
-                    'started_at'      => $attempt->started_at->toISOString(),
+            // Exclude exams the student has already submitted/graded (fully completed)
+            if ($attemptStatus === 'submitted' || $attemptStatus === 'graded') {
+                continue;
+            }
+
+            $scheduledIso = $exam->scheduled_at ? $exam->scheduled_at->toISOString() : null;
+
+            $upcomingExams[] = [
+                'id'              => $exam->id,
+                'courseCode'      => $exam->course_code,
+                'courseName'      => $exam->course_name,
+                'instructor'      => $exam->instructor->name ?? 'Unknown',
+                'examType'        => $exam->title,
+                'scheduledAt'     => $scheduledIso,
+                'scheduledDate'   => $scheduledIso, // legacy alias
+                'startTime'       => $exam->scheduled_at ? $exam->scheduled_at->format('h:i A') : 'TBD',
+                'durationMinutes' => $exam->duration_minutes,
+                'totalMarks'      => $exam->total_marks,
+                'totalQuestions'  => $exam->questions()->count(),
+                'status'          => 'Upcoming',
+                // Attempt tracking — allows card to show Continue vs Start
+                'attemptStatus'   => $attemptStatus, // null or 'in_progress'
+                'attemptId'       => $attempt ? $attempt->id : null,
+                'attemptStartedAt' => ($attempt && $attempt->started_at) ? $attempt->started_at->toISOString() : null,
+            ];
+        }
+
+        // active_exam is now derived from upcoming_exams (in_progress) for backward compat
+        $activeExamData = null;
+        foreach ($upcomingExams as $e) {
+            if ($e['attemptStatus'] === 'in_progress') {
+                $activeExamData = [
+                    'id'              => $e['id'],
+                    'attempt_id'      => $e['attemptId'],
+                    'courseCode'      => $e['courseCode'],
+                    'courseName'      => $e['courseName'],
+                    'examTitle'       => $e['examType'],
+                    'instructor'      => $e['instructor'],
+                    'date'            => $e['scheduledAt'] ? Carbon::parse($e['scheduledAt'])->format('M d, Y') : now()->format('M d, Y'),
+                    'time'            => $e['startTime'],
+                    'durationMinutes' => $e['durationMinutes'],
+                    'totalMarks'      => $e['totalMarks'],
+                    'started_at'      => $e['attemptStartedAt'],
                 ];
-            } elseif ($attempt && in_array($attempt->status, ['submitted', 'graded'])) {
-                // Already completed — skip from upcoming
-                $completedExamIds[] = $exam->id;
-            } else {
-                // Not yet attempted — show as upcoming
-                // Send scheduled_at as ISO string so frontend can do exact datetime math
-                $scheduledIso = $exam->scheduled_at ? $exam->scheduled_at->toISOString() : null;
-                $upcomingExams[] = [
-                    'id'              => $exam->id,
-                    'courseCode'      => $exam->course_code,
-                    'courseName'      => $exam->course_name,
-                    'instructor'      => $exam->instructor->name ?? 'Unknown',
-                    'examType'        => $exam->title,
-                    'scheduledAt'     => $scheduledIso,
-                    // Keep legacy fields for backward compat
-                    'scheduledDate'   => $scheduledIso,
-                    'startTime'       => $exam->scheduled_at ? $exam->scheduled_at->format('h:i A') : 'TBD',
-                    'durationMinutes' => $exam->duration_minutes,
-                    'totalMarks'      => $exam->total_marks,
-                    'totalQuestions'  => $exam->questions()->count(),
-                    'status'          => 'Upcoming',
-                ];
+                break;
             }
         }
 
         return response()->json([
             'data' => [
-                'active_exam'    => $activeExam,
+                'active_exam'    => $activeExamData,
                 'upcoming_exams' => $upcomingExams,
             ]
         ]);
@@ -250,53 +258,104 @@ class StudentExamController extends Controller
             'answers' => 'required|array',
         ]);
 
-        $submittedAnswers = $validated['answers']; // { questionId: selectedAnswer }
+        $submittedAnswers = $validated['answers'];
         $questions = $exam->questions()->get();
 
-        $totalScore = 0;
-        $totalPossible = 0;
+        // Question types that can be auto-graded
+        $autoGradeTypes = ['multiple_choice', 'true_false', 'matching'];
+
+        $autoScore   = 0;   // marks earned from auto-graded questions
+        $autoTotal   = 0;   // total marks available from auto-graded questions
+        $pendingTotal = 0;  // total marks from manual-graded questions (short_answer, fill_blank)
+
+        // Per-type score tracking for the breakdown
+        $typeBreakdown = [];
         $questionsReview = [];
 
         foreach ($questions as $q) {
             $studentAnswer = $submittedAnswers[$q->id] ?? null;
-            $isCorrect = false;
-            $canAutoGrade = in_array($q->type, ['multiple_choice', 'true_false']);
+            $isAutoGrade   = in_array($q->type, $autoGradeTypes);
+            $isCorrect     = false;
+            $earnedMarks   = 0;
 
-            if ($canAutoGrade && $studentAnswer !== null) {
-                // For MCQ: compare selected answer with correct_answer
-                $isCorrect = strtolower(trim((string)$studentAnswer)) === strtolower(trim((string)$q->correct_answer));
-                if ($isCorrect) {
-                    $totalScore += $q->marks;
+            if ($isAutoGrade) {
+                $autoTotal += $q->marks;
+
+                if ($studentAnswer !== null && $studentAnswer !== '') {
+                    if ($q->type === 'matching') {
+                        $isCorrect = $this->gradeMatching($studentAnswer, $q->options ?? []);
+                    } else {
+                        // MCQ / True-False: letter comparison (A, B, C... or A/B for T/F)
+                        $isCorrect = strtolower(trim((string)$studentAnswer))
+                                  === strtolower(trim((string)$q->correct_answer));
+                    }
                 }
+
+                if ($isCorrect) {
+                    $earnedMarks  = $q->marks;
+                    $autoScore   += $q->marks;
+                }
+
+                // Build per-type totals for the breakdown
+                $typeKey = $q->type;
+                if (!isset($typeBreakdown[$typeKey])) {
+                    $typeBreakdown[$typeKey] = ['earned' => 0, 'total' => 0];
+                }
+                $typeBreakdown[$typeKey]['earned'] += $earnedMarks;
+                $typeBreakdown[$typeKey]['total']  += $q->marks;
+
+                $questionsReview[] = [
+                    'question_id'   => $q->id,
+                    'questionText'  => $q->text,
+                    'type'          => $q->type,
+                    'studentAnswer' => $studentAnswer,
+                    'correctAnswer' => $q->correct_answer,
+                    'isCorrect'     => $isCorrect,
+                    'marks'         => $q->marks,
+                    'earnedMarks'   => $earnedMarks,
+                    'gradingStatus' => 'graded',
+                    'explanation'   => $isCorrect
+                        ? 'Correct!'
+                        : 'The correct answer is: ' . $q->correct_answer,
+                ];
+            } else {
+                // Manual grading — short_answer, fill_blank, essay, etc.
+                $pendingTotal += $q->marks;
+
+                $questionsReview[] = [
+                    'question_id'   => $q->id,
+                    'questionText'  => $q->text,
+                    'type'          => $q->type,
+                    'studentAnswer' => $studentAnswer,
+                    'correctAnswer' => null,
+                    'isCorrect'     => null,   // null = not yet graded
+                    'marks'         => $q->marks,
+                    'earnedMarks'   => null,   // null = pending
+                    'gradingStatus' => 'pending',
+                    'explanation'   => 'This answer will be marked by your instructor.',
+                ];
             }
-
-            $totalPossible += $q->marks;
-
-            $questionsReview[] = [
-                'question_id'   => $q->id,
-                'questionText'  => $q->text,
-                'type'          => $q->type,
-                'studentAnswer' => $studentAnswer,
-                'correctAnswer' => $q->correct_answer,
-                'isCorrect'     => $isCorrect,
-                'marks'         => $q->marks,
-                'explanation'   => $canAutoGrade
-                    ? ($isCorrect ? 'Correct!' : 'The correct answer is: ' . $q->correct_answer)
-                    : 'This question requires manual grading.',
-            ];
         }
 
-        // Calculate percentage and grade
-        $percentage = $totalPossible > 0 ? round(($totalScore / $totalPossible) * 100, 2) : 0;
-        $grade = $this->calculateGrade($percentage);
+        $totalPossible    = $autoTotal + $pendingTotal;
+        $hasPendingMarks  = $pendingTotal > 0;
 
-        // Update the attempt
+        // Percentage is calculated on the auto-graded portion only when pending marks exist
+        // so as not to artificially deflate the score before instructor grading
+        $percentageBase   = $autoTotal > 0 ? $autoTotal : $totalPossible;
+        $percentage       = $percentageBase > 0 ? round(($autoScore / $percentageBase) * 100, 2) : 0;
+        $grade            = $hasPendingMarks ? 'Pending' : $this->calculateGrade($percentage);
+
+        // Status: submitted if manual questions exist (instructor must grade)
+        // graded immediately if everything was auto-gradeable
+        $status = $hasPendingMarks ? 'submitted' : 'graded';
+
         $attempt->update([
-            'score'        => $totalScore,
+            'score'        => $autoScore,
             'total_marks'  => $totalPossible,
             'percentage'   => $percentage,
             'grade'        => $grade,
-            'status'       => 'submitted',
+            'status'       => $status,
             'answers'      => $submittedAnswers,
             'submitted_at' => now(),
         ]);
@@ -304,16 +363,60 @@ class StudentExamController extends Controller
         return response()->json([
             'data' => [
                 'attempt_id'      => $attempt->id,
-                'score'           => $totalScore,
+                // Auto-graded scores
+                'auto_score'      => $autoScore,
+                'auto_total'      => $autoTotal,
+                // Pending manual marks
+                'pending_total'   => $pendingTotal,
+                'has_pending'     => $hasPendingMarks,
+                // Overall
+                'score'           => $autoScore,
                 'total_marks'     => $totalPossible,
-                'percentage'      => $percentage,
+                'percentage'      => $hasPendingMarks ? null : $percentage,
                 'grade'           => $grade,
+                'status'          => $status,
+                // Type-level breakdown e.g. {"multiple_choice":{"earned":10,"total":20},...}
+                'type_breakdown'  => $typeBreakdown,
+                // Exam meta
                 'exam_title'      => $exam->title,
                 'course_code'     => $exam->course_code,
                 'course_name'     => $exam->course_name,
                 'questionsReview' => $questionsReview,
             ]
         ]);
+    }
+
+    /**
+     * Grade a matching question.
+     * Student answer format: "0:rightValue,1:rightValue,2:rightValue"
+     * Pairs (from DB options): [{left: "...", right: "..."}, ...]
+     * Returns true only if ALL pairs are correctly matched.
+     */
+    private function gradeMatching(string $studentAnswer, array $pairs): bool
+    {
+        if (empty($pairs) || empty(trim($studentAnswer))) {
+            return false;
+        }
+
+        // Parse student selections: "0:val,1:val" => [0 => 'val', 1 => 'val']
+        $selections = [];
+        foreach (explode(',', $studentAnswer) as $part) {
+            $pieces = explode(':', $part, 2);
+            if (count($pieces) === 2) {
+                $selections[(int)$pieces[0]] = trim($pieces[1]);
+            }
+        }
+
+        // Check every pair
+        foreach ($pairs as $i => $pair) {
+            $correctRight    = strtolower(trim($pair['right'] ?? ''));
+            $studentSelected = strtolower($selections[$i] ?? '');
+            if ($studentSelected !== $correctRight) {
+                return false;
+            }
+        }
+
+        return !empty($selections);
     }
 
     /**

@@ -198,7 +198,6 @@ class InstructorExamController extends Controller
         $instructor = $request->user();
 
         $exam = Exam::where('user_id', $instructor->id)
-            ->where('course_code', $instructor->course_code)
             ->where('id', $id)
             ->firstOrFail();
 
@@ -286,10 +285,13 @@ class InstructorExamController extends Controller
         $instructor = $request->user();
 
         $exam = Exam::where('user_id', $instructor->id)
-            ->where('course_code', $instructor->course_code)
             ->where('id', $id)
             ->firstOrFail();
 
+        // Clean up dependent child records before deletion
+        $exam->questions()->delete();
+        $exam->attempts()->delete();
+        $exam->students()->detach();
         $exam->delete();
 
         return response()->json([

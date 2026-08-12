@@ -23,6 +23,7 @@ export interface Question {
   correctAnswer?: string;
   selectedAnswer?: string;
   flagged?: boolean;
+  marks?: number;
 }
 
 export interface ActiveExam {
@@ -53,6 +54,10 @@ export interface UpcomingExam {
   totalQuestions: number;
   totalMarks: number;
   status: 'Soon' | 'Pending' | 'Ready' | 'Upcoming';
+  // Attempt tracking
+  attemptStatus?: 'in_progress' | null;
+  attemptId?: number | null;
+  attemptStartedAt?: string | null;
 }
 
 export interface RecentResult {
@@ -63,15 +68,25 @@ export interface RecentResult {
   score: number;
   totalMarks: number;
   percentage: number;
-  grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'C+' | 'C';
-  status: 'Passed' | 'Failed';
+  grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'C+' | 'C' | 'Pending' | string;
+  status: 'Passed' | 'Failed' | 'Pending';
   completedDate: string;
+  // Grading breakdown
+  autoScore?: number;
+  autoTotal?: number;
+  pendingTotal?: number;
+  hasPending?: boolean;
+  typeBreakdown?: Record<string, { earned: number; total: number }>;
   questionsReview: {
     questionText: string;
+    type?: string;
+    gradingStatus?: 'graded' | 'pending';
     studentAnswer: string;
-    correctAnswer: string;
+    correctAnswer: string | null;
     explanation: string;
-    isCorrect: boolean;
+    isCorrect: boolean | null;
+    marks?: number;
+    earnedMarks?: number | null;
   }[];
 }
 

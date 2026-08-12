@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { UpcomingExam } from '../types'
 
 const props = defineProps<{
@@ -9,6 +10,11 @@ const emit = defineEmits<{
   (e: 'start-exam', examId: number): void
   (e: 'view-details', exam: UpcomingExam): void
 }>()
+
+// Limit to 3 exams
+const displayedExams = computed(() => {
+  return props.exams.slice(0, 3)
+})
 
 // Helper to format date into Month and Day for the calendar box
 const formatMonth = (dateString: string) => {
@@ -37,7 +43,7 @@ const formatDay = (dateString: string) => {
 
     <div class="space-y-6">
       <div
-        v-for="exam in exams"
+        v-for="exam in displayedExams"
         :key="exam.id"
         class="flex items-start gap-4"
       >

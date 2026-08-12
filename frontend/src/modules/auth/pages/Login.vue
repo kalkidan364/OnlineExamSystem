@@ -73,60 +73,60 @@ const cancelStep2 = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4 sm:p-8 font-sans">
+  <div class="min-h-screen w-full bg-white flex items-center justify-center p-4 sm:p-6 font-sans">
     
     <!-- Main Card Container -->
-    <div class="flex flex-col md:flex-row w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden">
+    <div class="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-200/60">
       
       <!-- Left Side (Branding & Image) -->
-      <div class="hidden md:flex flex-col w-1/2 bg-[#283593] text-white p-10 relative overflow-hidden">
+      <div class="hidden md:flex flex-col w-1/2 bg-[#b9e2f0] text-white p-8 relative overflow-hidden justify-between min-h-[460px]">
         
         <!-- Background Image with Gradient Overlay -->
-        <div class="absolute inset-0 z-0 bg-[#1a237e]">
+        <div class="absolute inset-0 z-0 ">
           <img 
-            src="../../../assets/images/bac.png" 
+            src="../../../assets/images/imagep.png" 
             alt="Wollo University" 
-            class="w-[180%] max-w-none h-auto absolute bottom-0 left-1/2 -translate-x-1/2 opacity-80"
+              class="w-full h-full object-cover object-center"
           />
-          <div class="absolute inset-0 bg-gradient-to-b from-[#283593]/80 via-[#283593]/20 to-[#283593]/80"></div>
+          
         </div>
 
         <!-- Content -->
-        <div class="relative z-10 flex flex-col h-full">
-          <!-- Logo & Title -->
-          <div class="flex items-center gap-4 mb-12">
-            <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-lg p-0.5">
-              <img src="../../../assets/images/logo.png" alt="Wollo University Logo" class="w-full h-full object-contain rounded-full" />
+        <div class="relative z-10 flex flex-col h-full justify-between">
+          <div>
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-3 mb-8">
+              <div class="w-12 h-12 bg-#A2D7E9 rounded-full flex items-center justify-center shadow-lg p-0.5 shrink-0">
+                <img src="../../../assets/images/logo.png" alt="Wollo University Logo" class="w-full h-full object-contain rounded-full" />
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-black tracking-wide">Wollo University</h2>
+                <p class="text-xs text-black font-medium">Online Examination System</p>
+              </div>
             </div>
-            <div>
-              <h2 class="text-xl font-bold tracking-wide">Wollo University</h2>
-              <p class="text-sm text-blue-200 font-medium">Online Examination System</p>
-            </div>
-          </div>
 
-          <!-- Hero Text -->
-          <div class="mt-4">
-            <h1 class="text-3xl font-extrabold leading-tight mb-5">
-              Excellence in Education,<br/>
-              Innovation in Assessment
-            </h1>
-            <div class="w-12 h-1 bg-blue-500 mb-5 rounded-full"></div>
-            <p class="text-blue-100 text-sm leading-relaxed max-w-sm">
-              A secure, reliable and user-friendly platform for managing examinations and evaluating academic excellence.
-            </p>
+            <!-- Hero Text -->
+            <div class="mt-4">
+              <h1 class="text-2xl font-extrabold text-black leading-tight mb-4">
+                Excellence in Education,<br/>
+                Innovation in Assessment
+              </h1>
+              <div class="w-12 h-1 bg-blue-400 mb-4 rounded-full"></div>
+             
+            </div>
           </div>
 
           <!-- Glassmorphism Badge at Bottom -->
-          <div class="mt-auto pt-10">
-            <div class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-4 flex items-center gap-4">
-              <div class="bg-white/10 p-2 rounded-full">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <div class="pt-6">
+            <div class="bg-white/10 backdrop-blur-md border border-blue/20 rounded-xl p-3 flex items-center gap-3">
+              <div class="bg-white/20 p-2 rounded-full shrink-0">
+                <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                 </svg>
               </div>
               <div>
-                <h4 class="font-semibold text-white text-sm">Secure & Protected</h4>
-                <p class="text-xs text-blue-200">Your data is safe with enterprise grade security</p>
+                <h4 class="font-semibold text-black text-[13px]">Secure & Protected</h4>
+                <p class="text-[11px] text-black">Your data is safe with enterprise grade security</p>
               </div>
             </div>
           </div>
@@ -134,27 +134,27 @@ const cancelStep2 = () => {
       </div>
 
       <!-- Right Side (Forms) -->
-      <div class="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
+      <div class="w-full md:w-1/2 p-6 md:p-8 flex flex-col justify-center bg-white">
         
         <!-- STEP 1: INITIAL LOGIN FORM -->
         <template v-if="!authStore.pendingInstructor">
-          <div class="mb-8">
-            <h2 class="text-2xl font-bold text-slate-900 mb-1">Welcome Back 👋</h2>
-            <p class="text-sm text-slate-500">Sign in to continue to your account</p>
+          <div class="mb-6">
+            <h2 class="text-xl font-bold text-slate-900 mb-1">Welcome Back 👋</h2>
+            <p class="text-xs text-slate-500">Sign in to continue to your account</p>
           </div>
 
-          <div v-if="authStore.error" class="mb-6 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex items-center gap-2">
-            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            {{ authStore.error }}
+          <div v-if="authStore.error" class="mb-5 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg flex items-center gap-2">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span>{{ authStore.error }}</span>
           </div>
 
-          <form @submit.prevent="handleLogin" class="space-y-5">
+          <form @submit.prevent="handleLogin" class="space-y-4">
             
             <!-- Email or Username Input -->
             <div>
               <label for="login" class="block text-xs font-semibold text-slate-700 mb-1.5">Email Address or Username</label>
               <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
@@ -164,7 +164,7 @@ const cancelStep2 = () => {
                   type="text" 
                   v-model="loginField"
                   placeholder="Enter your email or username" 
-                  class="block w-full pl-9 pr-3 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all"
+                  class="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all"
                   required
                 />
               </div>
@@ -174,7 +174,7 @@ const cancelStep2 = () => {
             <div>
               <label for="role" class="block text-xs font-semibold text-slate-700 mb-1.5">Login As</label>
               <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -182,7 +182,7 @@ const cancelStep2 = () => {
                 <select 
                   id="role" 
                   v-model="selectedRole"
-                  class="block w-full pl-9 pr-3 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all appearance-none cursor-pointer"
+                  class="block w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all appearance-none cursor-pointer"
                   required
                 >
                   <option value="student">Student</option>
@@ -201,7 +201,7 @@ const cancelStep2 = () => {
             <div>
               <label for="password" class="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
               <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -211,7 +211,7 @@ const cancelStep2 = () => {
                   :type="showPassword ? 'text' : 'password'" 
                   v-model="password"
                   placeholder="Enter your password" 
-                  class="block w-full pl-9 pr-10 py-2.5 bg-[#f4f7fb] border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5138ed] focus:bg-white transition-all font-medium tracking-widest"
+                  class="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all font-medium"
                   required
                 />
                 <button 
@@ -228,18 +228,18 @@ const cancelStep2 = () => {
                   </svg>
                 </button>
               </div>
-              <div class="mt-2 text-right">
-                <a href="#" class="text-xs font-semibold text-[#5138ed] hover:text-[#3f2cb8]">Forgot Password?</a>
+              <div class="mt-1.5 text-right">
+                <a href="#" class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700">Forgot Password?</a>
               </div>
             </div>
 
             <!-- Remember Me -->
-            <div class="flex items-center pb-2">
+            <div class="flex items-center pb-1">
               <input 
                 id="remember-me" 
                 type="checkbox" 
                 v-model="rememberMe"
-                class="h-3.5 w-3.5 text-[#5138ed] focus:ring-[#5138ed] border-slate-300 rounded cursor-pointer"
+                class="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded cursor-pointer"
               />
               <label for="remember-me" class="ml-2 block text-xs text-slate-600 cursor-pointer">
                 Remember me
@@ -251,15 +251,15 @@ const cancelStep2 = () => {
               <button 
                 type="submit" 
                 :disabled="authStore.isLoading"
-                class="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-[#5138ed] hover:bg-[#3f2cb8] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5138ed] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                class="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 <span v-if="authStore.isLoading">Signing In...</span>
                 <span v-else>Sign In</span>
                 
-                <svg v-if="!authStore.isLoading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg v-if="!authStore.isLoading" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                 </svg>
-                <svg v-else class="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg v-else class="animate-spin -ml-1 mr-3 h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -267,30 +267,30 @@ const cancelStep2 = () => {
             </div>
           </form>
 
-          <div class="mt-8 text-center text-xs text-slate-500">
+          <div class="mt-6 text-center text-xs text-slate-500">
             Don't have an account? 
-            <a href="#" class="font-semibold text-[#5138ed] hover:text-[#3f2cb8]">Contact your administrator</a>
+            <a href="#" class="font-semibold text-indigo-600 hover:text-indigo-700">Contact your administrator</a>
           </div>
         </template>
 
         <!-- STEP 2: INSTRUCTOR ASSIGNMENT SELECTION FORM -->
         <template v-else>
           <div class="mb-6">
-            <div class="inline-flex items-center gap-2 px-2.5 py-1 bg-indigo-50 text-[#5138ed] text-xs font-semibold rounded-full mb-3">
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-full mb-3">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
               Step 2: Select Teaching Assignment
             </div>
-            <h2 class="text-2xl font-bold text-slate-900 mb-1">Select Active Context 🎓</h2>
-            <p class="text-sm text-slate-500">Choose your assigned department, course, and section to access your instructor workspace.</p>
+            <h2 class="text-xl font-bold text-slate-900 mb-1">Select Active Context 🎓</h2>
+            <p class="text-xs text-slate-500">Choose your assigned department, course, and section to access your instructor workspace.</p>
           </div>
 
           <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 mb-6 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-[#5138ed] text-white flex items-center justify-center font-bold text-sm">
+            <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
               {{ authStore.pendingInstructor?.user?.name ? authStore.pendingInstructor.user.name.slice(0, 2).toUpperCase() : 'IN' }}
             </div>
-            <div>
-              <h4 class="text-sm font-bold text-slate-800">{{ authStore.pendingInstructor?.user?.name }}</h4>
-              <p class="text-xs text-slate-500">{{ authStore.pendingInstructor?.user?.email }}</p>
+            <div class="min-w-0 flex-1">
+              <h4 class="text-sm font-bold text-slate-800 truncate">{{ authStore.pendingInstructor?.user?.name }}</h4>
+              <p class="text-xs text-slate-500 truncate">{{ authStore.pendingInstructor?.user?.email }}</p>
             </div>
           </div>
 
@@ -303,7 +303,7 @@ const cancelStep2 = () => {
                 <select 
                   id="select-department" 
                   v-model="selectedDepartment"
-                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5138ed] transition-all cursor-pointer font-medium"
+                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 transition-all cursor-pointer"
                   required
                 >
                   <option value="" disabled>Select Department...</option>
@@ -325,7 +325,7 @@ const cancelStep2 = () => {
                 <select 
                   id="select-course" 
                   v-model="selectedCourse"
-                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5138ed] transition-all cursor-pointer font-medium"
+                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 transition-all cursor-pointer"
                   required
                 >
                   <option value="" disabled>Select Course...</option>
@@ -347,7 +347,7 @@ const cancelStep2 = () => {
                 <select 
                   id="select-section" 
                   v-model="selectedSection"
-                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5138ed] transition-all cursor-pointer font-medium"
+                  class="block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 transition-all cursor-pointer"
                   required
                 >
                   <option value="" disabled>Select Section...</option>
@@ -367,14 +367,14 @@ const cancelStep2 = () => {
               <button 
                 type="button" 
                 @click="cancelStep2"
-                class="w-1/3 py-2.5 px-4 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                class="w-1/3 py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
               >
                 Back to Login
               </button>
 
               <button 
                 type="submit" 
-                class="w-2/3 flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-xs font-semibold text-white bg-[#5138ed] hover:bg-[#3f2cb8] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5138ed] transition-colors"
+                class="w-2/3 flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 transition-all"
               >
                 <span>Verify & Proceed to Dashboard</span>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>

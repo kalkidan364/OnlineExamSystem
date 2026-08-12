@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { ActiveExam, Question } from '../types'
+import wolloLogo from '@/assets/images/logo.png'
 
 const props = defineProps<{
   exam: ActiveExam
@@ -11,7 +12,25 @@ const emit = defineEmits<{
   (e: 'submit-exam', answers: Record<number, string>, scores: number, percentage: number): void
 }>()
 
-const questions = ref<Question[]>(props.exam.questions)
+const groupQuestionsByInstruction = (qs: Question[]) => {
+  const grouped: Question[] = []
+  const seenInstructions = new Set<string>()
+  const noInstructionQs: Question[] = []
+
+  qs.forEach(q => {
+    const inst = (q as any).instruction || ''
+    if (!inst) {
+      noInstructionQs.push(q)
+    } else if (!seenInstructions.has(inst)) {
+      seenInstructions.add(inst)
+      grouped.push(...qs.filter(x => ((x as any).instruction || '') === inst))
+    }
+  })
+  
+  return [...grouped, ...noInstructionQs]
+}
+
+const questions = ref<Question[]>(groupQuestionsByInstruction(props.exam.questions))
 const currentIndex = ref<number>(0)
 const answers = ref<Record<number, string>>({})
 const matchingAnswers = ref<Record<number, Record<number, string>>>({}) // for matching questions: qId -> {pairIndex -> selectedRight}
@@ -25,10 +44,53 @@ const settings = ref<Record<string, any>>((props.exam as any).settings || {})
 
 const activeQuestion = computed(() => questions.value[currentIndex.value])
 
+const navigationGroups = computed(() => {
+  const groups: { instruction: string; items: { q: Question; globalIndex: number }[] }[] = []
+  
+  questions.value.forEach((q, idx) => {
+    const inst = (q as any).instruction || 'General Questions'
+    let group = groups.find(g => g.instruction === inst)
+    if (!group) {
+      group = { instruction: inst, items: [] }
+      groups.push(group)
+    }
+    group.items.push({ q, globalIndex: idx })
+  })
+  
+  return groups
+})
+
 let timer: number | null = null
+
+const webcamVideo = ref<HTMLVideoElement | null>(null)
+const mediaStream = ref<MediaStream | null>(null)
+const isCameraActive = ref(false)
+
+const startWebcam = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    mediaStream.value = stream
+    if (webcamVideo.value) {
+      webcamVideo.value.srcObject = stream
+      isCameraActive.value = true
+    }
+  } catch (err) {
+    console.error("Webcam access denied or error:", err)
+    alert("Camera access is required for proctoring. Please allow camera permissions.")
+  }
+}
+
+const stopWebcam = () => {
+  if (mediaStream.value) {
+    mediaStream.value.getTracks().forEach(track => track.stop())
+    mediaStream.value = null
+    isCameraActive.value = false
+  }
+}
 
 // Live timer countdown
 onMounted(() => {
+  startWebcam()
   timer = window.setInterval(() => {
     if (secondsRemaining.value <= 1) {
       if (timer) clearInterval(timer)
@@ -42,6 +104,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  stopWebcam()
 })
 
 // Monitor screen tab focus switches to enforce academic integrity rules
@@ -171,15 +234,21 @@ const confirmCancel = () => {
     <!-- Top Console Bar -->
     <header class="border-b border-slate-800 bg-slate-950 px-6 py-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white font-serif font-black text-sm">
-          W
+        <!-- Wollo University Logo -->
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-white overflow-hidden shadow-md shrink-0">
+          <img
+            :src="wolloLogo"
+            alt="Wollo University"
+            class="h-9 w-9 object-contain"
+          />
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span class="text-xs font-bold tracking-widest text-slate-400 uppercase">EXAM PORTAL</span>
+            <span class="text-[10px] font-black tracking-widest text-slate-400 uppercase leading-none">Wollo University</span>
+            <span class="text-[10px] font-bold tracking-widest text-slate-500 uppercase leading-none">· Exam Portal</span>
             <span class="h-2 w-2 rounded-full bg-rose-500 animate-ping"></span>
           </div>
-          <h2 class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
+          <h2 class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md mt-0.5">
             {{ exam.courseCode }}: {{ exam.courseName }}
           </h2>
         </div>
@@ -223,18 +292,22 @@ const confirmCancel = () => {
 
           <!-- Simulated Live Frame -->
           <div class="relative aspect-video rounded-lg overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center">
+            
+            <!-- Real Webcam Video Feed -->
+            <video ref="webcamVideo" autoplay muted playsinline class="absolute inset-0 w-full h-full object-cover z-0"></video>
+
             <!-- Overlay graphics to simulate biometric analysis -->
-            <div class="absolute inset-0 border border-indigo-500/30 m-4 rounded pointer-events-none"></div>
-            <div class="absolute top-2 left-2 text-[8px] font-mono text-slate-400 bg-black/40 px-1.5 py-0.5 rounded">
+            <div class="absolute inset-0 border border-indigo-500/30 m-4 rounded pointer-events-none z-10 shadow-[inset_0_0_20px_rgba(99,102,241,0.15)]"></div>
+            <div class="absolute top-2 left-2 text-[8px] font-mono text-slate-400 bg-black/60 px-1.5 py-0.5 rounded z-10 backdrop-blur-sm">
               SECURE_ID: Kalkidan M.
             </div>
-            <div class="absolute bottom-2 right-2 flex items-center gap-1 text-[8px] font-mono text-slate-400 bg-black/40 px-1.5 py-0.5 rounded">
+            <div class="absolute bottom-2 right-2 flex items-center gap-1 text-[8px] font-mono text-slate-400 bg-black/60 px-1.5 py-0.5 rounded z-10 backdrop-blur-sm">
               <span class="h-1 w-1 rounded-full bg-red-500 animate-pulse"></span>
               REC 1080p
             </div>
 
-            <!-- Vector Mock Face / Camera Silhouette -->
-            <div class="flex flex-col items-center text-slate-400">
+            <!-- Vector Mock Face / Camera Silhouette (Shown while loading) -->
+            <div v-if="!isCameraActive" class="flex flex-col items-center text-slate-400 z-10 bg-slate-900/80 absolute inset-0 justify-center">
               <div class="h-16 w-16 rounded-full border-2 border-indigo-500/50 flex items-center justify-center bg-slate-900 relative">
                 <div class="h-8 w-8 rounded-full bg-indigo-500/10 border border-indigo-500/30"></div>
                 <!-- Facial recognition reticle lines -->
@@ -243,7 +316,7 @@ const confirmCancel = () => {
                 <div class="absolute -bottom-1 -left-1 h-3 w-3 border-b-2 border-l-2 border-emerald-400"></div>
                 <div class="absolute -bottom-1 -right-1 h-3 w-3 border-b-2 border-r-2 border-emerald-400"></div>
               </div>
-              <span class="text-[9px] font-mono uppercase tracking-widest text-slate-400 mt-2">Biometrics Synchronized</span>
+              <span class="text-[9px] font-mono uppercase tracking-widest text-slate-400 mt-2">Initializing Camera...</span>
             </div>
           </div>
           
@@ -259,26 +332,40 @@ const confirmCancel = () => {
             <p class="text-[11px] text-slate-500 mt-0.5">Jump directly to any section</p>
           </div>
 
-          <div class="grid grid-cols-5 gap-2">
-            <button
-              v-for="(q, idx) in questions"
-              :key="q.id"
-              @click="currentIndex = idx"
-              :class="[
-                'relative flex h-10 w-full items-center justify-center rounded-lg border font-mono text-xs font-bold transition-all',
-                idx === currentIndex
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20 scale-105'
-                  : isQuestionAnswered(q.id)
-                  ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-400'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:border-slate-700'
-              ]"
-            >
-              {{ idx + 1 }}
-              <!-- Small flag icon overlay -->
-              <span v-if="flagged[q.id]" class="absolute -top-1 -right-1 flex h-3 w-3">
-                <span class="relative inline-flex h-3 w-3 rounded-full bg-amber-500 text-[8px] items-center justify-center text-slate-950 font-bold">!</span>
-              </span>
-            </button>
+          <div 
+            class="space-y-5 overflow-y-auto pr-1"
+            style="max-height: 140px; scrollbar-width: none; -ms-overflow-style: none;"
+          >
+            <!-- Add a style block for webkit hidden scrollbar -->
+            <component :is="'style'">
+              .overflow-y-auto::-webkit-scrollbar { display: none; }
+            </component>
+            <div v-for="(group, gIdx) in navigationGroups" :key="gIdx" class="space-y-3">
+              <h5 class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest border-b border-slate-800/50 pb-1.5" :title="group.instruction">
+                {{ group.instruction }}
+              </h5>
+              <div class="grid grid-cols-5 gap-2">
+                <button
+                  v-for="item in group.items"
+                  :key="item.q.id"
+                  @click="currentIndex = item.globalIndex"
+                  :class="[
+                    'relative flex h-10 w-full items-center justify-center rounded-lg border font-mono text-xs font-bold transition-all',
+                    item.globalIndex === currentIndex
+                      ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20 scale-105'
+                      : isQuestionAnswered(item.q.id)
+                      ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-400'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:border-slate-700'
+                  ]"
+                >
+                  {{ item.globalIndex + 1 }}
+                  <!-- Small flag icon overlay -->
+                  <span v-if="flagged[item.q.id]" class="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span class="relative inline-flex h-3 w-3 rounded-full bg-amber-500 text-[8px] items-center justify-center text-slate-950 font-bold">!</span>
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <hr class="border-slate-800" />
@@ -300,12 +387,21 @@ const confirmCancel = () => {
           </div>
         </div>
 
+        <!-- Quick Exit trigger (Moved from right side) -->
+        <button
+          @click="confirmCancel"
+          class="w-full rounded-xl border border-rose-950 bg-rose-950/10 text-rose-400 py-2.5 text-xs font-bold hover:bg-rose-950/30 transition-all border-dashed mt-auto"
+        >
+          Suspend Session & Go Back
+        </button>
+
       </div>
 
-      <!-- Center: Main Active Question Board (6 Cols) -->
-      <div class="xl:col-span-6 space-y-6 flex flex-col justify-between">
+      <!-- Center: Main Active Question Board (9 Cols) -->
+      <div class="xl:col-span-9 space-y-6 flex flex-col justify-between">
         
-        <div class="rounded-xl border border-slate-800 bg-slate-950 p-6 md:p-8 space-y-6 min-h-[480px]">
+        <div class="flex flex-col rounded-xl border border-slate-800 bg-slate-950 p-6 md:p-8 min-h-[480px]">
+          <div class="flex-1 space-y-6">
           <template v-if="activeQuestion">
             <!-- Question Header meta -->
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
@@ -319,7 +415,7 @@ const confirmCancel = () => {
               </div>
               <div class="flex items-center gap-2">
                 <span class="rounded bg-slate-800 px-2 py-1 text-[10px] font-mono text-slate-300 border border-slate-700">
-                  Value: 10 Marks
+                  Value: {{ activeQuestion.marks || 0 }} Marks
                 </span>
                 <button
                   @click="toggleFlag"
@@ -421,49 +517,66 @@ const confirmCancel = () => {
 
               <!-- ── Matching ── -->
               <template v-else-if="activeQuestion.type === 'matching' && (activeQuestion as any).pairs">
-                <div class="space-y-4">
-                  <!-- Column Headers -->
-                  <div class="grid grid-cols-2 gap-4">
-                    <div class="px-4 py-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-center">
-                      <span class="text-xs font-black uppercase tracking-widest text-indigo-300">
-                        {{ (activeQuestion as any).columnA || 'Column A' }}
-                      </span>
-                    </div>
-                    <div class="px-4 py-2 rounded-xl bg-teal-600/20 border border-teal-500/40 text-center">
-                      <span class="text-xs font-black uppercase tracking-widest text-teal-300">
-                        {{ (activeQuestion as any).columnB || 'Column B' }}
-                      </span>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
+                  
+                  <!-- Left side: Column A with selection dropdown -->
+                  <div class="space-y-4">
+                    <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-4 pl-8">{{ (activeQuestion as any).columnA || 'Column A' }}</h4>
+                    <template v-for="(pair, pIdx) in (activeQuestion as any).pairs" :key="pIdx">
+                      <div
+                        v-if="pair.left && pair.left.trim() !== ''"
+                        class="flex items-center gap-3"
+                      >
+                        <!-- Number Identifier -->
+                        <span class="text-xs font-bold text-slate-500 w-5 text-right shrink-0">{{ Number(pIdx) + 1 }}.</span>
+                        
+                        <!-- Column A box -->
+                        <div class="flex-1 flex items-center justify-between rounded-xl border border-indigo-800/60 bg-indigo-950/30 pl-4 pr-2 py-2 text-xs font-semibold text-indigo-100 min-h-[48px] shadow-sm">
+                          <!-- Use v-html to parse rich text tags properly -->
+                          <span class="pr-3 leading-relaxed prose prose-invert prose-p:my-0 prose-sm" v-html="pair.left"></span>
+                          
+                          <!-- Identifier Dropdown (A, B, C...) -->
+                          <div class="relative shrink-0 w-[52px]">
+                            <select
+                              :value="matchingAnswers[activeQuestion.id]?.[Number(pIdx)] || ''"
+                              @change="handleMatchingAnswer(activeQuestion.id, Number(pIdx), ($event.target as HTMLSelectElement).value)"
+                              class="w-full appearance-none rounded-lg border border-indigo-500/40 bg-indigo-900/50 pl-3 pr-6 py-2 text-[11px] font-black font-mono text-white focus:border-indigo-400 focus:bg-indigo-800 transition-colors cursor-pointer"
+                            >
+                              <option value="" disabled>-</option>
+                              <option
+                                v-for="(p, rIdx) in (activeQuestion as any).pairs"
+                                :key="'opt-'+rIdx"
+                                :value="p.right"
+                              >
+                                {{ String.fromCharCode(65 + rIdx) }}
+                              </option>
+                            </select>
+                            <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+
+                  <!-- Right side: Column B options display -->
+                  <div class="space-y-4">
+                    <h4 class="text-[10px] font-black uppercase tracking-widest text-teal-400 mb-4">{{ (activeQuestion as any).columnB || 'Column B' }}</h4>
+                    <div class="flex flex-col gap-4 pt-1">
+                      <div
+                        v-for="(pair, rIdx) in (activeQuestion as any).pairs"
+                        :key="'right-'+rIdx"
+                        class="flex items-center gap-4 text-xs bg-slate-900/50 p-2 pr-4 rounded-xl border border-slate-800/50"
+                      >
+                        <!-- Letter Identifier (A, B, C...) -->
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 border-2 border-slate-700 font-black font-mono text-[13px] text-white shadow-sm">
+                          {{ String.fromCharCode(65 + rIdx) }}
+                        </span>
+                        <!-- Column B text parsed as HTML -->
+                        <span class="font-medium text-slate-300 leading-relaxed prose prose-invert prose-p:my-0 prose-sm" v-html="pair.right"></span>
+                      </div>
                     </div>
                   </div>
 
-                  <!-- Matching Rows -->
-                  <div
-                    v-for="(pair, pIdx) in (activeQuestion as any).pairs"
-                    :key="pIdx"
-                    class="grid grid-cols-2 gap-4 items-center"
-                  >
-                    <!-- Left side — Column A item -->
-                    <div class="flex items-center gap-3 rounded-xl border border-indigo-800/60 bg-indigo-950/30 px-4 py-3 text-xs font-semibold text-indigo-200">
-                      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-700 text-[10px] font-black text-white">{{ Number(pIdx) + 1 }}</span>
-                      {{ pair.left }}
-                    </div>
-                    <!-- Right side — Column B dropdown -->
-                    <div class="relative">
-                      <select
-                        :value="matchingAnswers[activeQuestion.id]?.[Number(pIdx)] || ''"
-                        @change="handleMatchingAnswer(activeQuestion.id, Number(pIdx), ($event.target as HTMLSelectElement).value)"
-                        class="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-xs font-medium text-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none transition-colors appearance-none pr-8"
-                      >
-                        <option value="" disabled>— Select {{ (activeQuestion as any).columnB || 'match' }} —</option>
-                        <option
-                          v-for="(p, rIdx) in (activeQuestion as any).pairs"
-                          :key="rIdx"
-                          :value="p.right"
-                        >{{ p.right }}</option>
-                      </select>
-                      <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </div>
-                  </div>
                 </div>
               </template>
 
@@ -496,105 +609,41 @@ const confirmCancel = () => {
                <p class="text-slate-400 mt-2 max-w-md mx-auto">This exam does not contain any questions. It may have been published prematurely. Please contact your instructor.</p>
              </div>
           </div>
-        </div>
+          </div> <!-- End flex-1 space-y-6 -->
 
-        <!-- Bottom Question Controls -->
-        <div class="flex items-center justify-between">
-          <button
-            @click="currentIndex = Math.max(0, currentIndex - 1)"
-            :disabled="currentIndex === 0"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-xs font-bold text-slate-400 hover:text-white hover:border-slate-700 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-            <span>Back Question</span>
-          </button>
+          <!-- Bottom Question Controls (Moved Inside Card) -->
+          <div class="mt-8 pt-6 border-t border-slate-800 flex items-center justify-between">
+            <button
+              @click="currentIndex = Math.max(0, currentIndex - 1)"
+              :disabled="currentIndex === 0"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-xs font-bold text-slate-400 hover:text-white hover:border-slate-700 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+              <span>Back Question</span>
+            </button>
 
-          <span class="text-xs font-bold font-mono text-slate-500 hidden sm:inline-block">
-            SECURE BUFFER: ALL INPUTS SAVED REDUNDANTLY
-          </span>
+            <span class="text-xs font-bold font-mono text-slate-500 hidden sm:inline-block">
+              SECURE BUFFER: ALL INPUTS SAVED REDUNDANTLY
+            </span>
 
-          <button
-            v-if="currentIndex < questions.length - 1"
-            @click="currentIndex = Math.min(questions.length - 1, currentIndex + 1)"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
-          >
-            <span>Next Question</span>
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-          </button>
-          <button
-            v-else
-            @click="showConfirmSubmit = true"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-colors"
-          >
-            <span>Finish & Submit</span>
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-          </button>
-        </div>
-
-      </div>
-
-      <!-- Right Side: Proctors integrity log & Exam conditions (3 Cols) -->
-      <div class="xl:col-span-3 space-y-6">
-        
-        <!-- Active Proctor Logs -->
-        <div class="rounded-xl border border-slate-800 bg-slate-950 p-5 space-y-4">
-          <div>
-            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <svg class="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-              Auditor Live Logs
-            </h4>
-            <p class="text-[11px] text-slate-500 mt-0.5">Continuous integrity audit metrics</p>
-          </div>
-
-          <div class="space-y-3 text-[11px] font-mono text-slate-400">
-            <div class="flex justify-between border-b border-slate-900 pb-2">
-              <span>Lockdown Status:</span>
-              <span class="text-emerald-400 font-bold">SECURE</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-900 pb-2">
-              <span>Tab focus limits:</span>
-              <span :class="tabSwitches > 0 ? 'text-amber-400' : 'text-slate-400'">
-                {{ tabSwitches }} of 3 switches
-              </span>
-            </div>
-            <div class="flex justify-between border-b border-slate-900 pb-2">
-              <span>Connected servers:</span>
-              <span>Dessie-Primary-Node-01</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-900 pb-2">
-              <span>Integrity Index:</span>
-              <span class="text-emerald-400 font-bold">99.8% Perfect</span>
-            </div>
-            <div class="flex justify-between pb-1">
-              <span>IP Address logged:</span>
-              <span>10.124.93.18</span>
-            </div>
-          </div>
-
-          <div class="rounded-lg bg-rose-950/20 p-3 border border-rose-900/30 text-[10px] text-rose-400 flex items-start gap-2">
-            <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            <span>Warning: Do not open DevTools console or any terminal window. Doing so results in direct exam termination.</span>
+            <button
+              v-if="currentIndex < questions.length - 1"
+              @click="currentIndex = Math.min(questions.length - 1, currentIndex + 1)"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
+            >
+              <span>Next Question</span>
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+            <button
+              v-else
+              @click="showConfirmSubmit = true"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-colors"
+            >
+              <span>Finish & Submit</span>
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            </button>
           </div>
         </div>
-
-        <!-- Official Course Guidelines -->
-        <div class="rounded-xl border border-slate-800 bg-slate-950 p-5 space-y-3">
-          <h4 class="text-xs font-bold text-white uppercase tracking-wider">Candidate Guidelines</h4>
-          <ul class="text-xs text-slate-400 space-y-2 list-disc list-inside font-sans leading-relaxed">
-            <li>Each question awards 10 marks equally. No negative marking is applied.</li>
-            <li>Calculations can be done on a blank sheet of paper within webcam frame.</li>
-            <li>Once submitted, you will receive an immediate score summary sheet.</li>
-            <li>For assistance, hit the proctor chat icon (contact Dr. Abraham).</li>
-          </ul>
-        </div>
-
-        <!-- Quick Exit trigger -->
-        <button
-          @click="confirmCancel"
-          class="w-full rounded-xl border border-rose-950 bg-rose-950/10 text-rose-400 py-2.5 text-xs font-bold hover:bg-rose-950/30 transition-all border-dashed"
-        >
-          Suspend Session & Go Back
-        </button>
 
       </div>
     </div>
