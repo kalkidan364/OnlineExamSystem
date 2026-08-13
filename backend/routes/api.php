@@ -117,6 +117,11 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
         // Reports & Results Management
         Route::get('/reports', [InstructorReportController::class, 'index']);
+        Route::get('/results', [\App\Http\Controllers\Api\V1\InstructorResultController::class, 'index']);
+        Route::get('/results/{examId}', [\App\Http\Controllers\Api\V1\InstructorResultController::class, 'showExamResults']);
+        Route::get('/results/{examId}/student/{studentId}', [\App\Http\Controllers\Api\V1\InstructorResultController::class, 'showStudentResult']);
+        Route::post('/results/{examId}/student/{studentId}/save', [\App\Http\Controllers\Api\V1\InstructorResultController::class, 'saveGrades']);
+        Route::post('/results/{examId}/student/{studentId}/publish', [\App\Http\Controllers\Api\V1\InstructorResultController::class, 'publishResult']);
 
         // Instructor profile — name, department, year_level, section (for header)
         Route::get('/me', function (Request $request) {

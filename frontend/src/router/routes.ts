@@ -145,6 +145,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'StudentExamTake',
     component: () => import('../modules/student/views/ExamTake.vue')
   },
+  {
+    path: '/student/results',
+    name: 'StudentResults',
+    component: () => import('../modules/student/views/Results.vue')
+  },
 
   // ── Super Admin Routes ──
   {

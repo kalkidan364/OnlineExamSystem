@@ -132,7 +132,7 @@ const handleQuickAction = (actionKey: 'take-exam' | 'view-results' | 'download-r
       }
       break
     case 'view-results':
-      document.getElementById('recent-results-section')?.scrollIntoView({ behavior: 'smooth' })
+      router.push('/student/results')
       break
     case 'download-results':
       isTranscriptOpen.value = true

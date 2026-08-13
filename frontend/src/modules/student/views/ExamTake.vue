@@ -20,7 +20,7 @@ const examDisplayName = ref('')
 const TYPE_LABELS: Record<string, string> = {
   multiple_choice: 'Multiple Choice',
   true_false:      'True / False',
-  matching:        'Problem Solving',
+  matching:        'Matching',
   short_answer:    'Short Answer',
   fill_blank:      'Fill in the Blank',
   essay:           'Essay',

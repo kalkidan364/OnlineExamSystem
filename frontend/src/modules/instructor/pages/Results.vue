@@ -36,12 +36,12 @@ onMounted(() => {
         <div>
           <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Course Information</div>
           <div class="flex items-center gap-3 mb-1">
-            <h2 class="text-xl font-extrabold text-slate-800">Database Systems</h2>
-            <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-600 rounded-md">Active</span>
+            <h2 class="text-xl font-extrabold text-slate-800">{{ resultStore.course.name }}</h2>
+            <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-600 rounded-md">{{ resultStore.course.status }}</span>
           </div>
           <div class="flex items-center gap-4 text-[13px] text-slate-500 font-medium">
-            <span>Course Code: CS 304</span>
-            <span>Instructor: Dr. Abebe Kebede</span>
+            <span>Course Code: {{ resultStore.course.code }}</span>
+            <span>Instructor: {{ resultStore.course.instructor_name }}</span>
           </div>
         </div>
       </div>
@@ -55,7 +55,7 @@ onMounted(() => {
           </div>
           <div class="flex flex-col">
             <span class="text-[10px] font-bold text-slate-400">Semester</span>
-            <span class="text-[13px] font-bold text-slate-700">Semester I</span>
+            <span class="text-[13px] font-bold text-slate-700">{{ resultStore.course.semester }}</span>
           </div>
         </div>
         <!-- Academic Year -->
@@ -65,7 +65,7 @@ onMounted(() => {
           </div>
           <div class="flex flex-col">
             <span class="text-[10px] font-bold text-slate-400">Academic Year</span>
-            <span class="text-[13px] font-bold text-slate-700">2025 / 2026</span>
+            <span class="text-[13px] font-bold text-slate-700">{{ resultStore.course.academic_year }}</span>
           </div>
         </div>
         <!-- Department -->
@@ -75,26 +75,26 @@ onMounted(() => {
           </div>
           <div class="flex flex-col">
             <span class="text-[10px] font-bold text-slate-400">Department</span>
-            <span class="text-[13px] font-bold text-slate-700">Computer Science</span>
+            <span class="text-[13px] font-bold text-slate-700">{{ resultStore.course.department }}</span>
           </div>
         </div>
       </div>
     </div>
     
-    <!-- Main Content Grid -->
-    <div class="flex flex-col xl:flex-row gap-6">
+    <!-- Main Content Area -->
+    <div class="space-y-6">
       
-      <!-- Left Column (Stats + Table) -->
-      <div class="flex-1 min-w-0">
+      <!-- Top Section: Stats & Full-Width Results Table -->
+      <div class="w-full">
         <ResultsStats />
         <ResultsTable />
       </div>
 
-      <!-- Right Column (Sidebar Widgets) -->
-      <div class="w-full xl:w-[260px] space-y-4">
-        <OverallPerformanceWidget />
-        <PerformanceSummaryWidget />
-        <ResultsQuickActionsWidget />
+      <!-- Bottom Section: 3-Column Grid (Grading Progress, Pending Manual Grading, Quick Actions) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <OverallPerformanceWidget class="h-full" />
+        <PerformanceSummaryWidget class="h-full" />
+        <ResultsQuickActionsWidget class="h-full" />
       </div>
 
     </div>

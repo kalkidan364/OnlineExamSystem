@@ -114,7 +114,6 @@ const getTypeBadge = (type: string) => {
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Submitted</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Graded</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Published</th>
-            <th class="pb-4 pt-4 px-4 font-semibold text-center">Average Score</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Status</th>
             <th class="pb-4 pt-4 pl-4 pr-4 text-center font-semibold">Actions</th>
           </tr>
@@ -174,10 +173,6 @@ const getTypeBadge = (type: string) => {
             <td class="py-4 px-4 text-center">
               <svg v-if="exam.is_published" class="w-4 h-4 text-emerald-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
               <svg v-else class="w-4 h-4 text-rose-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </td>
-            
-            <td class="py-4 px-4 text-center text-[12px] font-bold text-slate-700">
-              {{ exam.average_score ? exam.average_score + '%' : '-' }}
             </td>
             
             <td class="py-4 px-4 text-center">

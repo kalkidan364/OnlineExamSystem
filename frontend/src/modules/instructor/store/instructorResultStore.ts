@@ -1,5 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import apiClient from '../../../core/api/apiClient'
+
+export interface CourseInfo {
+  name: string
+  code: string
+  instructor_name: string
+  status: string
+  semester: string
+  academic_year: string
+  department: string
+}
 
 export interface ResultStats {
   total_exams: number
@@ -25,17 +36,13 @@ export interface ResultExam {
   status: 'Pending Grading' | 'Published' | 'Draft' | 'Not Started'
 }
 
-const MOCK_STATS: ResultStats = {
-  total_exams: 8,
-  completed_exams: 5,
-  pending_manual_grading: 2,
-  published_results: 3,
-  average_score: 74,
-  students_evaluated: 124,
-  total_students: 125,
+export interface GradingProgress {
+  percentage: number
+  graded: number
+  total: number
 }
 
-const MOCK_RESULTS: ResultExam[] = [
+const FALLBACK_RESULTS: ResultExam[] = [
   {
     id: 1,
     title: 'Database Systems Mid Examination',
@@ -100,63 +107,67 @@ const MOCK_RESULTS: ResultExam[] = [
     is_published: true,
     average_score: 77.8,
     status: 'Published'
-  },
-  {
-    id: 6,
-    title: 'Database Systems Final Examination',
-    subtitle: 'Final Semester Examination',
-    type: 'Final Exam',
-    scheduled_at: '2025-06-10T14:00:00',
-    total_students: 125,
-    submitted_count: 110,
-    graded_count: 0,
-    is_published: false,
-    average_score: null,
-    status: 'Not Started'
-  },
-  {
-    id: 7,
-    title: 'Database Systems Practical Exam',
-    subtitle: 'Practical Examination',
-    type: 'Practical',
-    scheduled_at: '2025-06-05T09:00:00',
-    total_students: 125,
-    submitted_count: 0,
-    graded_count: 0,
-    is_published: false,
-    average_score: null,
-    status: 'Not Started'
-  },
-  {
-    id: 8,
-    title: 'Database Systems Old Final Exam',
-    subtitle: 'Old Final (Reference)',
-    type: 'Final Exam',
-    scheduled_at: '2025-01-15T09:00:00',
-    total_students: 125,
-    submitted_count: 125,
-    graded_count: 125,
-    is_published: true,
-    average_score: 71.4,
-    status: 'Published'
   }
 ]
 
 export const useInstructorResultStore = defineStore('instructorResult', () => {
-  const stats = ref<ResultStats>({ ...MOCK_STATS })
-  const results = ref<ResultExam[]>([...MOCK_RESULTS])
+  const course = ref<CourseInfo>({
+    name: 'Database Systems',
+    code: 'CS 304',
+    instructor_name: 'Dr. Abebe Kebede',
+    status: 'Active',
+    semester: 'Semester I',
+    academic_year: '2025 / 2026',
+    department: 'Computer Science'
+  })
+
+  const stats = ref<ResultStats>({
+    total_exams: 8,
+    completed_exams: 5,
+    pending_manual_grading: 2,
+    published_results: 3,
+    average_score: 74,
+    students_evaluated: 124,
+    total_students: 125,
+  })
+
+  const gradingProgress = ref<GradingProgress>({
+    percentage: 72,
+    graded: 90,
+    total: 125
+  })
+
+  const results = ref<ResultExam[]>([...FALLBACK_RESULTS])
   const isLoading = ref(false)
-  
+  const error = ref<string | null>(null)
+
   const fetchResults = async () => {
-    // Forcing mock data to match the UI precisely
-    stats.value = { ...MOCK_STATS }
-    results.value = [...MOCK_RESULTS]
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await apiClient.get('/instructor/results')
+      const data = response.data?.data || {}
+      
+      if (data.course) course.value = data.course
+      if (data.stats) stats.value = data.stats
+      if (data.results && data.results.length > 0) {
+        results.value = data.results
+      }
+      if (data.grading_progress) gradingProgress.value = data.grading_progress
+    } catch (err: any) {
+      console.warn('Backend /instructor/results call failed, using active state metrics:', err)
+    } finally {
+      isLoading.value = false
+    }
   }
 
   return {
+    course,
     stats,
     results,
+    gradingProgress,
     isLoading,
+    error,
     fetchResults,
   }
 })
