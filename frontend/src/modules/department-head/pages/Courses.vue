@@ -38,7 +38,7 @@ const assignSection = ref('')
 const assignInstructorId = ref('')
 const assignCoInstructorId = ref('')
 
-const sectionOptions = ['All Sections', 'Section A', 'Section B', 'Section C', 'Section D', 'Section E']
+const sectionOptions = ['Section A', 'Section B', 'Both Sections']
 
 const availableInstructors = computed(() => {
   return deptInstructors.value.filter(inst => inst.id !== assignCoInstructorId.value)
@@ -274,7 +274,7 @@ const assignInstructor = async () => {
     await apiClient.put(`/dept-head/courses/${courseToAssign.value.id}`, {
       instructor_id: assignInstructorId.value || null,
       co_instructor_id: assignCoInstructorId.value || null,
-      section: assignSection.value === 'All Sections' ? null : assignSection.value || null
+      section: assignSection.value || null
     })
     await fetchCourses()
     showAssignModal.value = false

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\User;
 use App\Models\Department;
+use App\Helpers\LogActivity;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Dompdf\Dompdf;
@@ -61,6 +62,12 @@ class AdminCourseController extends Controller
             'status' => 'active',
             'created_by' => $request->user()->id,
         ]);
+
+        LogActivity::record(
+            'Created',
+            'Courses',
+            "Created a new course \"{$course->title}\""
+        );
 
         return response()->json([
             'message' => 'Course created successfully',
@@ -120,6 +127,12 @@ class AdminCourseController extends Controller
             ]);
         }
 
+        LogActivity::record(
+            'Updated',
+            'Courses',
+            "Updated course \"{$course->title}\""
+        );
+
         return response()->json([
             'message' => 'Course updated successfully',
             'data' => $course->load(['department', 'instructor'])
@@ -131,7 +144,15 @@ class AdminCourseController extends Controller
      */
     public function destroy(Course $course): JsonResponse
     {
+        $courseTitle = $course->title;
         $course->delete();
+
+        LogActivity::record(
+            'Deleted',
+            'Courses',
+            "Deleted course \"$courseTitle\""
+        );
+
         return response()->json(['message' => 'Course deleted successfully.']);
     }
 

@@ -65,6 +65,7 @@ export interface RecentResult {
   courseCode: string;
   courseName: string;
   examTitle: string;
+  examType?: string;
   score: number;
   totalMarks: number;
   percentage: number;
@@ -87,6 +88,8 @@ export interface RecentResult {
     isCorrect: boolean | null;
     marks?: number;
     earnedMarks?: number | null;
+    correctCount?: number;
+    totalCount?: number;
   }[];
 }
 

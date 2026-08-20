@@ -410,39 +410,45 @@ class InstructorResultController extends Controller
 
                 // ── Matching ─────────────────────────────────────────────────
                 if ($isMatching) {
-                    // options = [{left: "A item", right: "B item"}, ...]
-                    // student_answer may be JSON string like {"0":"B","1":"A"} or null
                     $studentPairs = [];
-                    if ($studentAns) {
-                        if (is_string($studentAns)) {
-                            $decoded = json_decode($studentAns, true);
-                            $studentPairs = is_array($decoded) ? $decoded : [];
-                        } elseif (is_array($studentAns)) {
-                            $studentPairs = $studentAns;
+                    if ($studentAns && is_string($studentAns)) {
+                        foreach (explode(',', $studentAns) as $part) {
+                            $pieces = explode(':', $part, 2);
+                            if (count($pieces) === 2) {
+                                $studentPairs[(string)$pieces[0]] = strtoupper(trim($pieces[1]));
+                            }
                         }
+                    } elseif (is_array($studentAns)) {
+                        $studentPairs = $studentAns;
                     }
 
                     // Build Column A (left items) and Column B (right items, shuffled display)
-                    $pairs = collect($options)->map(function ($opt, $i) use ($studentPairs) {
+                    $pairs = collect($options)->map(function ($opt, $i) use ($studentPairs, $options) {
                         $leftText  = is_array($opt) ? strip_tags($opt['left']  ?? '') : '';
                         $rightText = is_array($opt) ? strip_tags($opt['right'] ?? '') : '';
                         $letter    = chr(65 + $i); // A, B, C, D for Column A items
 
                         // What did the student match this left item to?
-                        $studentMatch = $studentPairs[(string)$i] ?? ($studentPairs[$letter] ?? null);
+                        $studentMatchLetter = $studentPairs[(string)$i] ?? ($studentPairs[$letter] ?? '');
+                        
+                        // Look up the right text that corresponds to the student's selected letter
+                        $studentRightText = 'Not matched';
+                        if ($studentMatchLetter !== '') {
+                            $studentLetterIdx = ord($studentMatchLetter) - 65;
+                            if ($studentLetterIdx >= 0 && isset($options[$studentLetterIdx])) {
+                                $studentRightText = strip_tags($options[$studentLetterIdx]['right'] ?? 'Not matched');
+                            }
+                        }
 
-                        // The correct match is the right text of this pair
-                        // Map to a letter for the right column
-                        $correctLetter = chr(49 + $i); // 1, 2, 3... or use index
-                        $isRowCorrect  = $studentMatch !== null &&
-                            strtolower(trim($studentMatch)) === strtolower(trim($rightText));
+                        $isRowCorrect  = $studentMatchLetter !== '' &&
+                            $studentMatchLetter === $letter;
 
                         return [
                             'index'          => $i,
                             'left_letter'    => $letter,
                             'left_text'      => $leftText,
                             'right_text'     => $rightText,  // correct match
-                            'student_match'  => $studentMatch,
+                            'student_match'  => $studentRightText === 'Not matched' ? null : $studentRightText,
                             'is_correct'     => $isRowCorrect,
                         ];
                     })->values()->all();
@@ -453,7 +459,15 @@ class InstructorResultController extends Controller
                         return ['index' => $i, 'label' => (string)($i + 1), 'text' => $rightText];
                     })->values()->all();
 
-                    $allCorrect = collect($pairs)->every(fn($p) => $p['is_correct']);
+                    $colACounter = count($pairs);
+                    $correctMatchCount = collect($pairs)->where('is_correct', true)->count();
+                    $allCorrect = $colACounter > 0 && $correctMatchCount === $colACounter;
+
+                    $marksPerItem = (float)($q->marks_per_item ?? 0);
+                    if ($marksPerItem <= 0 && $colACounter > 0) {
+                        $marksPerItem = round($q->marks / $colACounter, 2);
+                    }
+                    $earnedMarks = round($correctMatchCount * $marksPerItem, 2);
 
                     return [
                         'id'             => $q->id,
@@ -464,14 +478,14 @@ class InstructorResultController extends Controller
                         'options'        => [],           // not used for matching
                         'matching_pairs' => $pairs,       // per-row result
                         'column_b'       => $columnB,     // right-side items list
-                        'correct_answer' => $correct,
-                        'student_answer' => $studentAns,
+                        'correct_answer' => 'See correct matches below.',
+                        'student_answer' => $studentAns ? 'Attempted' : 'Not answered',
                         'marks'          => $q->marks,
-                        'scored'         => null,         // manual grading
-                        'is_auto'        => false,
+                        'scored'         => $earnedMarks,
+                        'is_auto'        => true,
                         'is_correct'     => $allCorrect,
                         'explanation'    => strip_tags($q->explanation ?? ''),
-                        'manual_score'   => $q->manual_score ?? null,
+                        'manual_score'   => null,
                     ];
                 }
 
@@ -491,7 +505,7 @@ class InstructorResultController extends Controller
                     'is_auto'        => false,
                     'is_correct'     => null,
                     'explanation'    => strip_tags($q->explanation ?? ''),
-                    'manual_score'   => $q->manual_score ?? null,
+                    'manual_score'   => $answers['_manual_scores'][$q->id] ?? null,
                 ];
             })->values()->all();
 
@@ -632,11 +646,14 @@ class InstructorResultController extends Controller
             $pct         = $totalMarks > 0 ? round(($finalScore / $totalMarks) * 100, 1) : 0;
             $grade       = $this->calculateGrade($pct);
 
+            $answers['_manual_scores'] = $manualScores;
+
             $attempt->update([
                 'score'      => $finalScore,
                 'percentage' => $pct,
                 'grade'      => $grade,
                 'status'     => 'graded',
+                'answers'    => $answers,
             ]);
 
             return response()->json([
@@ -668,7 +685,7 @@ class InstructorResultController extends Controller
             }
 
             // Mark the exam as published so students can see results
-            Exam::where('id', (int)$examId)->update(['status' => 'published', 'is_published' => true]);
+            Exam::where('id', (int)$examId)->update(['status' => 'published', 'published_at' => now()]);
 
             return response()->json([
                 'message'     => 'Results published successfully',

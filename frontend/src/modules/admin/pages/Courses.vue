@@ -23,7 +23,7 @@ const assignInstructorId = ref('')
 const assignCoInstructorId = ref('')
 const isLoading = ref(false)
 
-const sectionOptions = ['All Sections', 'Section A', 'Section B', 'Section C', 'Section D', 'Section E']
+const sectionOptions = ['Section A', 'Section B', 'Both Sections']
 
 const currentInstructorInfo = computed(() => {
   if (!courseToAssign.value?.instructor) return null
@@ -283,7 +283,7 @@ const assignInstructor = async () => {
     await apiClient.put(`/admin/courses/${courseToAssign.value.id}`, {
       instructor_id: assignInstructorId.value || null,
       co_instructor_id: assignCoInstructorId.value || null,
-      section: assignSection.value === 'All Sections' ? null : assignSection.value || null
+      section: assignSection.value || null
     })
     await fetchCourses()
     showAssignModal.value = false

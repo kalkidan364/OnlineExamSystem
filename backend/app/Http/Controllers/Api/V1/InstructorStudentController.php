@@ -51,13 +51,24 @@ class InstructorStudentController extends Controller
         // Clean section name (e.g. "Section A" -> "A")
         $cleanSection = trim(str_ireplace('Section', '', $sectionName));
 
+        // Check if "Both Sections" is requested
+        $isBothSections = strcasecmp(trim($sectionName), 'Both Sections') === 0;
+
         $students = User::where('role', 'student')
             ->where('department_id', $department->id)
             ->where('year_level', $courseLevel)
-            ->where(function($query) use ($sectionName, $cleanSection) {
-                $query->where('section', $sectionName)
-                      ->orWhere('section', $cleanSection)
-                      ->orWhere('section', "Section $cleanSection");
+            ->where(function($query) use ($sectionName, $cleanSection, $isBothSections) {
+                if ($isBothSections) {
+                    // Include both Section A and Section B students
+                    $query->where('section', 'Section A')
+                          ->orWhere('section', 'A')
+                          ->orWhere('section', 'Section B')
+                          ->orWhere('section', 'B');
+                } else {
+                    $query->where('section', $sectionName)
+                          ->orWhere('section', $cleanSection)
+                          ->orWhere('section', "Section $cleanSection");
+                }
             })
             ->get();
 

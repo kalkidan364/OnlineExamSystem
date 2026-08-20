@@ -98,7 +98,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       {
         path: 'results/:examId/student/:studentId',
-        name: 'StudentResultDetail',
+        name: 'InstructorStudentResultDetail',
         component: () => import('../modules/instructor/pages/StudentResultDetail.vue')
       },
       {
@@ -150,6 +150,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'StudentResults',
     component: () => import('../modules/student/views/Results.vue')
   },
+  {
+    path: '/student/results/:attemptId',
+    name: 'StudentResultDetail',
+    component: () => import('../modules/student/views/StudentResultDetail.vue')
+  },
 
   // ── Super Admin Routes ──
   {
@@ -195,6 +200,11 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'reports',
         name: 'AdminReports',
         component: () => import('../modules/admin/pages/Reports.vue')
+      },
+      {
+        path: 'activity-logs',
+        name: 'AdminActivityLogs',
+        component: () => import('../modules/admin/pages/ActivityLogs.vue')
       },
       {
         path: 'departments',
@@ -252,6 +262,11 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'reports',
         name: 'DeptHeadReports',
         component: () => import('../modules/department-head/pages/Reports.vue')
+      },
+      {
+        path: 'activity-logs',
+        name: 'DeptHeadActivityLogs',
+        component: () => import('../modules/department-head/pages/ActivityLogs.vue')
       },
       {
         path: 'settings',

@@ -485,7 +485,7 @@ const iconStyles = [
                           
                           <div v-if="q.options && q.options.length > 0" class="flex flex-col gap-2 mb-4 ml-2">
                             <div v-for="(opt, oIdx) in q.options" :key="oIdx" class="flex items-start gap-2">
-                              <span class="text-[11px] font-bold text-slate-400 mt-0.5">{{ String.fromCharCode(65 + oIdx) }}.</span>
+                              <span class="text-[11px] font-bold text-slate-400 mt-0.5">{{ String.fromCharCode(65 + Number(oIdx)) }}.</span>
                               <p class="text-[12px] text-slate-600" v-html="typeof opt === 'string' ? opt : (opt.text || opt)"></p>
                             </div>
                           </div>

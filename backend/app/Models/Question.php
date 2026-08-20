@@ -23,6 +23,7 @@ class Question extends Model
         'explanation',
         'image_url',
         'marks',
+        'marks_per_item',
         'difficulty',
         'chapter',
         'topic',
@@ -37,9 +38,10 @@ class Question extends Model
     protected function casts(): array
     {
         return [
-            'options'       => 'array',
-            'settings'      => 'array',
-            'question_data' => 'array',
+            'options'        => 'array',
+            'settings'       => 'array',
+            'question_data'  => 'array',
+            'marks_per_item' => 'float',
         ];
     }
 

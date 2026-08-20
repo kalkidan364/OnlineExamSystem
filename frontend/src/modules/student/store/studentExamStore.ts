@@ -213,6 +213,8 @@ export const useStudentExamStore = defineStore('studentExam', () => {
           isCorrect:     q.isCorrect,       // null if pending
           marks:         q.marks,
           earnedMarks:   q.earnedMarks,     // null if pending
+          correctCount:  q.correctCount,
+          totalCount:    q.totalCount,
         })),
       }
 
@@ -243,6 +245,7 @@ export const useStudentExamStore = defineStore('studentExam', () => {
         courseCode: r.courseCode,
         courseName: r.courseName,
         examTitle: r.examTitle,
+        examType: r.examType,
         score: r.score,
         totalMarks: r.totalMarks,
         percentage: r.percentage,
@@ -254,6 +257,24 @@ export const useStudentExamStore = defineStore('studentExam', () => {
     } catch (err: any) {
       console.error('Failed to fetch results', err)
       results.value = []
+    }
+  }
+
+  /**
+   * Fetch detailed result breakdown for a specific attempt from API.
+   */
+  const fetchResultDetail = async (attemptId: number | string) => {
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await apiClient.get(`/student/results/${attemptId}`)
+      return response.data.data
+    } catch (err: any) {
+      console.error('Failed to fetch result detail', err)
+      error.value = err.response?.data?.message || 'Failed to load exam result details'
+      throw err
+    } finally {
+      isLoading.value = false
     }
   }
 
@@ -270,5 +291,6 @@ export const useStudentExamStore = defineStore('studentExam', () => {
     startExam,
     submitExam,
     fetchResults,
+    fetchResultDetail,
   }
 })

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Department;
+use App\Helpers\LogActivity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -58,7 +59,13 @@ class AdminUserController extends Controller
             'phone'         => 'nullable|string|max:50',
             'gender'        => 'nullable|in:Male,Female,Other',
             'password'      => 'required|string|min:8',
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
+
+        $profilePicturePath = null;
+        if ($request->hasFile('profile_picture')) {
+            $profilePicturePath = $request->file('profile_picture')->store('avatars', 'public');
+        }
 
         $user = User::create([
             'name'          => $request->name,
@@ -76,7 +83,21 @@ class AdminUserController extends Controller
             'phone'         => $request->phone,
             'gender'        => $request->gender,
             'password'      => Hash::make($request->password),
+            'profile_picture' => $profilePicturePath,
         ]);
+
+        $roleName = ucfirst(str_replace('_', ' ', $user->role));
+        $module = match($user->role) {
+            'student'   => 'Students',
+            'instructor' => 'Instructors',
+            'dept_head' => 'Instructors',
+            default     => 'Users',
+        };
+        LogActivity::record(
+            'Created',
+            $module,
+            "Created a new $roleName \"{$user->name}\""
+        );
 
         return response()->json([
             'data'    => $user->load('department:id,name'),
@@ -103,6 +124,7 @@ class AdminUserController extends Controller
             'phone'         => 'nullable|string|max:50',
             'gender'        => 'nullable|in:Male,Female,Other',
             'password'      => 'nullable|string|min:8',
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $data = $request->only([
@@ -111,11 +133,31 @@ class AdminUserController extends Controller
             'phone', 'gender', 'status'
         ]);
 
+        if ($request->hasFile('profile_picture')) {
+            if ($user->profile_picture && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_picture)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_picture);
+            }
+            $data['profile_picture'] = $request->file('profile_picture')->store('avatars', 'public');
+        }
+
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
 
         $user->update($data);
+
+        $roleName = ucfirst(str_replace('_', ' ', $user->role));
+        $module = match($user->role) {
+            'student'   => 'Students',
+            'instructor' => 'Instructors',
+            'dept_head' => 'Instructors',
+            default     => 'Users',
+        };
+        LogActivity::record(
+            'Updated',
+            $module,
+            "Updated $roleName \"{$user->name}\""
+        );
 
         return response()->json([
             'data'    => $user->load('department:id,name'),
@@ -128,7 +170,22 @@ class AdminUserController extends Controller
      */
     public function destroy(User $user): JsonResponse
     {
+        $roleName = ucfirst(str_replace('_', ' ', $user->role));
+        $userName = $user->name;
+        $module = match($user->role) {
+            'student'   => 'Students',
+            'instructor' => 'Instructors',
+            'dept_head' => 'Instructors',
+            default     => 'Users',
+        };
+        
         $user->delete();
+
+        LogActivity::record(
+            'Deleted',
+            $module,
+            "Deleted $roleName \"$userName\""
+        );
 
         return response()->json(['message' => 'User deleted successfully.']);
     }

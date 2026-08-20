@@ -53,6 +53,7 @@ const fetchInstructors = async () => {
     allInstructors.value = (res.data.data || []).map((u: any) => ({
       ...u,
       avatar: u.name ? u.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
+      profilePicture: u.profile_picture ? `http://localhost:8000/storage/${u.profile_picture}` : null,
       status: u.status || 'active',
       joined: new Date(u.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
       departmentName: u.department?.name || '—',
@@ -176,12 +177,16 @@ const viewInstructor = (inst: any) => { viewingInstructor.value = inst }
 const closeView = () => { viewingInstructor.value = null }
 const openAdd = () => {
   newInstructor.value = { name:'', email:'', phone:'', gender:'', department_id:'', semester:'', year:'', employeeId:'', username:'', password:'', confirmPassword:'', profilePicture: null }
+  if (previewUrl) previewUrl.value = null
   showPassword.value = false
   showConfirmPassword.value = false
   permissions.value.forEach(p => p.checked = true)
   showAddPage.value = true
 }
-const closeAdd = () => { showAddPage.value = false }
+const closeAdd = () => { 
+  showAddPage.value = false 
+  if (previewUrl) previewUrl.value = null
+}
 const editPermissions = ref([
   { id: 'create_exams', key: 'createExams', label: 'Create Exams', desc: 'Create and manage exams', checked: true },
   { id: 'view_results', key: 'viewResults', label: 'View Results', desc: 'View student results and analytics', checked: true },
@@ -191,12 +196,27 @@ const editPermissions = ref([
   { id: 'generate_reports', key: 'generateReports', label: 'Generate Reports', desc: 'Generate and export reports', checked: true }
 ])
 const fileInput = ref<HTMLInputElement | null>(null)
+const previewUrl = ref<string | null>(null)
 const triggerFileInput = () => { if (fileInput.value) fileInput.value.click() }
+
 const editFileInput = ref<HTMLInputElement | null>(null)
+const editPreviewUrl = ref<string | null>(null)
 const triggerEditFileInput = () => { if (editFileInput.value) editFileInput.value.click() }
+
 const handleProfilePicture = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0]
-  if (file) newInstructor.value.profilePicture = file
+  if (file) {
+    newInstructor.value.profilePicture = file
+    previewUrl.value = URL.createObjectURL(file)
+  }
+}
+
+const handleEditProfilePicture = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (file) {
+    editInstructorForm.value.profilePicture = file
+    editPreviewUrl.value = URL.createObjectURL(file)
+  }
 }
 
 const openEdit = (instructor: any) => {
@@ -208,24 +228,54 @@ const openEdit = (instructor: any) => {
     password: '',
     profilePicture: null
   }
+  if (editPreviewUrl) editPreviewUrl.value = instructor.profilePicture || null
   // Initialize editPermissions (in a real app, populate from instructor.permissions)
   editPermissions.value.forEach(p => p.checked = true)
   showEditModal.value = true
 }
 
-const saveEdit = () => {
+const saveEdit = async () => {
   isLoading.value = true
-  setTimeout(() => {
-    const index = allInstructors.value.findIndex(i => i.id === editInstructorForm.value.id)
-    if (index !== -1) {
-      allInstructors.value[index] = { ...allInstructors.value[index], ...editInstructorForm.value }
-      if (viewingInstructor.value?.id === editInstructorForm.value.id) {
-        viewingInstructor.value = { ...allInstructors.value[index] }
+  try {
+    const formData = new FormData()
+    formData.append('_method', 'PUT')
+    formData.append('name', editInstructorForm.value.name)
+    formData.append('email', editInstructorForm.value.email)
+    
+    if (editInstructorForm.value.username) formData.append('username', editInstructorForm.value.username)
+    if (editInstructorForm.value.phone) formData.append('phone', editInstructorForm.value.phone)
+    if (editInstructorForm.value.gender) formData.append('gender', editInstructorForm.value.gender)
+    if (editInstructorForm.value.department_id) formData.append('department_id', editInstructorForm.value.department_id)
+    if (editInstructorForm.value.employeeId) formData.append('id_no', editInstructorForm.value.employeeId)
+    
+    // Check if it's a File object (meaning a new image was uploaded)
+    if (editInstructorForm.value.profilePicture instanceof File) {
+      formData.append('profile_picture', editInstructorForm.value.profilePicture)
+    }
+
+    await apiClient.post(`/admin/users/${editInstructorForm.value.id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    await fetchInstructors()
+    showEditModal.value = false
+    
+    // Update viewingInstructor if it was the one edited
+    if (viewingInstructor.value?.id === editInstructorForm.value.id) {
+      const updatedInst = allInstructors.value.find(i => i.id === editInstructorForm.value.id)
+      if (updatedInst) viewingInstructor.value = { ...updatedInst }
+    }
+  } catch (err: any) {
+    let msg = 'Failed to update instructor.'
+    if (err.response?.data) {
+      msg = err.response.data.message || msg
+      if (err.response.data.errors) {
+        msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
       }
     }
-    showEditModal.value = false
+    alert(msg)
+  } finally {
     isLoading.value = false
-  }, 300)
+  }
 }
 
 const addInstructor = async () => {
@@ -236,18 +286,25 @@ const addInstructor = async () => {
   }
   isLoading.value = true
   try {
-    await apiClient.post('/admin/users', {
-      name: newInstructor.value.name,
-      email: newInstructor.value.email,
-      username: newInstructor.value.username,
-      phone: newInstructor.value.phone,
-      gender: newInstructor.value.gender,
-      role: 'instructor',
-      department_id: newInstructor.value.department_id || null,
-      password: newInstructor.value.password,
-      year_level: newInstructor.value.year || null,
-      semester: settingsStore.semester || null,
-      id_no: newInstructor.value.employeeId || null,
+    const formData = new FormData()
+    formData.append('name', newInstructor.value.name)
+    formData.append('email', newInstructor.value.email)
+    formData.append('role', 'instructor')
+    formData.append('password', newInstructor.value.password)
+    
+    if (newInstructor.value.username) formData.append('username', newInstructor.value.username)
+    if (newInstructor.value.phone) formData.append('phone', newInstructor.value.phone)
+    if (newInstructor.value.gender) formData.append('gender', newInstructor.value.gender)
+    if (newInstructor.value.department_id) formData.append('department_id', newInstructor.value.department_id)
+    if (newInstructor.value.year) formData.append('year_level', newInstructor.value.year)
+    if (settingsStore.semester) formData.append('semester', settingsStore.semester)
+    if (newInstructor.value.employeeId) formData.append('id_no', newInstructor.value.employeeId)
+    if (newInstructor.value.profilePicture) {
+      formData.append('profile_picture', newInstructor.value.profilePicture)
+    }
+
+    await apiClient.post('/admin/users', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
     await fetchInstructors()
     showAddPage.value = false
@@ -512,7 +569,8 @@ const handleImport = async (event: Event) => {
                 <tr v-for="inst in paginated" :key="inst.id" class="hover:bg-slate-50/50 transition-colors">
                   <td class="px-5 py-3">
                     <div class="flex items-center gap-3">
-                      <div :class="avatarBg(inst.id)" class="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0">
+                      <img v-if="inst.profilePicture" :src="inst.profilePicture" class="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200">
+                      <div v-else :class="avatarBg(inst.id)" class="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0">
                         {{ inst.avatar }}
                       </div>
                       <span class="text-[12px] font-bold text-slate-800 whitespace-nowrap">{{ inst.name }}</span>
@@ -819,12 +877,19 @@ const handleImport = async (event: Event) => {
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Profile Picture</label>
-                <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center hover:border-[#4338ca] hover:bg-slate-50 transition-colors cursor-pointer" @click="triggerFileInput">
+                <div class="relative border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center hover:border-[#4338ca] hover:bg-slate-50 transition-colors cursor-pointer overflow-hidden" @click="triggerFileInput">
                   <input type="file" ref="fileInput" class="hidden" accept="image/png, image/jpeg" @change="handleProfilePicture">
-                  <svg class="w-6 h-6 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                  <span class="text-[13px] font-bold text-slate-700 mb-1">Upload Photo</span>
-                  <span class="text-[11px] text-slate-400">PNG, JPG up to 2MB</span>
-                  <div v-if="newInstructor.profilePicture" class="mt-3 text-[12px] text-emerald-600 font-medium">{{ newInstructor.profilePicture.name }} selected</div>
+                  <template v-if="previewUrl">
+                    <img :src="previewUrl" class="w-full h-full object-cover absolute inset-0 opacity-20">
+                    <img :src="previewUrl" class="w-16 h-16 rounded-full object-cover z-10 border-2 border-white shadow-sm mb-2">
+                    <span class="text-[13px] font-bold text-[#4338ca] mb-1 z-10">Change Photo</span>
+                    <span class="text-[11px] text-slate-500 z-10 text-center truncate max-w-[80%]">{{ newInstructor.profilePicture?.name }}</span>
+                  </template>
+                  <template v-else>
+                    <svg class="w-6 h-6 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span class="text-[13px] font-bold text-slate-700 mb-1">Upload Photo</span>
+                    <span class="text-[11px] text-slate-400">PNG, JPG up to 2MB</span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -1029,10 +1094,17 @@ const handleImport = async (event: Event) => {
               </div>
               <div class="col-span-2">
                 <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Profile Picture</label>
-                <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center hover:border-[#4338ca] hover:bg-slate-50 transition-colors cursor-pointer" @click="triggerEditFileInput">
-                  <input type="file" ref="editFileInput" class="hidden" accept="image/png, image/jpeg" @change="(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if(f) editInstructorForm.profilePicture = f }">
-                  <span class="text-[12px] font-bold text-slate-700">Upload Photo</span>
-                  <div v-if="editInstructorForm.profilePicture" class="mt-1 text-[11px] text-emerald-600">{{ editInstructorForm.profilePicture.name }} selected</div>
+                <div class="relative border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center hover:border-[#4338ca] hover:bg-slate-50 transition-colors cursor-pointer overflow-hidden" @click="triggerEditFileInput">
+                  <input type="file" ref="editFileInput" class="hidden" accept="image/png, image/jpeg" @change="handleEditProfilePicture">
+                  <template v-if="editPreviewUrl">
+                    <img :src="editPreviewUrl" class="w-full h-full object-cover absolute inset-0 opacity-20">
+                    <img :src="editPreviewUrl" class="w-12 h-12 rounded-full object-cover z-10 border-2 border-white shadow-sm mb-1">
+                    <span class="text-[12px] font-bold text-[#4338ca] z-10">Change Photo</span>
+                    <span class="text-[10px] text-slate-500 z-10 text-center truncate max-w-[80%]">{{ editInstructorForm.profilePicture?.name || 'Current Photo' }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="text-[12px] font-bold text-slate-700">Upload Photo</span>
+                  </template>
                 </div>
               </div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Department <span class="text-rose-500">*</span></label>

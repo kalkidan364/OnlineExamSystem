@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\ActivityLog;
+use App\Helpers\LogActivity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,12 +99,13 @@ class DepartmentController extends Controller
             'status'      => 'active',
         ]);
 
-        ActivityLog::create([
-            'department_id' => $department->id,
-            'user_id' => Auth::id(),
-            'action' => 'Department created',
-            'type' => 'created'
-        ]);
+        LogActivity::record(
+            'Created',
+            'Departments',
+            "Created a new department \"{$department->name}\"",
+            'Success',
+            $department->id
+        );
 
         return response()->json([
             'data'    => $department->load('head:id,name,email'),
@@ -137,12 +139,13 @@ class DepartmentController extends Controller
             // Link the head to the department
             $department->update(['head_id' => $instructor->id]);
 
-            ActivityLog::create([
-                'department_id' => $department->id,
-                'user_id' => Auth::id(),
-                'action' => 'Department head changed to ' . $instructor->name,
-                'type' => 'head_assigned'
-            ]);
+            LogActivity::record(
+                'Updated',
+                'Departments',
+                "Assigned department head for \"{$department->name}\" to \"{$instructor->name}\"",
+                'Success',
+                $department->id
+            );
         });
 
         return response()->json([
@@ -166,19 +169,21 @@ class DepartmentController extends Controller
         $department->update($request->only(['name', 'code', 'established', 'status']));
 
         if ($request->has('status')) {
-            ActivityLog::create([
-                'department_id' => $department->id,
-                'user_id' => Auth::id(),
-                'action' => 'Department status changed to ' . ucfirst($request->status),
-                'type' => 'status_changed'
-            ]);
+            LogActivity::record(
+                'Updated',
+                'Departments',
+                "Changed status of department \"{$department->name}\" to " . ucfirst($request->status),
+                'Success',
+                $department->id
+            );
         } else {
-            ActivityLog::create([
-                'department_id' => $department->id,
-                'user_id' => Auth::id(),
-                'action' => 'Department updated',
-                'type' => 'updated'
-            ]);
+            LogActivity::record(
+                'Updated',
+                'Departments',
+                "Updated department \"{$department->name}\"",
+                'Success',
+                $department->id
+            );
         }
 
         return response()->json([
@@ -192,6 +197,8 @@ class DepartmentController extends Controller
      */
     public function destroy(Department $department): JsonResponse
     {
+        $deptName = $department->name;
+        
         DB::transaction(function () use ($department) {
             // Revert head back to instructor if exists
             if ($department->head_id) {
@@ -199,6 +206,14 @@ class DepartmentController extends Controller
             }
             $department->delete();
         });
+
+        LogActivity::record(
+            'Deleted',
+            'Departments',
+            "Deleted department \"$deptName\"",
+            'Success',
+            $department->id
+        );
 
         return response()->json([
             'message' => 'Department deleted successfully.',

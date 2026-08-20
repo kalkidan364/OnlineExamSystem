@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { sampleAnnouncements } from '../data/mockData'
 import type { RecentResult } from '../types'
 import { useStudentExamStore } from '../store/studentExamStore'
@@ -9,15 +10,13 @@ import Header from '../components/Header.vue'
 import HeroSection from '../components/HeroSection.vue'
 import StudentSidebar from '../components/StudentSidebar.vue'
 import ProfileModal from '../components/ProfileModal.vue'
-import ResultReviewModal from '../components/ResultReviewModal.vue'
 
+const router = useRouter()
 const examStore = useStudentExamStore()
 const { profile, fetchProfile } = useStudentProfile()
 
 const isSidebarOpen = ref(false)
 const isProfileOpen = ref(false)
-const selectedResult = ref<RecentResult | null>(null)
-const isResultModalOpen = ref(false)
 
 const results = computed(() => examStore.results)
 const isLoading = computed(() => examStore.isLoading)
@@ -32,8 +31,7 @@ onMounted(async () => {
 })
 
 const openResultDetails = (res: RecentResult) => {
-  selectedResult.value = res
-  isResultModalOpen.value = true
+  router.push(`/student/results/${res.id}`)
 }
 
 const getScoreColor = (percentage: number) => {
@@ -85,12 +83,6 @@ const getGradeBadgeClass = (grade: string) => {
       @update-profile="(updated) => profile = updated"
     />
 
-    <!-- Result Detail Breakdown Modal -->
-    <ResultReviewModal
-      v-if="isResultModalOpen && selectedResult"
-      :result="selectedResult"
-      @close="isResultModalOpen = false"
-    />
 
     <!-- Row 1: Full-Width Hero Banner (Flush under header) -->
     <HeroSection
@@ -120,7 +112,7 @@ const getGradeBadgeClass = (grade: string) => {
                 <th class="py-3.5 px-4 font-semibold">#</th>
                 <th class="py-3.5 px-4 font-semibold">Course Code</th>
                 <th class="py-3.5 px-4 font-semibold">Course Title</th>
-                <th class="py-3.5 px-4 font-semibold">Exam Title</th>
+                <th class="py-3.5 px-4 font-semibold">Exam Type</th>
                 <th class="py-3.5 px-4 font-semibold">Date</th>
                 <th class="py-3.5 px-4 font-semibold">Score</th>
                 <th class="py-3.5 px-4 font-semibold">Grade</th>
@@ -176,9 +168,9 @@ const getGradeBadgeClass = (grade: string) => {
                   {{ res.courseName }}
                 </td>
 
-                <!-- Exam Title -->
+                <!-- Exam Type -->
                 <td class="py-4 px-4 text-slate-600">
-                  {{ res.examTitle }}
+                  {{ res.examType }}
                 </td>
 
                 <!-- Date -->

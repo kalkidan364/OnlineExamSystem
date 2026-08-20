@@ -44,11 +44,19 @@ const detailedBreakdown = computed(() => {
     if (!stats[type]) {
       stats[type] = { totalQs: 0, correctQs: 0, marksEarned: 0, marksTotal: 0, hasPendingQs: false }
     }
-    stats[type].totalQs++
+    if (q.type === 'matching' && q.totalCount) {
+      stats[type].totalQs += (q.totalCount || 1)
+      if (q.correctCount) {
+        stats[type].correctQs += q.correctCount
+      }
+    } else {
+      stats[type].totalQs++
+      if (q.isCorrect === true) stats[type].correctQs++
+    }
+    
     if (q.gradingStatus === 'pending') {
       stats[type].hasPendingQs = true
     }
-    if (q.isCorrect === true) stats[type].correctQs++
     stats[type].marksEarned += (q.earnedMarks || 0)
     stats[type].marksTotal += (q.marks || 0)
   }

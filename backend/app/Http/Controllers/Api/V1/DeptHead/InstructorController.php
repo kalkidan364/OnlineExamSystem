@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\DeptHead;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\User;
+use App\Helpers\LogActivity;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -68,6 +69,12 @@ class InstructorController extends Controller
             'status' => 'active',
         ]);
 
+        LogActivity::record(
+            'Created',
+            'Instructors',
+            "Created a new Instructor \"{$instructor->name}\""
+        );
+
         return response()->json([
             'message' => 'Instructor created successfully',
             'data' => $instructor
@@ -90,6 +97,12 @@ class InstructorController extends Controller
 
         $instructor->update($request->only(['name', 'semester']));
 
+        LogActivity::record(
+            'Updated',
+            'Instructors',
+            "Updated Instructor \"{$instructor->name}\""
+        );
+
         return response()->json([
             'message' => 'Instructor updated successfully',
             'data' => $instructor
@@ -104,7 +117,14 @@ class InstructorController extends Controller
         $deptId = $this->resolveDeptId($request);
         $instructor = User::where('department_id', $deptId)->whereIn('role', ['instructor', 'dept_head'])->findOrFail($id);
         
+        $instructorName = $instructor->name;
         $instructor->delete();
+
+        LogActivity::record(
+            'Deleted',
+            'Instructors',
+            "Deleted Instructor \"$instructorName\""
+        );
 
         return response()->json(['message' => 'Instructor deleted successfully']);
     }

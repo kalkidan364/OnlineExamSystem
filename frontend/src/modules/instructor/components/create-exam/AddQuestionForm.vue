@@ -92,6 +92,11 @@ const matchShuffle = ref(true)
 const matchMappings = ref(['A', 'B', 'C', 'D']) // correct answer mapping per row
 const activeMatchingCell = ref<{ rowIndex: number, col: 'left' | 'right' } | null>(null)
 
+const activeColACount = computed(() => {
+  const count = matchPairs.value.filter(p => p.left.replace(/<[^>]*>?/gm, '').trim() !== '').length
+  return count > 0 ? count : matchPairs.value.length
+})
+
 watch(questionType, (newVal) => {
   clearError()
   if (newVal === 'Matching') {
@@ -306,6 +311,10 @@ const addQuestionToExam = () => {
         }
       })
       
+      const itemsCount = column_a.length > 0 ? column_a.length : 1
+      const perItemMark = Number(score.value) || 1
+      const totalMatchingMarks = itemsCount * perItemMark
+
       qData.column_a = column_a
       qData.column_b = column_b
       qData.correct_answers = correct_answers
@@ -314,6 +323,8 @@ const addQuestionToExam = () => {
       qData.correct_answer = Object.entries(correct_answers).map(([k, v]) => `${k}-${v}`).join(',')
       qData.columnA = 'Column A'
       qData.columnB = 'Column B'
+      qData.marks_per_item = perItemMark
+      qData.marks = totalMatchingMarks
       break;
     }
   }
@@ -399,7 +410,12 @@ const getQuestionTypeLabel = (type: string) => {
           </select>
         </div>
         <div>
-          <label class="block text-[12px] font-bold text-slate-800 mb-2">Score Marks <span class="text-rose-500">*</span></label>
+          <label class="block text-[12px] font-bold text-slate-800 mb-2">
+            Score Marks <span class="text-rose-500">*</span>
+            <span v-if="questionType === 'Matching'" class="text-[#5138ed] font-semibold text-[11px] block sm:inline sm:ml-1">
+              (per Column A item: {{ activeColACount }} × {{ score || 0 }} = {{ activeColACount * (Number(score) || 0) }} total)
+            </span>
+          </label>
           <input v-model="score" type="number" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed]" min="1" />
         </div>
         <div>

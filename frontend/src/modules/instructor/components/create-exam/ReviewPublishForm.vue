@@ -134,6 +134,9 @@ const editQuestion = (index: number) => {
         qData.correct_answers[(i + 1).toString()] = getLetter(i)
       })
     }
+
+    const itemsLen = Math.max((qData.column_a || []).length, (qData.pairs || []).length, 1)
+    qData.marks_per_item = qData.marks_per_item || (qData.marks ? Math.max(1, Math.round(qData.marks / itemsLen)) : 1)
   }
 
   editingQuestionData.value = qData
@@ -172,6 +175,9 @@ const saveEditedQuestion = () => {
         }
         finalPairs.push({ left: (p.left || '').trim(), right: (p.right || '').trim() })
       })
+
+      const itemsCount = column_a.length > 0 ? column_a.length : 1
+      const perItemMark = Number(editingQuestionData.value.marks_per_item || editingQuestionData.value.marks || 1)
       
       editingQuestionData.value.column_a = column_a
       editingQuestionData.value.column_b = column_b
@@ -181,6 +187,8 @@ const saveEditedQuestion = () => {
       editingQuestionData.value.correct_answer = Object.entries(correct_answers).map(([k, v]) => `${k}-${v}`).join(',')
       editingQuestionData.value.columnA = 'Column A'
       editingQuestionData.value.columnB = 'Column B'
+      editingQuestionData.value.marks_per_item = perItemMark
+      editingQuestionData.value.marks = itemsCount * perItemMark
     }
     formStore.questions[editingQuestionIndex.value] = editingQuestionData.value
   }
@@ -274,6 +282,15 @@ const handlePublish = async () => {
   conflictError.value = null
   generalError.value = null
 
+  // Validate Total Marks vs sum of question marks
+  const totalQuestionMarks = formStore.questions.reduce((sum: number, q: any) => sum + Number(q.marks || 1), 0)
+  if (totalQuestionMarks !== Number(formStore.totalMarks)) {
+    generalError.value = `Mark Mismatch: The total marks assigned to your questions (${totalQuestionMarks}) does not match the Total Marks set for the exam (${formStore.totalMarks}). Please adjust the question marks or update the exam Total Marks in Step 1.`
+    isSubmitting.value = false
+    showPublishConfirm.value = true
+    return
+  }
+
   try {
     const payload = {
       title: formStore.title || 'Untitled Exam',
@@ -281,7 +298,7 @@ const handlePublish = async () => {
       course_name: formStore.examType || 'Software Engineering',
       duration_minutes: formStore.durationMinutes,
       total_marks: formStore.totalMarks,
-      status: 'published',
+      status: 'published' as const,
       scheduled_at: formStore.getScheduledAt(),
       questions: formStore.questions,
       settings: formStore.getSettingsPayload()
@@ -1040,8 +1057,14 @@ const handlePublish = async () => {
                     <span v-else class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">{{ editingQuestionData.type }}</span>
                     
                     <div class="flex items-center gap-2">
-                      <label class="text-[12px] font-bold text-slate-600">Marks:</label>
-                      <input type="number" v-model.number="editingQuestionData.marks" class="w-16 px-2 py-1 border border-slate-200 rounded-md text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" min="1" />
+                      <label class="text-[12px] font-bold text-slate-600">
+                        {{ editingQuestionData.type?.toLowerCase() === 'matching' ? 'Marks per Column A item:' : 'Marks:' }}
+                      </label>
+                      <input type="number" v-if="editingQuestionData.type?.toLowerCase() === 'matching'" v-model.number="editingQuestionData.marks_per_item" class="w-16 px-2 py-1 border border-slate-200 rounded-md text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" min="1" />
+                      <input type="number" v-else v-model.number="editingQuestionData.marks" class="w-16 px-2 py-1 border border-slate-200 rounded-md text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" min="1" />
+                      <span v-if="editingQuestionData.type?.toLowerCase() === 'matching'" class="text-[11px] font-semibold text-[#5138ed]">
+                        ({{ (editingQuestionData.pairs?.filter((p: any) => (p.left || '').trim()).length || 1) }} items × {{ editingQuestionData.marks_per_item || 1 }} = {{ (editingQuestionData.pairs?.filter((p: any) => (p.left || '').trim()).length || 1) * (editingQuestionData.marks_per_item || 1) }} total marks)
+                      </span>
                     </div>
 
                     <div class="flex items-center gap-2 ml-auto">
@@ -1124,9 +1147,9 @@ const handlePublish = async () => {
                         <div v-for="(pair, index) in editingQuestionData.pairs" :key="index" class="grid grid-cols-[1fr_1fr_auto] gap-6 items-center">
                           <!-- Column A -->
                           <div class="flex items-start gap-3">
-                            <div class="w-6 shrink-0 mt-3 font-bold text-slate-400 text-sm text-right">{{ index + 1 }}.</div>
+                            <div class="w-6 shrink-0 mt-3 font-bold text-slate-400 text-sm text-right">{{ Number(index) + 1 }}.</div>
                             <div 
-                              @click="activeMatchingCell = { rowIndex: index, col: 'left' }"
+                              @click="activeMatchingCell = { rowIndex: Number(index), col: 'left' }"
                               :class="[ 
                                 'w-full min-h-[60px] max-h-[120px] overflow-y-auto bg-white border rounded-xl p-3 text-[13px] text-slate-700 cursor-pointer transition-all prose prose-sm',
                                 activeMatchingCell?.rowIndex === index && activeMatchingCell?.col === 'left' ? 'border-[#5138ed] ring-1 ring-[#5138ed] shadow-sm' : 'border-slate-200 hover:border-slate-300'
@@ -1139,9 +1162,9 @@ const handlePublish = async () => {
 
                           <!-- Column B -->
                           <div class="flex items-start gap-3">
-                            <div class="w-6 shrink-0 mt-3 font-bold text-slate-400 text-sm text-right">{{ getLetterLabel(index) }}.</div>
+                            <div class="w-6 shrink-0 mt-3 font-bold text-slate-400 text-sm text-right">{{ getLetterLabel(Number(index)) }}.</div>
                             <div 
-                              @click="activeMatchingCell = { rowIndex: index, col: 'right' }"
+                              @click="activeMatchingCell = { rowIndex: Number(index), col: 'right' }"
                               :class="[ 
                                 'w-full min-h-[60px] max-h-[120px] overflow-y-auto bg-white border rounded-xl p-3 text-[13px] text-slate-700 cursor-pointer transition-all prose prose-sm',
                                 activeMatchingCell?.rowIndex === index && activeMatchingCell?.col === 'right' ? 'border-[#5138ed] ring-1 ring-[#5138ed] shadow-sm' : 'border-slate-200 hover:border-slate-300'
@@ -1152,7 +1175,7 @@ const handlePublish = async () => {
                             </div>
                           </div>
 
-                          <button @click="editingQuestionData.pairs.splice(index, 1); delete editingQuestionData.correct_answers[(index + 1).toString()]" class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg self-start mt-2">
+                          <button @click="editingQuestionData.pairs.splice(Number(index), 1); delete editingQuestionData.correct_answers[(Number(index) + 1).toString()]" class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg self-start mt-2">
                             <Trash2 class="w-4 h-4" />
                           </button>
                         </div>
@@ -1175,15 +1198,15 @@ const handlePublish = async () => {
 
                       <div class="space-y-3">
                         <template v-for="(_, index) in editingQuestionData.pairs" :key="index">
-                          <div v-if="editingQuestionData.pairs[index] && (editingQuestionData.pairs[index].left || '').replace(/<[^>]*>?/gm, '').trim()" class="grid grid-cols-[1fr_auto] gap-6 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+                          <div v-if="editingQuestionData.pairs[Number(index)] && (editingQuestionData.pairs[Number(index)].left || '').replace(/<[^>]*>?/gm, '').trim()" class="grid grid-cols-[1fr_auto] gap-6 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200">
                             <div class="text-[13px] text-slate-700 font-medium truncate flex items-center gap-2">
-                              <span class="font-bold text-slate-400 w-4">{{ index + 1 }}.</span>
-                              {{ (editingQuestionData.pairs[index].left || '').replace(/<[^>]*>?/gm, '').substring(0, 80) }}
+                              <span class="font-bold text-slate-400 w-4">{{ Number(index) + 1 }}.</span>
+                              {{ (editingQuestionData.pairs[Number(index)].left || '').replace(/<[^>]*>?/gm, '').substring(0, 80) }}
                             </div>
                             <div class="w-72">
-                              <select v-model="editingQuestionData.correct_answers[(index + 1).toString()]" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 font-bold focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer shadow-sm">
-                                <option v-for="(pair, i) in editingQuestionData.pairs" :key="i" :value="getLetterLabel(i)">
-                                  {{ getLetterLabel(i) }} — {{ (pair.right || '').replace(/<[^>]*>?/gm, '').substring(0, 40) || 'Empty' }}
+                              <select v-model="editingQuestionData.correct_answers[(Number(index) + 1).toString()]" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[13px] text-slate-700 font-bold focus:outline-none focus:border-[#5138ed] appearance-none cursor-pointer shadow-sm">
+                                <option v-for="(pair, i) in editingQuestionData.pairs" :key="i" :value="getLetterLabel(Number(i))">
+                                  {{ getLetterLabel(Number(i)) }} — {{ (pair.right || '').replace(/<[^>]*>?/gm, '').substring(0, 40) || 'Empty' }}
                                 </option>
                               </select>
                             </div>

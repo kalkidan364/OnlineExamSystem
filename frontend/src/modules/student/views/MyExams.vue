@@ -72,6 +72,7 @@ const ongoingExamsList = computed(() => {
       instructor: activeExam.value.instructor,
       examType: activeExam.value.examTitle,
       scheduledAt: activeExam.value.date,
+      scheduledDate: activeExam.value.date,
       startTime: activeExam.value.time,
       durationMinutes: activeExam.value.durationMinutes,
       totalQuestions: activeExam.value.totalQuestions,
@@ -135,7 +136,7 @@ onMounted(async () => {
     examStore.fetchResults(),
     examStore.fetchDashboard(),
   ])
-  if (activeExam.value?.startTime) {
+  if (activeExam.value?.time) {
     const end = new Date(Date.now() + 45 * 60 * 1000 + 32 * 1000).toISOString()
     startCountdown(end)
   }

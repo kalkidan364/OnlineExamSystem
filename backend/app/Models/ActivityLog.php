@@ -12,9 +12,13 @@ class ActivityLog extends Model
     protected $fillable = [
         'department_id',
         'user_id',
+        'actor_role',
         'action',
         'type',
+        'module',
         'details',
+        'ip_address',
+        'log_status',
     ];
 
     public function user()

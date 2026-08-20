@@ -59,6 +59,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('courses-export', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'export']);
         Route::post('courses-import', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'import']);
         
+        Route::get('activity-logs', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'index']);
+        
         Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
 
         // List all instructors (for assign-head modal), optionally filter by department_id
@@ -151,7 +153,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/exams',     [StudentExamController::class, 'index']);
         Route::post('/exams/{exam}/start',  [StudentExamController::class, 'start']);
         Route::post('/exams/{exam}/submit', [StudentExamController::class, 'submit']);
-        Route::get('/results',   [StudentExamController::class, 'results']);
+        Route::get('/results',              [StudentExamController::class, 'results']);
+        Route::get('/results/{attemptId}',  [StudentExamController::class, 'showResult']);
 
     });
 

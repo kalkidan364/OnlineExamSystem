@@ -19,7 +19,7 @@ export interface Exam {
   scheduled_at: string | null
   duration_minutes: number
   total_marks: number
-  status: 'draft' | 'published' | 'scheduled' | 'completed'
+  status: 'draft' | 'published' | 'scheduled' | 'completed' | 'active' | 'archived'
   students_count?: number
   questions_count?: number
   questions?: any[]

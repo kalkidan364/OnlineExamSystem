@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Department;
 use App\Models\User;
+use App\Helpers\LogActivity;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -75,6 +76,12 @@ class CourseController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        LogActivity::record(
+            'Created',
+            'Courses',
+            "Created a new course \"{$course->title}\""
+        );
+
         return response()->json([
             'message' => 'Course created successfully',
             'data' => $course->load('instructor')
@@ -143,6 +150,12 @@ class CourseController extends Controller
             ]);
         }
 
+        LogActivity::record(
+            'Updated',
+            'Courses',
+            "Updated course \"{$course->title}\""
+        );
+
         return response()->json([
             'message' => 'Course updated successfully',
             'data' => $course->load(['instructor', 'coInstructor'])
@@ -161,7 +174,14 @@ class CourseController extends Controller
             return response()->json(['message' => 'Unauthorized. You can only delete courses you created.'], 403);
         }
         
+        $courseTitle = $course->title;
         $course->delete();
+
+        LogActivity::record(
+            'Deleted',
+            'Courses',
+            "Deleted course \"$courseTitle\""
+        );
 
         return response()->json(['message' => 'Course deleted successfully']);
     }

@@ -269,10 +269,20 @@ const groupedFilteredQuestions = computed(() => {
           </div>
         </div>
         <div class="flex items-center gap-3">
+          <button v-if="prevStudentId" @click="router.push(`/instructor/results/${route.params.examId}/student/${prevStudentId}`)"
+            class="p-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors" title="Previous Student">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          
           <button @click="router.push(`/instructor/results/${route.params.examId}`)"
             class="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            Back to Student Results
+            Back to List
+          </button>
+          
+          <button v-if="nextStudentId" @click="router.push(`/instructor/results/${route.params.examId}/student/${nextStudentId}`)"
+            class="p-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors" title="Next Student">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
           </button>
         </div>
       </div>

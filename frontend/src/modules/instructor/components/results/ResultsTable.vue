@@ -119,8 +119,28 @@ const getTypeBadge = (type: string) => {
           </tr>
         </thead>
         <tbody>
+          <!-- Loading State -->
+          <tr v-if="resultStore.isLoading">
+            <td colspan="9" class="py-12 text-center">
+              <div class="flex flex-col items-center justify-center">
+                <div class="w-8 h-8 border-4 border-indigo-200 border-t-[#5138ed] rounded-full animate-spin mb-3"></div>
+                <p class="text-sm font-medium text-slate-500">Loading results...</p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Empty State -->
+          <tr v-else-if="resultStore.results.length === 0">
+            <td colspan="9" class="py-12 text-center">
+              <div class="flex flex-col items-center justify-center text-slate-400">
+                <svg class="w-12 h-12 mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <p class="text-sm font-medium text-slate-500">No exams found.</p>
+              </div>
+            </td>
+          </tr>
+
           <!-- Data rows -->
-          <tr v-for="(exam, index) in resultStore.results" :key="exam.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
+          <tr v-else v-for="(exam, index) in resultStore.results" :key="exam.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0 group">
             <td class="py-4 pl-4 pr-4">
               <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border" :class="getIconClass(index)">
@@ -198,7 +218,9 @@ const getTypeBadge = (type: string) => {
     
     <!-- Pagination -->
     <div class="p-4 border-t border-slate-100 flex items-center justify-between mt-auto">
-      <span class="text-[12px] text-slate-500 font-medium">Showing 1 to 8 of 8 exams</span>
+      <span class="text-[12px] text-slate-500 font-medium">
+        {{ resultStore.results.length > 0 ? `Showing 1 to ${resultStore.results.length} of ${resultStore.results.length} exams` : 'No exams to display' }}
+      </span>
       <div class="flex items-center gap-2">
         <button class="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50" disabled>
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>

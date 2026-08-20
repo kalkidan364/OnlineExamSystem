@@ -143,6 +143,7 @@ class InstructorExamController extends Controller
                     'options'        => collect($q['options'] ?? [])->map(function ($opt) { return is_string($opt) ? ['text' => $opt] : $opt; })->toArray(),
                     'correct_answer' => $q['correct_answer'] ?? null,
                     'marks'          => $q['marks'] ?? 5,
+                    'marks_per_item' => isset($q['marks_per_item']) ? (float)$q['marks_per_item'] : null,
                     'difficulty'     => 'Medium',
                     'status'         => 1,
                 ]);
@@ -248,6 +249,7 @@ class InstructorExamController extends Controller
                     'options'        => collect($q['options'] ?? [])->map(function ($opt) { return is_string($opt) ? ['text' => $opt] : $opt; })->toArray(),
                     'correct_answer' => $q['correct_answer'] ?? null,
                     'marks'          => $q['marks'] ?? 5,
+                    'marks_per_item' => isset($q['marks_per_item']) ? (float)$q['marks_per_item'] : null,
                     'difficulty'     => 'Medium',
                     'status'         => 1,
                 ]);

@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use App\Helpers\LogActivity;
 
 class StudentController extends Controller
 {
@@ -71,6 +72,12 @@ class StudentController extends Controller
         }
 
         $student->update($validated);
+
+        LogActivity::record(
+            'Updated',
+            'Students',
+            "Updated Student \"{$student->name}\""
+        );
 
         return response()->json([
             'message' => 'Student updated successfully',

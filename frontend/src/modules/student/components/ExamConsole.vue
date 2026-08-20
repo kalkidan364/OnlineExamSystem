@@ -535,24 +535,24 @@ const confirmCancel = () => {
                           <!-- Use v-html to parse rich text tags properly -->
                           <span class="pr-3 leading-relaxed prose prose-invert prose-p:my-0 prose-sm" v-html="pair.left"></span>
                           
-                          <!-- Identifier Dropdown (A, B, C...) -->
-                          <div class="relative shrink-0 w-[52px]">
-                            <select
-                              :value="matchingAnswers[activeQuestion.id]?.[Number(pIdx)] || ''"
-                              @change="handleMatchingAnswer(activeQuestion.id, Number(pIdx), ($event.target as HTMLSelectElement).value)"
-                              class="w-full appearance-none rounded-lg border border-indigo-500/40 bg-indigo-900/50 pl-3 pr-6 py-2 text-[11px] font-black font-mono text-white focus:border-indigo-400 focus:bg-indigo-800 transition-colors cursor-pointer"
-                            >
-                              <option value="" disabled>-</option>
-                              <option
-                                v-for="(p, rIdx) in (activeQuestion as any).pairs"
-                                :key="'opt-'+rIdx"
-                                :value="p.right"
+                            <!-- Identifier Dropdown (A, B, C...) -->
+                            <div class="relative shrink-0 w-[52px]">
+                              <select
+                                :value="matchingAnswers[activeQuestion.id]?.[Number(pIdx)] || ''"
+                                @change="handleMatchingAnswer(activeQuestion.id, Number(pIdx), ($event.target as HTMLSelectElement).value)"
+                                class="w-full appearance-none rounded-lg border border-indigo-500/40 bg-indigo-900/50 pl-3 pr-6 py-2 text-[11px] font-black font-mono text-white focus:border-indigo-400 focus:bg-indigo-800 transition-colors cursor-pointer"
                               >
-                                {{ String.fromCharCode(65 + rIdx) }}
-                              </option>
-                            </select>
-                            <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                          </div>
+                                <option value="" disabled>-</option>
+                                <option
+                                  v-for="(p, rIdx) in (activeQuestion as any).pairs"
+                                  :key="'opt-'+rIdx"
+                                  :value="String.fromCharCode(65 + Number(rIdx))"
+                                >
+                                  {{ String.fromCharCode(65 + Number(rIdx)) }}
+                                </option>
+                              </select>
+                              <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
                         </div>
                       </div>
                     </template>
@@ -569,7 +569,7 @@ const confirmCancel = () => {
                       >
                         <!-- Letter Identifier (A, B, C...) -->
                         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 border-2 border-slate-700 font-black font-mono text-[13px] text-white shadow-sm">
-                          {{ String.fromCharCode(65 + rIdx) }}
+                          {{ String.fromCharCode(65 + Number(rIdx)) }}
                         </span>
                         <!-- Column B text parsed as HTML -->
                         <span class="font-medium text-slate-300 leading-relaxed prose prose-invert prose-p:my-0 prose-sm" v-html="pair.right"></span>
