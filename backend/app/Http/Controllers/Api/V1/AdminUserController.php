@@ -196,66 +196,85 @@ class AdminUserController extends Controller
      */
     public function export(Request $request)
     {
-        $role   = $request->role ?? 'student';
-        $format = $request->format ?? 'excel';
-        $roles  = explode(',', $role);
+        $role = $request->query('role', 'student');
+        $format = $request->query('format', 'csv');
+        $roles = explode(',', $role);
 
-        $users = User::with('department')->whereIn('role', $roles)->latest()->get();
+        $query = User::whereIn('role', $roles);
 
-        $fileName = 'export_' . str_replace(',', '_', $role) . '_' . date('Y-m-d');
+        // Apply filters
+        if ($request->filled('department') && $request->department !== 'all') {
+            $query->whereHas('department', function ($q) use ($request) {
+                $q->where('name', $request->department);
+            });
+        }
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('section') && $request->section !== 'all') {
+            $query->where('section', $request->section);
+        }
+        if ($request->filled('year') && $request->year !== 'all') {
+            $query->where('year_level', $request->year);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('id_no', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->with('department')->get();
+        $fileName = "export_{$role}_" . date('Y-m-d');
 
         if ($format === 'pdf') {
             return $this->exportUsersPdf($users, $fileName);
         }
 
-        // Default: CSV (Excel opens .csv natively — no ZipArchive needed)
         return $this->exportUsersCsv($users, $fileName);
     }
 
     private function exportUsersCsv($users, string $fileName)
     {
-        $headers = [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '.csv"',
-            'Pragma'              => 'no-cache',
-            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires'             => '0',
-        ];
-
-        $callback = function () use ($users) {
-            $handle = fopen('php://output', 'w');
-            // UTF-8 BOM for Excel compatibility
-            fputs($handle, "\xEF\xBB\xBF");
-            // Headings
+        ob_start();
+        $handle = fopen('php://output', 'w');
+        // UTF-8 BOM for Excel compatibility
+        fputs($handle, "\xEF\xBB\xBF");
+        // Headings
+        fputcsv($handle, [
+            'ID', 'Full Name', 'Email', 'Username', 'Password',
+            'Student ID / Employee ID', 'Department', 'Academic Year',
+            'Year Level', 'Semester', 'Section', 'Phone', 'Gender',
+            'Status', 'Registered Date'
+        ]);
+        foreach ($users as $user) {
             fputcsv($handle, [
-                'ID', 'Full Name', 'Email', 'Username', 'Password',
-                'Student ID / Employee ID', 'Department', 'Academic Year',
-                'Year Level', 'Semester', 'Section', 'Phone', 'Gender',
-                'Status', 'Registered Date'
+                $user->id,
+                $user->name,
+                $user->email,
+                $user->username ?? '',
+                '', // Password is never exported as plain text
+                $user->id_no ?? '',
+                $user->department ? $user->department->name : '',
+                $user->academic_year ?? '',
+                $user->year_level ?? '',
+                $user->semester ?? '',
+                $user->section ?? '',
+                $user->phone ?? '',
+                $user->gender ?? '',
+                $user->status ?? 'active',
+                $user->created_at ? $user->created_at->format('Y-m-d') : '',
             ]);
-            foreach ($users as $user) {
-                fputcsv($handle, [
-                    $user->id,
-                    $user->name,
-                    $user->email,
-                    $user->username ?? '',
-                    '', // Password is never exported as plain text
-                    $user->id_no ?? '',
-                    $user->department ? $user->department->name : '',
-                    $user->academic_year ?? '',
-                    $user->year_level ?? '',
-                    $user->semester ?? '',
-                    $user->section ?? '',
-                    $user->phone ?? '',
-                    $user->gender ?? '',
-                    $user->status ?? 'active',
-                    $user->created_at ? $user->created_at->format('Y-m-d') : '',
-                ]);
-            }
-            fclose($handle);
-        };
+        }
+        fclose($handle);
+        $csvContent = ob_get_clean();
 
-        return response()->stream($callback, 200, $headers);
+        return response()->json([
+            'file' => base64_encode($csvContent),
+            'filename' => $fileName . '.csv'
+        ]);
     }
 
     private function exportUsersPdf($users, string $fileName)
@@ -302,23 +321,16 @@ class AdminUserController extends Controller
         }
         $html .= '</tbody></table></body></html>';
 
-        $options = new Options();
-        $options->set('isHtml5ParserEnabled', true);
-        $options->set('isPhpEnabled', false);
-        $options->set('defaultFont', 'DejaVu Sans');
-
-        $dompdf = new Dompdf($options);
+        $dompdf = new \Dompdf\Dompdf();
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
 
         $pdfContent = $dompdf->output();
 
-        return response($pdfContent, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '.pdf"',
-            'Pragma'              => 'no-cache',
-            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+        return response()->json([
+            'file' => base64_encode($pdfContent),
+            'filename' => $fileName . '.pdf'
         ]);
     }
 

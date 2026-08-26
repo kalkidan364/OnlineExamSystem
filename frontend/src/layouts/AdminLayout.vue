@@ -4,13 +4,13 @@ import AdminHeader from './components/AdminHeader.vue'
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f8fafc] font-sans flex">
+  <div class="min-h-screen bg-[#f8fafc] font-sans flex overflow-hidden">
     
     <!-- Sidebar -->
     <AdminSidebar />
 
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col pl-56 min-w-0">
+    <div class="flex-1 flex flex-col pl-56 min-w-0 h-screen overflow-y-auto scrollbar-hide">
       
       <!-- Header -->
       <AdminHeader />
@@ -48,5 +48,12 @@ import AdminHeader from './components/AdminHeader.vue'
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 </style>

@@ -387,31 +387,53 @@ const handleImport = async (event: Event) => {
 
 const showExportDropdown = ref(false)
 const handleExport = async (format: string) => {
-  showExportDropdown.value = false;
-  isLoading.value = true;
+  showExportDropdown.value = false
+  isLoading.value = true
   try {
-    const res = await apiClient.get(`/admin/users-export?role=student&format=${format}`, { responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `students_export_${new Date().toISOString().slice(0,10)}.${format === 'pdf' ? 'pdf' : 'csv'}`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch (err: any) {
-    if (err.response && err.response.data && err.response.data instanceof Blob) {
-      const text = await err.response.data.text();
-      try {
-        const json = JSON.parse(text);
-        alert(json.message || 'Failed to export students');
-      } catch (e) {
-        alert('Failed to export students');
+    const params: Record<string, string> = { role: 'student', format }
+    if (deptFilter.value !== 'all') params.department = deptFilter.value
+    if (yearFilter.value !== 'all') params.year = yearFilter.value
+    if (sectionFilter.value !== 'all') params.section = sectionFilter.value
+    if (search.value) params.search = search.value
+
+    const token = localStorage.getItem('auth_token')
+    const queryString = new URLSearchParams(params).toString()
+    
+    const response = await fetch(`http://localhost:8000/api/v1/admin/users-export?${queryString}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
       }
-    } else {
-      alert('Failed to export students');
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      try { alert(JSON.parse(text).message || 'Export failed') } catch { alert('Export failed') }
+      return
     }
+
+    const data = await response.json()
+    if (!data.file || !data.filename) throw new Error('Invalid export format')
+
+    const binary = atob(data.file)
+    const array = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i)
+    
+    const blob = new Blob([array], { type: format === 'pdf' ? 'application/pdf' : 'text/csv' })
+    const blobUrl = window.URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.setAttribute('download', data.filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err: any) {
+    alert('Failed to export students. Please try again.')
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
 }
 </script>
