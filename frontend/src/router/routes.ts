@@ -155,6 +155,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'StudentResultDetail',
     component: () => import('../modules/student/views/StudentResultDetail.vue')
   },
+  {
+    path: '/student/academic-calendar',
+    name: 'StudentAcademicCalendar',
+    component: () => import('../modules/student/views/AcademicCalendar.vue')
+  },
 
   // ── Super Admin Routes ──
   {
@@ -210,6 +215,11 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'departments',
         name: 'AdminDepartments',
         component: () => import('../modules/admin/pages/Departments.vue')
+      },
+      {
+        path: 'academic-calendar',
+        name: 'AdminAcademicCalendar',
+        component: () => import('../modules/admin/pages/AcademicCalendar.vue')
       },
       {
         path: 'settings',

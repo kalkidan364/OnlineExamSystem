@@ -296,6 +296,7 @@ const handlePublish = async () => {
       title: formStore.title || 'Untitled Exam',
       course_code: formStore.courseCode || 'SWE-301',
       course_name: formStore.examType || 'Software Engineering',
+      section: formStore.section,
       duration_minutes: formStore.durationMinutes,
       total_marks: formStore.totalMarks,
       status: 'published' as const,

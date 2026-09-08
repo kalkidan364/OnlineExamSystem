@@ -156,14 +156,39 @@ class AdminCourseController extends Controller
         return response()->json(['message' => 'Course deleted successfully.']);
     }
 
-    /**
+/**
      * Export courses as CSV (Excel-compatible) or PDF.
      * Pure PHP — no ZipArchive needed.
      */
     public function export(Request $request)
     {
-        $format   = $request->format ?? 'excel';
-        $courses  = Course::with('department')->latest()->get();
+        $format = $request->query('format', 'csv');
+        $query = Course::with('department')->latest();
+
+        // Apply filters
+        if ($request->filled('department') && $request->department !== 'all') {
+            $query->whereHas('department', function ($q) use ($request) {
+                $q->where('name', $request->department);
+            });
+        }
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('level') && $request->level !== 'all') {
+            $query->where('level', $request->level);
+        }
+        if ($request->filled('semester') && $request->semester !== 'all') {
+            $query->where('semester', $request->semester);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'LIKE', "%{$search}%")
+                  ->orWhere('code', 'LIKE', "%{$search}%");
+            });
+        }
+
+        $courses = $query->get();
         $fileName = 'courses_export_' . date('Y-m-d');
 
         if ($format === 'pdf') {
@@ -175,42 +200,37 @@ class AdminCourseController extends Controller
 
     private function exportCoursesCsv($courses, string $fileName)
     {
-        $headers = [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '.csv"',
-            'Pragma'              => 'no-cache',
-            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires'             => '0',
-        ];
-
-        $callback = function () use ($courses) {
-            $handle = fopen('php://output', 'w');
-            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+        ob_start();
+        $handle = fopen('php://output', 'w');
+        fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+        fputcsv($handle, [
+            'ID', 'Course Name', 'Course Code', 'Description',
+            'Department', 'Credits', 'Level', 'Semester',
+            'Start Date', 'End Date', 'Status', 'Created Date'
+        ]);
+        foreach ($courses as $course) {
             fputcsv($handle, [
-                'ID', 'Course Name', 'Course Code', 'Description',
-                'Department', 'Credits', 'Level', 'Semester',
-                'Start Date', 'End Date', 'Status', 'Created Date'
+                $course->id,
+                $course->title ?? $course->name ?? '',
+                $course->code ?? '',
+                $course->description ?? '',
+                $course->department ? $course->department->name : '',
+                $course->credits ?? '',
+                $course->level ?? '',
+                $course->semester ?? '',
+                $course->start_date ?? '',
+                $course->end_date ?? '',
+                $course->status ?? 'active',
+                $course->created_at ? $course->created_at->format('Y-m-d') : '',
             ]);
-            foreach ($courses as $course) {
-                fputcsv($handle, [
-                    $course->id,
-                    $course->title ?? $course->name ?? '',
-                    $course->code ?? '',
-                    $course->description ?? '',
-                    $course->department ? $course->department->name : '',
-                    $course->credits ?? '',
-                    $course->level ?? '',
-                    $course->semester ?? '',
-                    $course->start_date ?? '',
-                    $course->end_date ?? '',
-                    $course->status ?? 'active',
-                    $course->created_at ? $course->created_at->format('Y-m-d') : '',
-                ]);
-            }
-            fclose($handle);
-        };
+        }
+        fclose($handle);
+        $csvContent = ob_get_clean();
 
-        return response()->stream($callback, 200, $headers);
+        return response()->json([
+            'file' => base64_encode($csvContent),
+            'filename' => $fileName . '.csv'
+        ]);
     }
 
     private function exportCoursesPdf($courses, string $fileName)
@@ -252,23 +272,21 @@ class AdminCourseController extends Controller
         }
         $html .= '</tbody></table></body></html>';
 
-        $options = new Options();
+        $options = new \Dompdf\Options();
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isPhpEnabled', false);
         $options->set('defaultFont', 'DejaVu Sans');
 
-        $dompdf = new Dompdf($options);
+        $dompdf = new \Dompdf\Dompdf($options);
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
 
         $pdfContent = $dompdf->output();
 
-        return response($pdfContent, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '.pdf"',
-            'Pragma'              => 'no-cache',
-            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+        return response()->json([
+            'file' => base64_encode($pdfContent),
+            'filename' => $fileName . '.pdf'
         ]);
     }
 

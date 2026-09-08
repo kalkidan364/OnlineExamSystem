@@ -17,6 +17,7 @@ class Exam extends Model
         'title',
         'course_code',
         'course_name',
+        'section',
         'description',
         'duration_minutes',
         'total_marks',

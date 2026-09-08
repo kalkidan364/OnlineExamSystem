@@ -34,6 +34,13 @@ class StudentExamController extends Controller
         $attemptedExamIds = ExamAttempt::where('user_id', $student->id)->pluck('exam_id');
 
         $upcomingCount = Exam::where('status', 'published')
+            ->where(function ($query) use ($student) {
+                $query->whereNull('section')
+                      ->orWhere('section', '')
+                      ->orWhere('section', $student->section)
+                      ->orWhere('section', 'Section A and B')
+                      ->orWhere('section', 'Both');
+            })
             ->whereHas('instructor', function ($query) use ($student) {
                 $query->where('department_id', $student->department_id)
                       ->where('year_level', $student->year_level);
@@ -59,8 +66,15 @@ class StudentExamController extends Controller
     {
         $student = $request->user();
 
-        // Get all published exams for the student's department & year_level
+        // Get all published exams for the student's department & year_level & section
         $exams = Exam::where('status', 'published')
+            ->where(function ($query) use ($student) {
+                $query->whereNull('section')
+                      ->orWhere('section', '')
+                      ->orWhere('section', $student->section)
+                      ->orWhere('section', 'Section A and B')
+                      ->orWhere('section', 'Both');
+            })
             ->whereHas('instructor', function ($query) use ($student) {
                 $query->where('department_id', $student->department_id)
                       ->where('year_level', $student->year_level);

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { useAuthStore } from '../../modules/auth/store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useRoute } from 'vue-router'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const route = useRoute()
+
+const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
+const sidebarOpen = inject<{ value: boolean }>('sidebarOpen', { value: true })
 
 // Map routes to dynamic titles
 const pageTitle = computed(() => {
@@ -20,16 +23,18 @@ const pageTitle = computed(() => {
 <template>
   <header class="h-24 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-8 sticky top-0 z-30">
     
-    <!-- Left Side: Title & Menu Toggle (Mobile) -->
+    <!-- Left Side: Title & Menu Toggle -->
     <div class="flex items-center gap-4">
-      <button class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden transition-colors">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <!-- Hamburger button — always visible, toggles sidebar -->
+      <button
+        @click="toggleSidebar"
+        class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors border border-slate-100"
+        :title="sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
         </svg>
       </button>
-      <div class="hidden lg:flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 text-slate-500 border border-slate-100 mr-2">
-         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"></path></svg>
-      </div>
       
       <div class="flex flex-col">
         <h1 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h1>

@@ -18,7 +18,7 @@ onMounted(async () => {
     localExamType.value = 'Other'
   }
   
-  // Set course code from authenticated user by fetching actual profile
+  // Set course code and section from authenticated user by fetching actual profile
   if (!formStore.courseCode) {
     isLoadingCourse.value = true
     try {
@@ -27,6 +27,9 @@ onMounted(async () => {
         formStore.courseCode = res.data.data.course_code
       } else {
         formStore.courseCode = authStore.user?.course_code || 'CS-301'
+      }
+      if (res.data?.data?.section) {
+        formStore.section = res.data.data.section
       }
     } catch (e) {
       formStore.courseCode = authStore.user?.course_code || 'CS-301'
@@ -97,10 +100,21 @@ watch(localExamType, (newVal) => {
       </div>
 
       <!-- Description -->
-      <div class="md:row-span-2 h-full">
+      <div class="md:row-span-3 h-full">
         <label class="block text-[13px] font-bold text-slate-700 mb-2">Description</label>
-        <textarea v-model="formStore.description" class="w-full h-[120px] border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none" placeholder="Enter exam description (optional)"></textarea>
+        <textarea v-model="formStore.description" class="w-full h-full min-h-[120px] border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] resize-none" placeholder="Enter exam description (optional)"></textarea>
         <p class="text-[11px] text-slate-400 mt-2 font-medium">Briefly describe the purpose of this exam</p>
+      </div>
+
+      <!-- Section -->
+      <div>
+        <label class="block text-[13px] font-bold text-slate-700 mb-2">Section <span class="text-rose-500">*</span></label>
+        <select v-model="formStore.section" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]">
+          <option value="A">Section A</option>
+          <option value="B">Section B</option>
+          <option value="Both">Section A and B</option>
+        </select>
+        <p class="text-[11px] text-slate-400 mt-2 font-medium">Which students can see this exam</p>
       </div>
 
       <!-- Passing Marks -->

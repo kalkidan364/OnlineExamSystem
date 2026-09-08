@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import { inject } from 'vue'
 
 const route = useRoute()
+const sidebarOpen = inject<{ value: boolean }>('sidebarOpen', { value: true })
 
 const navItems = [
   { name: 'Dashboard',   path: '/admin/dashboard',    icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
@@ -12,18 +14,22 @@ const navItems = [
   { name: 'Departments', path: '/admin/departments',  icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
   { name: 'Reports',     path: '/admin/reports',      icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { name: 'Active Logs', path: '/admin/activity-logs', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { name: 'Academic Calendar', path: '/admin/academic-calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { name: 'Settings',    path: '/admin/settings',     icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
 </script>
 
 <template>
-  <aside class="w-56 bg-white border-r border-slate-100 flex flex-col h-screen fixed left-0 top-0 overflow-hidden">
+  <aside 
+    class="bg-white border-r border-slate-100 flex flex-col h-screen fixed left-0 top-0 overflow-hidden z-30 transition-all duration-300"
+    :class="sidebarOpen ? 'w-56' : 'w-20'"
+  >
     
     <!-- Logo Area -->
-    <div class="flex items-center px-5 pt-10 pb-4 border-b border-slate-50">
+    <div class="flex items-center px-5 pt-10 pb-4 border-b border-slate-50" :class="!sidebarOpen && 'justify-center'">
       <div class="flex items-center gap-2">
         <img src="../../assets/images/logo.png" alt="Wollo University" class="w-9 h-9 object-contain rounded-full shadow-sm" />
-        <div class="flex flex-col">
+        <div v-if="sidebarOpen" class="flex flex-col whitespace-nowrap">
           <span class="text-[14px] font-bold text-slate-900 leading-tight">Wollo University</span>
           <span class="text-[10px] text-slate-500 font-medium">System Administration</span>
         </div>
@@ -36,12 +42,14 @@ const navItems = [
         v-for="item in navItems" 
         :key="item.name"
         :to="item.path"
-        class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group"
+        class="flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group"
         :class="[
           route.path.startsWith(item.path) 
             ? 'bg-rose-50 text-rose-600 font-semibold' 
-            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700',
+          sidebarOpen ? 'px-4' : 'justify-center px-0'
         ]"
+        :title="!sidebarOpen ? item.name : undefined"
       >
         <svg 
           class="w-5 h-5 flex-shrink-0 transition-colors duration-200" 
@@ -52,21 +60,21 @@ const navItems = [
         >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
         </svg>
-        <span class="text-[13px] tracking-wide font-medium">{{ item.name }}</span>
+        <span v-if="sidebarOpen" class="text-[13px] tracking-wide font-medium whitespace-nowrap">{{ item.name }}</span>
       </router-link>
     </nav>
 
     <!-- Bottom Graphic -->
     <div class="p-6 mt-auto">
       <div class="w-full flex flex-col items-center justify-center opacity-60">
-        <div class="w-16 h-16 border-2 border-slate-200 rounded-t-full mb-2"></div>
+        <div class="w-16 h-16 border-2 border-slate-200 rounded-t-full mb-2" :class="!sidebarOpen && 'w-8 h-8 border'"></div>
         <div class="flex gap-1 mb-2">
-           <div class="w-3 h-4 border border-slate-200"></div>
-           <div class="w-3 h-4 border border-slate-200"></div>
-           <div class="w-3 h-4 border border-slate-200"></div>
+           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
+           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
+           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
         </div>
-        <span class="text-xs font-bold text-[#2b4c7e] tracking-wide uppercase">Wollo University</span>
-        <span class="text-[9px] text-slate-400 font-medium">Super Admin Portal</span>
+        <span v-if="sidebarOpen" class="text-xs font-bold text-[#2b4c7e] tracking-wide uppercase whitespace-nowrap">Wollo University</span>
+        <span v-if="sidebarOpen" class="text-[9px] text-slate-400 font-medium whitespace-nowrap">Super Admin Portal</span>
       </div>
     </div>
 

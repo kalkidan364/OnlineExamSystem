@@ -5,6 +5,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
   const title = ref('')
   const courseCode = ref('')
   const examType = ref('Mid Exam')
+  const section = ref('A')
   const totalMarks = ref(100)
   const passingMarks = ref(60)
   const description = ref('')
@@ -63,6 +64,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
     title.value = exam.title || ''
     courseCode.value = exam.course_code || ''
     examType.value = exam.course_name || 'Mid Exam'
+    section.value = exam.section || 'A'
     totalMarks.value = exam.total_marks || 100
     durationMinutes.value = exam.duration_minutes || 90
 
@@ -154,6 +156,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
     title.value = ''
     courseCode.value = ''
     examType.value = 'Mid Exam'
+    section.value = 'A'
     totalMarks.value = 100
     passingMarks.value = 60
     description.value = ''
@@ -162,6 +165,7 @@ export const useCreateExamStore = defineStore('createExam', () => {
     scheduledTime.value = '09:00'
     questions.value = []
     
+    // Reset Settings
     shuffleQuestions.value = true
     showReviewScreen.value = true
     shuffleAnswers.value = true

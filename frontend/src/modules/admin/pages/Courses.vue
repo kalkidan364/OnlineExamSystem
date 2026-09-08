@@ -345,26 +345,35 @@ const handleExport = async (format: string) => {
   showExportDropdown.value = false;
   isLoading.value = true;
   try {
-    const res = await apiClient.get(`/admin/courses-export?format=${format}`, { responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const token = localStorage.getItem('auth_token');
+    const params = new URLSearchParams();
+    params.set('format', format);
+    if (deptFilter.value && deptFilter.value !== 'all') params.set('department', deptFilter.value);
+    if (statusFilter.value && statusFilter.value !== 'all') params.set('status', statusFilter.value);
+    if (levelFilter.value && levelFilter.value !== 'all') params.set('level', levelFilter.value);
+    if (search.value) params.set('search', search.value);
+
+    const res = await fetch(`http://localhost:8000/api/v1/admin/courses-export?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Export failed');
+    const data = await res.json();
+    const byteChars = atob(data.file);
+    const byteNums = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([new Uint8Array(byteNums)], {
+      type: format === 'pdf' ? 'application/pdf' : 'text/csv'
+    });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `courses_export_${new Date().toISOString().slice(0,10)}.${format === 'pdf' ? 'pdf' : 'csv'}`);
+    link.download = data.filename || `courses_export_${new Date().toISOString().slice(0, 10)}.${format}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
+    URL.revokeObjectURL(url);
   } catch (err: any) {
-    if (err.response && err.response.data && err.response.data instanceof Blob) {
-      const text = await err.response.data.text();
-      try {
-        const json = JSON.parse(text);
-        alert(json.message || 'Failed to export courses');
-      } catch (e) {
-        alert('Failed to export courses');
-      }
-    } else {
-      alert('Failed to export courses');
-    }
+    alert('Failed to export courses. Please try again.');
   } finally {
     isLoading.value = false;
   }
@@ -379,12 +388,9 @@ const handleExport = async (format: string) => {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-            </div>
             <h1 class="text-[24px] font-bold text-slate-800">Courses</h1>
           </div>
-          <p class="text-[13px] text-slate-500 ml-[52px]">Manage all courses and their information across the system.</p>
+          <p class="text-[13px] text-slate-500">Manage all courses and their information across the system.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <input type="file" ref="importFileInput" @change="handleImport" accept=".csv" class="hidden">

@@ -60,9 +60,24 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('courses-export', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'export']);
         Route::post('courses-import', [\App\Http\Controllers\Api\V1\AdminCourseController::class, 'import']);
         
+        Route::get('exams', [\App\Http\Controllers\Api\V1\AdminExamController::class, 'index']);
+        Route::get('exams/{id}', [\App\Http\Controllers\Api\V1\AdminExamController::class, 'show']);
+        Route::delete('exams/{id}', [\App\Http\Controllers\Api\V1\AdminExamController::class, 'destroy']);
+        
         Route::get('activity-logs', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'index']);
         
         Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
+
+        // Calendar Event Categories
+        Route::apiResource('calendar/categories', \App\Http\Controllers\Api\V1\AdminCalendarController::class)
+            ->except(['show'])
+            ->parameters(['categories' => 'id']);
+
+        // Calendar Academic Events
+        Route::get('calendar/events',          [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'indexEvents']);
+        Route::post('calendar/events',         [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'storeEvent']);
+        Route::put('calendar/events/{id}',     [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'updateEvent']);
+        Route::delete('calendar/events/{id}',  [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'destroyEvent']);
 
         // List all instructors (for assign-head modal), optionally filter by department_id
         Route::get('instructors', function (Request $request) {

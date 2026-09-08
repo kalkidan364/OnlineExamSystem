@@ -70,6 +70,9 @@ const saveAsDraft = async () => {
   try {
     await examStore.createExam({
       title: formStore.title || 'Untitled Exam',
+      course_code: formStore.courseCode,
+      course_name: formStore.examType,
+      section: formStore.section,
       duration_minutes: formStore.durationMinutes,
       total_marks: formStore.totalMarks,
       status: 'draft',
