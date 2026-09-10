@@ -7,6 +7,9 @@ defineProps<{
     examsCompleted: number
     upcomingExams: number
   }
+  title?: string
+  subtitle?: string
+  description?: string
 }>()
 </script>
 
@@ -25,12 +28,12 @@ defineProps<{
 
       <!-- Greeting & Title -->
       <div>
-        <p class="text-indigo-600 font-bold text-xs uppercase tracking-widest">GOOD MORNING,</p>
-        <h1 class="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-slate-700 leading-none mt-2">
-          {{ profile.name.split(' ')[0] }}
+        <p class="text-indigo-600 font-bold text-xs uppercase tracking-widest">{{ subtitle || 'GOOD MORNING,' }}</p>
+        <h1 class="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-slate-700 leading-none mt-2 uppercase">
+          {{ title || profile.name.split(' ')[0] }}
         </h1>
         <p class="text-slate-600 text-sm sm:text-base leading-relaxed mt-4 font-normal max-w-[540px]">
-          Access your exams, track your academic progress, and stay organized throughout the semester.
+          {{ description || 'Access your exams, track your academic progress, and stay organized throughout the semester.' }}
         </p>
       </div>
 

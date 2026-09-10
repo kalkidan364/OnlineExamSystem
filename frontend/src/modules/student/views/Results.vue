@@ -88,6 +88,9 @@ const getGradeBadgeClass = (grade: string) => {
     <HeroSection
       :profile="profile"
       :stats="{ examsCompleted: results.length, upcomingExams: upcomingExams.length }"
+      subtitle="ACADEMIC RECORDS"
+      title="RESULTS"
+      description="View your past exam performance, check your grades, and download your academic transcripts."
     />
 
     <!-- Main Content Body -->

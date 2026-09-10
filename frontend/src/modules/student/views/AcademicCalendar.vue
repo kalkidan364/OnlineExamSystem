@@ -156,6 +156,9 @@ onMounted(async () => {
     <HeroSection
       :profile="profile"
       :stats="{ examsCompleted: results.length, upcomingExams: upcomingExams.length }"
+      subtitle="SCHEDULE"
+      title="ACADEMIC CALENDAR"
+      description="View important academic events, holidays, and exam periods for the current semester."
     />
 
     <!-- Main Content Body -->

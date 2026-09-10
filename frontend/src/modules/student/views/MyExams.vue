@@ -217,7 +217,13 @@ const quickTips = [
     />
 
     <!-- Hero Section -->
-    <HeroSection :profile="profile" :stats="{ examsCompleted: results.length, upcomingExams: upcomingExams.length }" />
+    <HeroSection 
+      :profile="profile" 
+      :stats="{ examsCompleted: results.length, upcomingExams: upcomingExams.length }" 
+      subtitle="ASSESSMENTS"
+      title="MY EXAMS"
+      description="Manage your ongoing and upcoming examinations in one place."
+    />
 
     <!-- Main Exam Page Body -->
     <main class="flex-1 w-full mx-auto max-w-[1340px] px-4 sm:px-6 lg:px-8 py-8">

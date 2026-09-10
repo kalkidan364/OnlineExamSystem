@@ -15,6 +15,7 @@ interface LogEntry {
   description: string
   ipAddress: string
   status: string
+  is_read: boolean
 }
 
 const filterType = ref('All Activities')
@@ -32,13 +33,40 @@ const filterTypes = [
 
 const logs = ref<LogEntry[]>([])
 const isLoading = ref(true)
+const unreadCount = ref(0)
 
 const isViewModalOpen = ref(false)
 const selectedLog = ref<LogEntry | null>(null)
 
-const openViewModal = (log: LogEntry) => {
+const markAllRead = async () => {
+  try {
+    await apiClient.post('/admin/activity-logs/mark-all-read')
+    // Mark all locally
+    logs.value.forEach(l => { l.is_read = true })
+    unreadCount.value = 0
+    // Notify sidebar to clear
+    window.dispatchEvent(new CustomEvent('log-count-update', { detail: { count: 0 } }))
+  } catch (err) {
+    console.error('Failed to mark all as read', err)
+  }
+}
+
+const openViewModal = async (log: LogEntry) => {
   selectedLog.value = log
   isViewModalOpen.value = true
+
+  // If unread, mark it as read on the backend
+  if (!log.is_read) {
+    try {
+      await apiClient.post(`/admin/activity-logs/${log.id}/read`)
+      log.is_read = true
+      if (unreadCount.value > 0) unreadCount.value--
+      // Dispatch event to update the sidebar badge
+      window.dispatchEvent(new Event('log-read'))
+    } catch (err) {
+      console.error('Failed to mark log as read', err)
+    }
+  }
 }
 
 const closeViewModal = () => {
@@ -59,9 +87,25 @@ const fetchLogs = async () => {
       return {
         ...log,
         actionType: log.action, // mapping from backend to match frontend
+        ipAddress: log.ip_address,
+        is_read: log.is_read,
         time: `${formattedDate}\n${formattedTime}`
       }
     })
+
+    // Check how many are actually unread from the server
+    const serverUnreadCount = logs.value.filter(l => !l.is_read).length
+
+    // Automatically mark all as read when the admin views the page
+    if (serverUnreadCount > 0) {
+      apiClient.post('/admin/activity-logs/mark-all-read').catch(console.error)
+      // Tell the sidebar to clear its badge
+      window.dispatchEvent(new CustomEvent('log-count-update', { detail: { count: 0 } }))
+    }
+    
+    // Hide the top unread count badge since they've now opened the page,
+    // but the red dots on the rows will remain for this session so they can see which are new.
+    unreadCount.value = 0
   } catch (error) {
     console.error('Error fetching logs:', error)
   } finally {
@@ -119,7 +163,7 @@ const paginatedLogs = computed(() => {
 
 const getRoleBadge = (role: string) => {
   if (role === 'Super Admin') return 'bg-indigo-50 text-[#5138ed]'
-  if (role === 'Department Head') return 'bg-purple-50 text-purple-600'
+  if (role.includes('Department Head')) return 'bg-purple-50 text-purple-600'
   if (role === 'Instructor') return 'bg-blue-50 text-blue-500'
   if (role === 'Student') return 'bg-emerald-50 text-emerald-500'
   return 'bg-slate-50 text-slate-500'
@@ -128,7 +172,7 @@ const getRoleBadge = (role: string) => {
 // "By Who" badge — same color mapping as role badge
 const getByWhoBadge = (byWho: string) => {
   if (byWho === 'Super Admin') return 'bg-indigo-50 text-[#5138ed]'
-  if (byWho === 'Department Head') return 'bg-purple-50 text-purple-600'
+  if (byWho.includes('Department Head')) return 'bg-purple-50 text-purple-600'
   if (byWho === 'Instructor') return 'bg-blue-50 text-blue-500'
   if (byWho === 'Student') return 'bg-emerald-50 text-emerald-500'
   return 'bg-slate-50 text-slate-500'
@@ -136,7 +180,7 @@ const getByWhoBadge = (byWho: string) => {
 
 const getAvatarColor = (role: string) => {
   if (role === 'Super Admin') return 'bg-indigo-100 text-[#5138ed]'
-  if (role === 'Department Head') return 'bg-purple-100 text-purple-600'
+  if (role.includes('Department Head')) return 'bg-purple-100 text-purple-600'
   if (role === 'Instructor') return 'bg-blue-100 text-blue-600'
   if (role === 'Student') return 'bg-emerald-100 text-emerald-600'
   return 'bg-slate-100 text-slate-500'
@@ -185,6 +229,12 @@ const getAvatarInitials = (name: string) => {
 
       <!-- Filters Right -->
       <div class="flex items-center gap-3">
+        <!-- Unread Count Badge -->
+        <div v-if="unreadCount > 0" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200">
+          <div class="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></div>
+          <span class="text-[12px] font-bold text-rose-600">{{ unreadCount }} unread</span>
+          <button @click="markAllRead" class="text-[11px] font-bold text-rose-500 hover:text-rose-700 underline underline-offset-2 ml-1">Mark all read</button>
+        </div>
         <div class="relative">
           <select v-model="filterType" class="appearance-none border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-[13px] text-slate-700 font-bold bg-white focus:outline-none focus:border-[#5138ed] shadow-sm">
             <option v-for="f in filterTypes" :key="f.label" :value="f.label">⚙️ {{ f.label }}</option>
@@ -223,11 +273,12 @@ const getAvatarInitials = (name: string) => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
-              <tr v-for="log in paginatedLogs" :key="log.id" class="hover:bg-slate-50/50 transition-colors">
+              <tr v-for="log in paginatedLogs" :key="log.id" class="transition-colors hover:bg-slate-50/80" :class="!log.is_read ? 'bg-rose-50/20' : ''">
                 <!-- Time -->
-                <td class="px-5 py-3 whitespace-nowrap">
+                <td class="px-5 py-3 whitespace-nowrap relative">
+                  <div v-if="!log.is_read" class="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
                   <span class="text-[11px] font-bold text-slate-500">{{ log.time.split('\n')[0] }}</span><br>
-                  <span class="text-[11px] font-bold text-slate-800">{{ log.time.split('\n')[1] }}</span>
+                  <span class="text-[11px] font-bold" :class="!log.is_read ? 'text-rose-600' : 'text-slate-800'">{{ log.time.split('\n')[1] }}</span>
                 </td>
 
                 <!-- User -->

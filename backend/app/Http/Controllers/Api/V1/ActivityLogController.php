@@ -14,7 +14,7 @@ class ActivityLogController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $logs = ActivityLog::with('user:id,name,email,role')
+        $logs = ActivityLog::with(['user:id,name,email,role,department_id', 'user.department:id,name'])
             ->latest()
             ->get()
             ->map(function ($log) {
@@ -22,7 +22,7 @@ class ActivityLogController extends Controller
                 $rawRole = $log->actor_role ?? ($log->user ? $log->user->role : '');
                 $byWho = match($rawRole) {
                     'admin'     => 'Super Admin',
-                    'dept_head' => 'Department Head',
+                    'dept_head' => $log->user && $log->user->department ? $log->user->department->name . ' Department Head' : 'Department Head',
                     'instructor' => 'Instructor',
                     'student'   => 'Student',
                     default     => 'System',
@@ -40,9 +40,39 @@ class ActivityLogController extends Controller
                     'description' => $log->details,
                     'ip_address'  => $log->ip_address ?? '127.0.0.1',
                     'status'      => $log->log_status ?? 'Success',
+                    'is_read'     => (bool)$log->is_read,
                 ];
             });
 
         return response()->json(['data' => $logs]);
+    }
+
+    /**
+     * Get the count of unread activity logs.
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $count = ActivityLog::where('is_read', false)->count();
+        return response()->json(['count' => $count]);
+    }
+
+    /**
+     * Mark a specific activity log as read.
+     */
+    public function markAsRead(Request $request, $id): JsonResponse
+    {
+        $log = ActivityLog::findOrFail($id);
+        $log->update(['is_read' => true]);
+        
+        return response()->json(['message' => 'Marked as read successfully.']);
+    }
+
+    /**
+     * Mark all unread activity logs as read at once.
+     */
+    public function markAllAsRead(Request $request): JsonResponse
+    {
+        $updated = ActivityLog::where('is_read', false)->update(['is_read' => true]);
+        return response()->json(['message' => "Marked {$updated} logs as read."]);
     }
 }

@@ -19,6 +19,7 @@ class ActivityLog extends Model
         'details',
         'ip_address',
         'log_status',
+        'is_read',
     ];
 
     public function user()

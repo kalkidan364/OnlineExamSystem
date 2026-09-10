@@ -64,8 +64,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('exams/{id}', [\App\Http\Controllers\Api\V1\AdminExamController::class, 'show']);
         Route::delete('exams/{id}', [\App\Http\Controllers\Api\V1\AdminExamController::class, 'destroy']);
         
+        Route::get('activity-logs/unread-count', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'unreadCount']);
+        Route::post('activity-logs/mark-all-read', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'markAllAsRead']);
+        Route::post('activity-logs/{id}/read', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'markAsRead']);
         Route::get('activity-logs', [\App\Http\Controllers\Api\V1\ActivityLogController::class, 'index']);
-        
         Route::post('settings', [\App\Http\Controllers\Api\V1\SystemSettingController::class, 'store']);
 
         // Calendar Event Categories

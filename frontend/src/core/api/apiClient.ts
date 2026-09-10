@@ -24,7 +24,17 @@ apiClient.interceptors.request.use(
 
 // Response Interceptor: Handle 401 Unauthorized globally
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If the request was a mutation, dispatch an event so the sidebar can refresh the log count
+    const method = response.config.method?.toUpperCase()
+    if (method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      // Ignore the log read endpoints themselves to prevent loop/overhead
+      if (!response.config.url?.includes('activity-logs')) {
+        window.dispatchEvent(new Event('activity-logged'))
+      }
+    }
+    return response
+  },
   (error) => {
     if (error.response && error.response.status === 401) {
       // Only redirect to login if we are NOT already on the login page

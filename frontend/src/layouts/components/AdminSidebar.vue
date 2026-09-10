@@ -17,6 +17,41 @@ const navItems = [
   { name: 'Academic Calendar', path: '/admin/academic-calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { name: 'Settings',    path: '/admin/settings',     icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
+
+import { ref, onMounted } from 'vue'
+import apiClient from '../../core/api/apiClient'
+
+const logCount = ref(0)
+
+onMounted(async () => {
+  try {
+    const res = await apiClient.get('/admin/activity-logs/unread-count')
+    logCount.value = res.data.count
+  } catch (err) {
+    console.error('Failed to fetch activity log count', err)
+  }
+})
+
+// Listen for individual log read events
+window.addEventListener('log-read', () => {
+  if (logCount.value > 0) logCount.value--
+})
+
+// Listen for "mark all read" — reset the count to 0
+window.addEventListener('log-count-update', (e: Event) => {
+  const detail = (e as CustomEvent).detail
+  logCount.value = detail.count ?? 0
+})
+
+// Listen for new activities to refresh the count
+window.addEventListener('activity-logged', async () => {
+  try {
+    const res = await apiClient.get('/admin/activity-logs/unread-count')
+    logCount.value = res.data.count
+  } catch (err) {
+    console.error('Failed to update activity log count', err)
+  }
+})
 </script>
 
 <template>
@@ -42,7 +77,7 @@ const navItems = [
         v-for="item in navItems" 
         :key="item.name"
         :to="item.path"
-        class="flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group"
+        class="flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group relative"
         :class="[
           route.path.startsWith(item.path) 
             ? 'bg-rose-50 text-rose-600 font-semibold' 
@@ -60,7 +95,12 @@ const navItems = [
         >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
         </svg>
-        <span v-if="sidebarOpen" class="text-[13px] tracking-wide font-medium whitespace-nowrap">{{ item.name }}</span>
+        <span v-if="sidebarOpen" class="text-[13px] tracking-wide font-medium whitespace-nowrap flex-1">{{ item.name }}</span>
+        
+        <span v-if="sidebarOpen && item.name === 'Active Logs' && logCount > 0" class="px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full shadow-sm">
+          {{ logCount > 99 ? '99+' : logCount }}
+        </span>
+        <div v-else-if="!sidebarOpen && item.name === 'Active Logs' && logCount > 0" class="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border border-white"></div>
       </router-link>
     </nav>
 
