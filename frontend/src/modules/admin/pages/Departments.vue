@@ -729,12 +729,8 @@ const deleteDept = async () => {
     <!-- ==================== DEPARTMENTS LIST VIEW ==================== -->
     <template v-if="!showAddForm && !showDetailView">
 
-      <!-- Header -->
-      <div class="flex items-start justify-between">
-        <div>
-          <h1 class="text-[22px] font-bold text-slate-800">Departments</h1>
-          <p class="text-[13px] text-slate-500 mt-1">View and manage all academic departments in the university.</p>
-        </div>
+      <!-- Page Actions -->
+      <div class="flex items-center justify-end">
         <button @click="showAddForm = true; resetAddForm()" class="flex items-center gap-2 bg-[#4338ca] hover:bg-indigo-700 text-white text-[13px] font-bold px-5 py-2.5 rounded-lg shadow-sm shadow-indigo-200 transition-all">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
           Add Department

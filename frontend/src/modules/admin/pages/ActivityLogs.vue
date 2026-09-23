@@ -207,27 +207,8 @@ const getAvatarInitials = (name: string) => {
 <template>
   <div class="max-w-[1500px] mx-auto">
 
-    <!-- Header -->
-    <div class="flex items-start justify-between mb-6">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
-          <svg class="w-6 h-6 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div>
-          <h1 class="text-[22px] font-bold text-slate-800">Active Logs</h1>
-          <p class="text-[13px] text-slate-500">Monitor all recent activities and system events in real-time.</p>
-          <div class="flex items-center gap-1 mt-1 text-[12px] text-slate-400">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-            <span>Dashboard</span>
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-            <span class="text-slate-800 font-bold">Active Logs</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filters Right -->
+    <!-- Page Actions -->
+    <div class="flex items-center justify-end mb-6">
       <div class="flex items-center gap-3">
         <!-- Unread Count Badge -->
         <div v-if="unreadCount > 0" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200">

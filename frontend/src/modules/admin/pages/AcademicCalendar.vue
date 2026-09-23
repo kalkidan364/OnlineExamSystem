@@ -243,13 +243,8 @@ onMounted(() => {
 <template>
   <div class="space-y-6 min-w-0 w-full pb-10">
     <template v-if="!showSettings">
-    
-    <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-[24px] font-bold text-slate-800">Academic Calendar</h1>
-        <p class="text-[13px] text-slate-500 mt-0.5">Manage academic events, holidays, and important dates.</p>
-      </div>
+    <!-- Page Actions -->
+    <div class="flex items-center justify-end">
       <div class="flex items-center gap-3">
         <span class="px-4 py-2 bg-indigo-50 text-[#4338ca] font-bold text-[12px] rounded-full">2025 Second Semester</span>
       </div>
@@ -660,11 +655,7 @@ onMounted(() => {
 
     <!-- SETTINGS VIEW -->
     <template v-else>
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 class="text-[24px] font-bold text-slate-800">Calendar Settings</h1>
-          <p class="text-[13px] text-slate-500 mt-0.5">Configure calendar preferences and manage event categories.</p>
-        </div>
+      <div class="flex flex-col md:flex-row md:items-center justify-end gap-4">
         <button @click="showSettings = false" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-[13px] hover:bg-slate-50 transition-colors shadow-sm">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
           Back to Calendar

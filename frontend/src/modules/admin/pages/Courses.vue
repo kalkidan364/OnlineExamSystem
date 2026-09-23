@@ -384,14 +384,8 @@ const handleExport = async (format: string) => {
   <div class="w-full">
     <!-- List View -->
     <div v-if="!showAddPage && !showDetailsPage" class="space-y-6 min-w-0 w-full">
-      <!-- Header -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-3">
-            <h1 class="text-[24px] font-bold text-slate-800">Courses</h1>
-          </div>
-          <p class="text-[13px] text-slate-500">Manage all courses and their information across the system.</p>
-        </div>
+      <!-- Page Actions -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div class="flex flex-wrap items-center gap-3">
           <input type="file" ref="importFileInput" @change="handleImport" accept=".csv" class="hidden">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">

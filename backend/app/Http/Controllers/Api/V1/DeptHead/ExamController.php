@@ -121,4 +121,17 @@ class ExamController extends Controller
             'data'    => $createdExams
         ], 201);
     }
+
+    /**
+     * Delete an exam schedule.
+     */
+    public function destroy($id): JsonResponse
+    {
+        $exam = Exam::findOrFail($id);
+        $exam->delete();
+
+        return response()->json([
+            'message' => 'Exam schedule deleted successfully'
+        ]);
+    }
 }

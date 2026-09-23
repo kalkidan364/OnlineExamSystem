@@ -163,14 +163,8 @@ onMounted(async () => {
     <!-- List View -->
     <div v-if="!showDetailsPage && !showAllQuestions" class="space-y-6 min-w-0 w-full">
 
-    <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div class="flex items-start gap-4">
-        <div>
-          <h1 class="text-[24px] font-bold text-slate-800">Exams</h1>
-          <p class="text-[13px] text-slate-500 mt-0.5">Manage all exams and their information across the system.</p>
-        </div>
-      </div>
+    <!-- Page Actions -->
+    <div class="flex flex-col md:flex-row md:items-center justify-end gap-4">
       <div class="flex flex-wrap items-center gap-3">
         <button class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> Export Exams

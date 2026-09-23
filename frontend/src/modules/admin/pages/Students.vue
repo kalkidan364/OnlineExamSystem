@@ -447,11 +447,7 @@ const handleExport = async (format: string) => {
     <template v-if="!showAddModal && !viewingStudent">
       
       <!-- Top Title & Action Bar -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 class="text-[22px] font-bold text-slate-800">Students</h1>
-          <p class="text-[13px] text-slate-500 mt-0.5">Manage all students and their information across the system.</p>
-        </div>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div class="flex items-center gap-3">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>

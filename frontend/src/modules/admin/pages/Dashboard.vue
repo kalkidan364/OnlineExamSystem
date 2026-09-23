@@ -143,12 +143,8 @@ const donutSegments = computed(() => {
 <template>
   <div class="space-y-6">
 
-    <!-- Page Title + Date -->
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="text-[22px] font-bold text-slate-800">Super Admin Dashboard</h1>
-        <p class="text-[13px] text-slate-500 mt-1">Welcome back, Super Admin! Here's an overview of your system.</p>
-      </div>
+    <!-- Page Actions -->
+    <div class="flex items-center justify-end">
       <div class="flex items-center gap-2 text-[13px] font-medium text-slate-600 border border-slate-200 rounded-xl px-4 py-2.5 bg-white shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
         <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
         May 27, 2025

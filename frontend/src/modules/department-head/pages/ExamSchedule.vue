@@ -184,6 +184,17 @@ const submitSchedule = async () => {
   }
 }
 
+const deleteExam = async (id: number) => {
+  if (!confirm('Are you sure you want to delete this exam schedule?')) return
+  try {
+    await apiClient.delete(`/dept-head/exams/${id}`)
+    await fetchExams()
+  } catch (error) {
+    console.error('Failed to delete exam:', error)
+    alert('Failed to delete exam. Please try again.')
+  }
+}
+
 const totalItems = computed(() => exams.value.length)
 const totalPages = computed(() => Math.ceil(totalItems.value / perPage))
 
@@ -233,10 +244,10 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
       <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
 
         <!-- Toolbar -->
-        <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div class="flex items-center gap-4 flex-1">
+        <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-4 flex-1">
             <!-- Search -->
-            <div class="relative w-80 shrink-0">
+            <div class="relative w-full md:w-80">
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
               <input type="text" placeholder="Search exams by title, course or code..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-600 placeholder:text-slate-400" />
             </div>
@@ -280,12 +291,10 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Title</th>
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course Code</th>
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course</th>
-                <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date &amp; Time</th>
-                <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Duration</th>
+                <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date</th>
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Room</th>
-                <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Students</th>
                 <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                <th class="text-right px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
+                <th class="text-center px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
@@ -300,24 +309,21 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                     <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="calIcon"></path></svg>
                     <span class="text-[13px] font-bold text-slate-700">{{ exam.date }}</span>
                   </div>
-                  <div class="text-[12px] font-medium text-[#5138ed]">{{ exam.time }}</div>
                 </td>
-                <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.duration }}</td>
                 <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.room }}</td>
-                <td class="px-6 py-4 text-[13px] font-bold text-slate-600">{{ exam.students }}</td>
                 <td class="px-6 py-4">
                   <span :class="[statusBadge(exam.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md']">{{ exam.status }}</span>
                 </td>
                 <td class="px-6 py-4">
-                  <div class="flex items-center justify-end gap-2">
+                  <div class="flex items-center justify-center gap-2">
                     <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-colors">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     </button>
                     <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-colors">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                     </button>
-                    <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    <button @click="deleteExam(exam.id)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
                 </td>

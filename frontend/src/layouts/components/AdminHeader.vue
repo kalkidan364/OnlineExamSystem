@@ -11,12 +11,24 @@ const route = useRoute()
 const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
 const sidebarOpen = inject<{ value: boolean }>('sidebarOpen', { value: true })
 
-// Map routes to dynamic titles
-const pageTitle = computed(() => {
-  if (route.path.includes('/users')) return 'User Management'
-  if (route.path.includes('/departments')) return 'Department & Course Management'
-  if (route.path.includes('/settings')) return 'System Settings'
-  return 'Super Admin Dashboard'
+// Map routes to dynamic titles and descriptions
+const pageInfo = computed(() => {
+  const path = route.path
+
+  if (path.includes('/dashboard')) return { title: 'Dashboard', desc: 'System-wide overview and key metrics.' }
+  if (path.includes('/instructors')) return { title: 'Instructors', desc: 'Manage system instructors and their assignments.' }
+  if (path.includes('/students')) return { title: 'Students', desc: 'Manage enrolled students and their profiles.' }
+  if (path.includes('/courses')) return { title: 'Courses', desc: 'Manage academic courses and materials.' }
+  if (path.includes('/exams')) return { title: 'Exams', desc: 'Manage system-wide examinations and schedules.' }
+  if (path.includes('/departments')) return { title: 'Departments', desc: 'Manage departments and organizational structure.' }
+  if (path.includes('/reports')) return { title: 'Reports', desc: 'View and generate comprehensive reports about the system.' }
+  if (path.includes('/calendar')) return { title: 'Academic Calendar', desc: 'Manage academic terms, semesters, and important dates.' }
+  if (path.includes('/settings')) return { title: 'Settings', desc: 'Global application settings and configuration.' }
+  if (path.includes('/activity-logs')) return { title: 'Activity Logs', desc: 'Track and review all system activities and events.' }
+  if (path.includes('/question-banks')) return { title: 'Question Banks', desc: 'Manage centralized pools of examination questions.' }
+  if (path.includes('/users')) return { title: 'User Management', desc: 'Manage system users, roles, and permissions.' }
+
+  return { title: 'Super Admin Dashboard', desc: 'System administration and management.' }
 })
 </script>
 
@@ -37,18 +49,9 @@ const pageTitle = computed(() => {
       </button>
       
       <div class="flex flex-col">
-        <h1 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h1>
-        <div v-if="route.path.includes('/dashboard')" class="mt-0.5 text-[12px] font-medium text-slate-500">
-          System-wide overview and key metrics.
-        </div>
-        <div v-else-if="route.path.includes('/users')" class="mt-0.5 text-[12px] font-medium text-slate-500">
-          Manage system users, instructors, and students.
-        </div>
-        <div v-else-if="route.path.includes('/departments')" class="mt-0.5 text-[12px] font-medium text-slate-500">
-          Manage departments and course assignments.
-        </div>
-        <div v-else-if="route.path.includes('/settings')" class="mt-0.5 text-[12px] font-medium text-slate-500">
-          Global application settings and configuration.
+        <h1 class="text-xl font-bold text-slate-800">{{ pageInfo.title }}</h1>
+        <div class="mt-0.5 text-[12px] font-medium text-slate-500">
+          {{ pageInfo.desc }}
         </div>
       </div>
     </div>

@@ -431,14 +431,8 @@ const handleImport = async (event: Event) => {
     <!-- ════════════════ LIST VIEW ════════════════ -->
     <div v-if="!viewingInstructor && !showAddPage" class="space-y-6 pb-12 min-w-0 w-full">
 
-      <!-- Page Header -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-3">
-            <h1 class="text-[24px] font-bold text-slate-800">Instructors</h1>
-          </div>
-          <p class="text-[13px] text-slate-500">Manage all instructors and their information across the system.</p>
-        </div>
+      <!-- Page Actions -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div class="flex flex-wrap items-center gap-3">
           <input type="file" ref="importFileInput" class="hidden" accept=".csv" @change="handleImport">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">

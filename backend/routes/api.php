@@ -105,6 +105,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::put('students/{id}', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'update']);
         Route::get('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'index']);
         Route::post('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'store']);
+        Route::delete('exams/{id}', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'destroy']);
     });
 
     // ------------------------------------------------------------------
