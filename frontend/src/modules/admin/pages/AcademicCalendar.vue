@@ -84,12 +84,15 @@ const eventForm = ref({
   is_recurring: false,
 })
 
+const isCustomEventTitle = ref(false)
+
 function openAddEventModal() {
   eventForm.value = {
     title: '', category_id: '', academic_year: '2025/2026', semester: 'Second Semester',
     start_date: '', end_date: '', all_day: true, start_time: '', end_time: '',
     description: '', status: 'upcoming', color: '#6366F1', is_recurring: false,
   }
+  isCustomEventTitle.value = false
   eventSaveError.value = null
   showAddEventModal.value = true
 }
@@ -920,7 +923,26 @@ onMounted(() => {
             <!-- Event Title -->
             <div>
               <label class="block text-[12px] font-bold text-slate-700 mb-1.5">Event Title <span class="text-rose-500">*</span></label>
-              <input v-model="eventForm.title" type="text" placeholder="Enter event title" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] text-slate-700 transition-all placeholder:text-slate-400" />
+              <div v-if="!isCustomEventTitle" class="relative">
+                <select
+                  v-model="eventForm.title"
+                  @change="if (eventForm.title === 'Other') { isCustomEventTitle = true; eventForm.title = '' }"
+                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-[13px] focus:outline-none focus:border-[#4338ca] text-slate-700 appearance-none"
+                >
+                  <option value="" disabled>Select event title</option>
+                  <option value="Class Start">Class Start</option>
+                  <option value="Other">Other (Type custom title)</option>
+                </select>
+                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+              </div>
+              <div v-else class="flex gap-2">
+                <input v-model="eventForm.title" type="text" placeholder="Enter custom event title" class="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] text-slate-700 transition-all placeholder:text-slate-400" />
+                <button type="button" @click="isCustomEventTitle = false; eventForm.title = ''" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[12px] font-bold transition-colors flex items-center justify-center shrink-0" title="Back to predefined titles">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              </div>
             </div>
 
             <!-- Category -->

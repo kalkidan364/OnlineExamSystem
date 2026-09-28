@@ -26,11 +26,12 @@ const getIconClass = (index: number) => {
 
 // Helpers for color logic
 const getStatusBadge = (status: string) => {
-  if (status === 'Published') return 'bg-emerald-50 text-emerald-600'
-  if (status === 'Pending Grading') return 'bg-amber-50 text-amber-600'
-  if (status === 'Draft') return 'bg-slate-100 text-slate-600'
-  if (status === 'Not Started') return 'bg-slate-50 text-slate-400'
-  return 'bg-slate-50 text-slate-600'
+  if (status === 'Published')   return 'bg-emerald-50 text-emerald-600'
+  if (status === 'Graded')      return 'bg-blue-50 text-blue-600'
+  if (status === 'Completed')   return 'bg-blue-50 text-blue-600'
+  if (status === 'Pending')     return 'bg-amber-50 text-amber-600'
+  if (status === 'Draft')       return 'bg-slate-100 text-slate-500'
+  return 'bg-slate-50 text-slate-400'
 }
 
 const getTypeBadge = (type: string) => {
@@ -74,9 +75,10 @@ const getTypeBadge = (type: string) => {
       <div class="relative shrink-0">
         <select v-model="selectedStatus" class="appearance-none border border-slate-200 rounded-xl text-sm pl-3 pr-8 py-2 text-slate-600 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] bg-white transition-colors w-[130px]">
           <option>All Status</option>
+          <option>Draft</option>
+          <option>Pending</option>
+          <option>Completed</option>
           <option>Published</option>
-          <option>Pending Grading</option>
-          <option>Not Started</option>
         </select>
         <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -112,7 +114,6 @@ const getTypeBadge = (type: string) => {
             <th class="pb-4 pt-4 px-4 font-semibold">Exam Date</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Students</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Submitted</th>
-            <th class="pb-4 pt-4 px-4 font-semibold text-center">Graded</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Published</th>
             <th class="pb-4 pt-4 px-4 font-semibold text-center">Status</th>
             <th class="pb-4 pt-4 pl-4 pr-4 text-center font-semibold">Actions</th>
@@ -178,18 +179,6 @@ const getTypeBadge = (type: string) => {
                 </span>
               </div>
             </td>
-            
-            <td class="py-4 px-4 text-center">
-              <div class="flex flex-col items-center">
-                <span class="text-[12px] font-bold" :class="exam.graded_count === exam.submitted_count && exam.submitted_count > 0 ? 'text-emerald-500' : (exam.graded_count === 0 ? 'text-rose-500' : 'text-orange-500')">
-                  {{ exam.graded_count }}
-                </span>
-                <span class="text-[10px]" :class="exam.graded_count === exam.submitted_count && exam.submitted_count > 0 ? 'text-emerald-400' : (exam.graded_count === 0 ? 'text-rose-400' : 'text-orange-400')">
-                  ({{ exam.total_students > 0 ? ((exam.graded_count / exam.total_students) * 100).toFixed(1).replace('.0', '') : 0 }}%)
-                </span>
-              </div>
-            </td>
-            
             <td class="py-4 px-4 text-center">
               <svg v-if="exam.is_published" class="w-4 h-4 text-emerald-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
               <svg v-else class="w-4 h-4 text-rose-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>

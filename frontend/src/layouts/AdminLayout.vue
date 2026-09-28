@@ -34,11 +34,11 @@ provide('toggleSidebar', toggleSidebar)
 
       <!-- Page Content -->
       <main class="flex-1 p-8">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
             <Suspense>
               <template #default>
-                <component :is="Component" />
+                <component :is="Component" :key="route.path" />
               </template>
               <template #fallback>
                 <div class="flex items-center justify-center min-h-[60vh]">

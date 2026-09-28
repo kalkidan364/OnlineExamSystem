@@ -107,6 +107,11 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/instructor/pages/Reports.vue')
       },
       {
+        path: 'semester-submission',
+        name: 'SemesterSubmission',
+        component: () => import('../modules/instructor/pages/SemesterSubmission.vue')
+      },
+      {
         path: 'exams/create',
         name: 'CreateExam',
         component: () => import('../modules/instructor/pages/CreateExam.vue')
@@ -277,6 +282,21 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'activity-logs',
         name: 'DeptHeadActivityLogs',
         component: () => import('../modules/department-head/pages/ActivityLogs.vue')
+      },
+      {
+        path: 'semester-submissions',
+        name: 'DeptHeadSemesterSubmissions',
+        component: () => import('../modules/department-head/pages/SemesterSubmissionDetail.vue')
+      },
+      {
+        path: 'semester-submissions/overview',
+        name: 'DeptHeadSemesterSubmissionsOverview',
+        component: () => import('../modules/department-head/pages/SemesterSubmissions.vue')
+      },
+      {
+        path: 'semester-submissions/:id',
+        name: 'DeptHeadSemesterSubmissionDetail',
+        component: () => import('../modules/department-head/pages/SemesterSubmissionDetail.vue')
       },
       {
         path: 'settings',

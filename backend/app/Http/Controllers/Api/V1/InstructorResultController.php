@@ -37,7 +37,7 @@ class InstructorResultController extends Controller
             )->count();
 
             $publishedResults = $exams->filter(fn($e) =>
-                $e->is_published || in_array($e->status, ['published', 'completed'])
+                !is_null($e->published_at)
             )->count();
 
             $avgScore = $allAttempts->count() > 0 ? round($allAttempts->avg('score'), 1) : 0;
@@ -52,15 +52,45 @@ class InstructorResultController extends Controller
 
             $resultExams = $exams->map(function ($exam) use ($allAttempts, $totalStudents) {
                 $examAttempts = $allAttempts->where('exam_id', $exam->id);
-                $submittedCount = $examAttempts->filter(fn($a) => $a->submitted_at !== null)->count();
-                $gradedCount    = $examAttempts->where('status', 'graded')->count();
+                $submittedCount = $examAttempts->filter(fn($a) => $a->submitted_at !== null || $a->status !== 'in_progress')->count();
+                // A student is considered "graded" if their status is either 'graded' or 'published'
+                $gradedCount    = $examAttempts->whereIn('status', ['graded', 'published'])->count();
+                $publishedCount = $examAttempts->where('status', 'published')->count();
                 $avg            = $examAttempts->count() > 0 ? round($examAttempts->avg('score'), 1) : null;
-                $isPublished    = (bool)($exam->is_published || in_array($exam->status, ['published', 'completed']));
+                
+                // An exam is fully published ONLY if all submitted students have their results published
+                $isPublished    = ($submittedCount > 0 && $publishedCount === $submittedCount);
+                // An exam is fully graded ONLY if all submitted students are graded (but not yet all published)
+                $isFullyGraded  = ($submittedCount > 0 && $gradedCount === $submittedCount && !$isPublished);
 
-                $statusStr = 'Not Started';
-                if ($isPublished)                         $statusStr = 'Published';
-                elseif ($submittedCount > $gradedCount)   $statusStr = 'Pending Grading';
-                elseif ($submittedCount > 0)              $statusStr = 'Draft';
+                // ── Time-based Status Logic ──────────────────────────────────────────
+                $now = now();
+                $scheduledAt  = $exam->scheduled_at;
+                $durationMins = (int)($exam->duration_minutes ?? 0);
+
+                if ($isPublished) {
+                    $statusStr = 'Published';
+                } elseif ($isFullyGraded) {
+                    $statusStr = 'Graded';
+                } elseif ($scheduledAt) {
+                    $examEnd = $scheduledAt->copy()->addMinutes($durationMins);
+                    if ($now->lt($scheduledAt)) {
+                        // Before exam starts
+                        $statusStr = 'Draft';
+                    } elseif ($now->lte($examEnd)) {
+                        // During exam window
+                        $statusStr = 'Pending';
+                    } else {
+                        // Exam time has fully elapsed, but not fully graded yet
+                        $statusStr = 'Completed';
+                    }
+                } else {
+                    // No scheduled_at set — fall back to submission counts
+                    if ($gradedCount > 0)                 $statusStr = 'Completed';
+                    elseif ($submittedCount > 0)          $statusStr = 'Pending';
+                    else                                  $statusStr = 'Draft';
+                }
+                // ─────────────────────────────────────────────────────────────────────
 
                 return [
                     'id'              => $exam->id,
@@ -145,7 +175,7 @@ class InstructorResultController extends Controller
             $scheduledAt     = $exam->scheduled_at
                 ? $exam->scheduled_at->toIso8601String()
                 : $exam->created_at->toIso8601String();
-            $isPublished     = (bool)($exam->is_published || in_array($exam->status, ['published', 'completed']));
+            $isPublished     = !is_null($exam->published_at);
 
             // 2. Fetch attempts for this exam — student relationship is named 'student' in ExamAttempt model
             $attempts = ExamAttempt::where('exam_id', $exam->id)
@@ -166,24 +196,60 @@ class InstructorResultController extends Controller
                 $classStudents = $classStudents->merge($extraStudents)->unique('id')->values();
             }
 
+            // Load all questions for this exam (to compute real auto/manual splits)
+            $examQuestions = \App\Models\Question::where('exam_id', $exam->id)->get();
+            $autoQIds = $examQuestions->filter(fn($q) => in_array($q->type, ['multiple_choice', 'true_false', 'matching']))->pluck('id')->flip();
+            $manualQIds = $examQuestions->filter(fn($q) => !in_array($q->type, ['multiple_choice', 'true_false', 'matching']))->pluck('id')->flip();
+            $autoQTotal = $examQuestions->filter(fn($q) => in_array($q->type, ['multiple_choice', 'true_false', 'matching']))->sum('marks');
+            $manualQTotal = $examQuestions->filter(fn($q) => !in_array($q->type, ['multiple_choice', 'true_false', 'matching']))->sum('marks');
+            $hasManualQuestions = $manualQIds->count() > 0;
+
             // 5. Build per-student result rows
-            $formattedStudents = $classStudents->map(function ($student, $idx) use ($attempts, $totalMarks, $scheduledAt) {
+            $formattedStudents = $classStudents->map(function ($student, $idx) use ($attempts, $totalMarks, $scheduledAt, $isPublished, $examQuestions, $autoQIds, $manualQIds, $autoQTotal, $manualQTotal, $hasManualQuestions) {
                 $attempt = $attempts->get($student->id);
 
                 if ($attempt) {
+                    $answers = $attempt->answers ?? [];
+                    if (is_string($answers)) $answers = json_decode($answers, true) ?? [];
+
+                    // Real auto score from MCQ/TF answers
+                    $autoScore = 0;
+                    foreach ($examQuestions as $q) {
+                        if (!$autoQIds->has($q->id)) continue;
+                        $studentAns = $answers[(string)$q->id] ?? null;
+                        if ($studentAns !== null && strtolower($studentAns) === strtolower($q->correct_answer ?? '')) {
+                            $autoScore += $q->marks;
+                        }
+                    }
+                    // Real manual score from stored _manual_scores
+                    $manualScores = $answers['_manual_scores'] ?? [];
+                    $manualScore = array_sum($manualScores);
+
                     $score       = (int)($attempt->score ?? 0);
                     $pct         = $totalMarks > 0 ? round(($score / $totalMarks) * 100, 1) : 0;
-                    $status      = match($attempt->status) {
-                        'graded'                => 'Graded',
-                        'submitted'             => 'Pending',
-                        'in_progress'           => 'Pending',
-                        default                 => 'Absent',
-                    };
+                    $grade       = $attempt->grade ?? $this->calculateGrade($pct);
+
+                    // Status shown in the instructor's student result table:
+                    // Published: attempt status is 'published' (auto-graded all-MCQ, or instructor clicked Re-Publish)
+                    // Graded: instructor clicked Save Grades (No Publish) — student cannot see result yet
+                    // Pending: student submitted with manual/subjective questions awaiting instructor review
+                    // Absent: no submission
+                    if ($attempt->status === 'published') {
+                        $status = 'Published';
+                    } elseif ($attempt->status === 'graded') {
+                        $status = 'Graded';
+                    } elseif (in_array($attempt->status, ['submitted', 'in_progress'])) {
+                        $status = 'Pending';
+                    } else {
+                        $status = 'Absent';
+                    }
+
                     $submittedOn = $attempt->submitted_at
                         ? $attempt->submitted_at->toIso8601String()
                         : ($attempt->updated_at ? $attempt->updated_at->toIso8601String() : $scheduledAt);
-                    $grade       = $attempt->grade ?? $this->calculateGrade($pct);
                 } else {
+                    $autoScore   = 0;
+                    $manualScore = 0;
                     $score       = 0;
                     $status      = 'Absent';
                     $submittedOn = $scheduledAt;
@@ -194,11 +260,12 @@ class InstructorResultController extends Controller
                     'id'          => $student->id,
                     'studentId'   => $student->id_no ?? ('STU' . str_pad($student->id, 7, '0', STR_PAD_LEFT)),
                     'name'        => $student->name,
+                    'section'     => $student->section ?? 'N/A',
                     'submittedOn' => $submittedOn,
-                    'autoScore'   => $totalMarks > 0 ? round($score * 0.6, 1) : 0,
-                    'autoTotal'   => $totalMarks > 0 ? (int)round($totalMarks * 0.6) : 0,
-                    'manualScore' => $totalMarks > 0 ? round($score * 0.4, 1) : 0,
-                    'manualTotal' => $totalMarks > 0 ? (int)round($totalMarks * 0.4) : 0,
+                    'autoScore'   => $autoScore,
+                    'autoTotal'   => $autoQTotal,
+                    'manualScore' => $manualScore,
+                    'manualTotal' => $manualQTotal,
                     'finalScore'  => $score,
                     'totalMarks'  => $totalMarks,
                     'grade'       => $grade,
@@ -206,12 +273,25 @@ class InstructorResultController extends Controller
                 ];
             })->values();
 
-            // 6. Summary metrics
+                    // 6. Summary metrics
             $total     = max($formattedStudents->count(), 1);
             $submitted = $formattedStudents->filter(fn($s) => $s['status'] !== 'Absent')->count();
-            $graded    = $formattedStudents->filter(fn($s) => $s['status'] === 'Graded')->count();
+            $graded    = $formattedStudents->filter(fn($s) => $s['status'] === 'Graded' || $s['status'] === 'Published')->count();
+            $published = $formattedStudents->filter(fn($s) => $s['status'] === 'Published')->count();
             $pending   = $formattedStudents->filter(fn($s) => $s['status'] === 'Pending')->count();
             $absent    = $formattedStudents->filter(fn($s) => $s['status'] === 'Absent')->count();
+
+            // Status logic for the top card
+            $publishStatus = 'Not Published';
+            if ($submitted > 0) {
+                if ($published === $submitted) {
+                    $publishStatus = 'Published';
+                } elseif ($graded === $submitted) {
+                    $publishStatus = 'Graded';
+                } elseif ($pending > 0 || $graded > 0 || $published > 0) {
+                    $publishStatus = 'Pending';
+                }
+            }
 
             return response()->json([
                 'data' => [
@@ -227,7 +307,8 @@ class InstructorResultController extends Controller
                         'total_students'   => $formattedStudents->count(),
                         'submitted_count'  => $submitted,
                         'submitted_pct'    => round(($submitted / $total) * 100, 1),
-                        'is_published'     => $isPublished,
+                        'is_published'     => $publishStatus === 'Published',
+                        'publish_status'   => $publishStatus,
                     ],
                     'summary' => [
                         'total_students' => $formattedStudents->count(),
@@ -569,7 +650,7 @@ class InstructorResultController extends Controller
                         'course_name'      => $courseName,
                         'total_marks'      => $totalMarks,
                         'duration_minutes' => $durationMinutes,
-                        'is_published'     => (bool)($exam->is_published || in_array($exam->status, ['published', 'completed'])),
+                        'is_published'     => !is_null($exam->published_at),
                     ],
                     'attempt' => [
                         'id'           => $attempt?->id,
@@ -648,6 +729,7 @@ class InstructorResultController extends Controller
 
             $answers['_manual_scores'] = $manualScores;
 
+            // Save Grades (No Publish) → status = 'graded' (not visible to student yet)
             $attempt->update([
                 'score'      => $finalScore,
                 'percentage' => $pct,
@@ -671,7 +753,7 @@ class InstructorResultController extends Controller
 
     /**
      * POST /instructor/results/{examId}/student/{studentId}/publish
-     * Save grades AND mark the exam as published.
+     * Save grades AND mark both the attempt and exam as published.
      */
     public function publishResult(Request $request, string $examId, string $studentId): JsonResponse
     {
@@ -684,7 +766,15 @@ class InstructorResultController extends Controller
                 return $saveResponse;
             }
 
-            // Mark the exam as published so students can see results
+            // Re-Publish: update attempt status to 'published' so student can see their result
+            $student = \App\Models\User::find((int)$studentId);
+            if ($student) {
+                ExamAttempt::where('exam_id', (int)$examId)
+                    ->where('user_id', $student->id)
+                    ->update(['status' => 'published']);
+            }
+
+            // Mark the exam as published
             Exam::where('id', (int)$examId)->update(['status' => 'published', 'published_at' => now()]);
 
             return response()->json([

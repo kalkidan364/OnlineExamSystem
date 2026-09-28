@@ -76,6 +76,7 @@ const pageTitle = computed(() => {
   if (route.path.includes('/students')) return 'Student Management'
   if (route.path.includes('/results')) return 'Results'
   if (route.path.includes('/reports')) return 'Reports'
+  if (route.path.includes('/semester-submission')) return ''
   if (route.path.includes('/profile')) return 'My Profile'
   if (route.path.includes('/settings')) return 'Settings'
   return 'Dashboard'

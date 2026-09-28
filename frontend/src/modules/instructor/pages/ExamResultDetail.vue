@@ -119,9 +119,10 @@ const filteredStudents = computed(() => {
 })
 
 const getStatusClass = (status: string) => {
-  if (status === 'Graded') return 'text-emerald-600'
-  if (status === 'Pending') return 'text-orange-500'
-  if (status === 'Absent') return 'text-rose-500'
+  if (status === 'Published') return 'text-emerald-600'
+  if (status === 'Graded')    return 'text-blue-600'
+  if (status === 'Pending')   return 'text-orange-500'
+  if (status === 'Absent')    return 'text-rose-500'
   return 'text-slate-500'
 }
 
@@ -143,9 +144,25 @@ const isStudentSelected = (studentId: number) => {
   return selectedStudentIds.value.includes(studentId)
 }
 
-const publishSelectedResults = () => {
+const isPublishing = ref(false)
+
+const publishSelectedResults = async () => {
   if (selectedStudentIds.value.length === 0) return
-  showPublishModal.value = true
+  
+  isPublishing.value = true
+  try {
+    for (const studentId of selectedStudentIds.value) {
+      await apiClient.post(`/instructor/results/${examId}/student/${studentId}/publish`)
+    }
+    // Refresh the data to show updated statuses
+    await fetchExamDetails()
+    showPublishModal.value = true
+  } catch (error) {
+    console.error('Failed to publish selected results:', error)
+    alert('An error occurred while publishing results. Please try again.')
+  } finally {
+    isPublishing.value = false
+  }
 }
 
 const resetFilters = () => {
@@ -211,8 +228,15 @@ const resetFilters = () => {
         <div class="flex flex-col"><span class="text-slate-400 font-bold text-[10px] uppercase mb-0.5">Submitted</span><span class="text-emerald-600 font-bold">{{ examDetail.submitted_count }} ({{ examDetail.submitted_pct }}%)</span></div>
         <div class="flex flex-col">
           <span class="text-slate-400 font-bold text-[10px] uppercase mb-0.5">Published</span>
-          <span v-if="examDetail.is_published" class="text-emerald-600 font-bold flex items-center gap-1">
+          
+          <span v-if="examDetail.publish_status === 'Published'" class="text-emerald-600 font-bold flex items-center gap-1">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> Published
+          </span>
+          <span v-else-if="examDetail.publish_status === 'Graded'" class="text-blue-600 font-bold flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Graded
+          </span>
+          <span v-else-if="examDetail.publish_status === 'Pending'" class="text-orange-500 font-bold flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Pending
           </span>
           <span v-else class="text-rose-500 font-bold flex items-center gap-1">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg> Not Published
@@ -277,19 +301,24 @@ const resetFilters = () => {
           <!-- Publish Selected Results Button -->
           <button
             @click="publishSelectedResults"
-            :disabled="selectedStudentIds.length === 0"
+            :disabled="selectedStudentIds.length === 0 || isPublishing"
             :class="[
               'px-4 py-2 rounded-xl text-[12px] font-bold flex items-center gap-2 transition-all shrink-0',
-              selectedStudentIds.length > 0
+              selectedStudentIds.length > 0 && !isPublishing
                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-70'
             ]"
             :title="selectedStudentIds.length === 0 ? 'Select at least one graded student to publish' : 'Publish selected results'"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg v-if="isPublishing" class="animate-spin -ml-1 mr-2 h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
             </svg>
-            <span>Publish Selected Results {{ selectedStudentIds.length > 0 ? `(${selectedStudentIds.length})` : '' }}</span>
+            <span v-if="isPublishing">Publishing...</span>
+            <span v-else>Publish Selected Results {{ selectedStudentIds.length > 0 ? `(${selectedStudentIds.length})` : '' }}</span>
           </button>
         </div>
 
@@ -302,6 +331,7 @@ const resetFilters = () => {
                   <th class="py-3 pl-4 pr-2 font-semibold">#</th>
                   <th class="py-3 px-3 font-semibold">Student ID</th>
                   <th class="py-3 px-3 font-semibold">Student Name</th>
+                  <th class="py-3 px-3 font-semibold">Section</th>
                   <th class="py-3 px-3 font-semibold">Submitted On</th>
                   <th class="py-3 px-3 font-semibold text-center">Auto Score<br><span class="text-[8px] text-slate-300 normal-case">(MCQ)</span></th>
                   <th class="py-3 px-3 font-semibold text-center">Manual Score<br><span class="text-[8px] text-slate-300 normal-case">(Subjective)</span></th>
@@ -316,6 +346,7 @@ const resetFilters = () => {
                   <td class="py-3 pl-4 pr-2 text-[12px] font-bold text-slate-500">{{ index + 1 }}</td>
                   <td class="py-3 px-3 text-[12px] font-medium text-slate-600">{{ student.studentId }}</td>
                   <td class="py-3 px-3 text-[12px] font-bold text-slate-800">{{ student.name }}</td>
+                  <td class="py-3 px-3 text-[12px] font-medium text-slate-600">{{ student.section }}</td>
                   <td class="py-3 px-3">
                     <div class="flex flex-col">
                       <span class="text-[12px] font-medium text-slate-700">{{ new Date(student.submittedOn).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) }}</span>

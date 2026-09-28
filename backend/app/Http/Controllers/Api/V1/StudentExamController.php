@@ -413,9 +413,12 @@ class StudentExamController extends Controller
         $percentage       = $percentageBase > 0 ? round(($autoScore / $percentageBase) * 100, 2) : 0;
         $grade            = $hasPendingMarks ? 'Pending' : $this->calculateGrade($percentage);
 
-        // Status: submitted if manual questions exist (instructor must grade)
-        // graded immediately if everything was auto-gradeable
-        $status = $hasPendingMarks ? 'submitted' : 'graded';
+        // Status logic after submission:
+        // - No manual questions at all → auto-publish immediately ('published')
+        // - Has manual questions (even if mixed with auto) → 'submitted' for instructor review
+        // - 'graded' is only set by instructor via saveGrades (Save No Publish)
+        // - 'published' is set by instructor via publishResult (Re-Publish) OR auto here
+        $status = $hasPendingMarks ? 'submitted' : 'published';
 
         $attempt->update([
             'score'        => $autoScore,
