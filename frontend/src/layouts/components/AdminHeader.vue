@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import { useAuthStore } from '../../modules/auth/store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
-import { computed, inject } from 'vue'
+import { computed, inject, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const route = useRoute()
+
+onMounted(() => {
+  authStore.fetchCurrentUser()
+})
+
+const profilePhotoUrl = computed(() => {
+  const pic = authStore.user?.profile_picture_url || authStore.user?.profile_picture
+  if (!pic) return 'https://i.pravatar.cc/150?u=admin123'
+  if (pic.startsWith('http://') || pic.startsWith('https://') || pic.startsWith('data:')) {
+    return pic
+  }
+  return `http://localhost:8000/storage/${pic}`
+})
 
 const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
 const sidebarOpen = inject<{ value: boolean }>('sidebarOpen', { value: true })
@@ -75,8 +88,8 @@ const pageInfo = computed(() => {
 
       <!-- User Profile Dropdown -->
       <div class="flex items-center gap-3 pl-6 border-l border-slate-200 cursor-pointer group">
-        <div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border-2 border-transparent group-hover:border-rose-500 transition-all">
-          <img src="https://i.pravatar.cc/150?u=admin123" alt="Profile" class="w-full h-full object-cover" />
+        <div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border-2 border-transparent group-hover:border-rose-500 transition-all flex items-center justify-center">
+          <img :src="profilePhotoUrl" alt="Profile" class="w-full h-full object-cover" />
         </div>
         <div class="hidden md:flex flex-col">
           <span class="text-sm font-bold text-slate-800">{{ authStore.user?.name || 'Super Admin' }}</span>

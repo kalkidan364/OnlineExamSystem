@@ -128,6 +128,8 @@ class AuthController extends Controller
                     'role'          => $effectiveRole,
                     'department_id' => $user->department_id,
                     'department'    => $user->department,
+                    'profile_picture'     => $user->profile_picture,
+                    'profile_picture_url' => $user->profile_picture_url,
                 ],
                 'token'            => $token,
                 'assigned_options' => $assignedOptions,
@@ -203,5 +205,87 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'Password changed successfully.']);
+    }
+
+    /**
+     * Update user profile photo.
+     */
+    public function updateProfilePhoto(Request $request): JsonResponse
+    {
+        $request->validate([
+            'profile_picture' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+        ]);
+
+        $user = $request->user();
+
+        // Delete old profile picture if exists
+        if ($user->profile_picture && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_picture)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_picture);
+        }
+
+        $path = $request->file('profile_picture')->store('avatars', 'public');
+        $user->profile_picture = $path;
+        $user->save();
+
+        $photoUrl = asset('storage/' . $path);
+
+        \App\Helpers\LogActivity::record(
+            'Updated',
+            'Users',
+            "Updated profile photo for \"{$user->name}\""
+        );
+
+        return response()->json([
+            'message'             => 'Profile photo updated successfully.',
+            'profile_picture'     => $path,
+            'profile_picture_url' => $photoUrl,
+            'user'                => [
+                'id'                  => $user->id,
+                'name'                => $user->name,
+                'email'               => $user->email,
+                'username'            => $user->username,
+                'role'                => $user->role,
+                'department_id'       => $user->department_id,
+                'profile_picture'     => $path,
+                'profile_picture_url' => $photoUrl,
+            ],
+        ]);
+    }
+
+    /**
+     * Remove user profile photo.
+     */
+    public function removeProfilePhoto(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->profile_picture && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_picture)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_picture);
+        }
+
+        $user->profile_picture = null;
+        $user->save();
+
+        \App\Helpers\LogActivity::record(
+            'Updated',
+            'Users',
+            "Removed profile photo for \"{$user->name}\""
+        );
+
+        return response()->json([
+            'message'             => 'Profile photo removed successfully.',
+            'profile_picture'     => null,
+            'profile_picture_url' => null,
+            'user'                => [
+                'id'                  => $user->id,
+                'name'                => $user->name,
+                'email'               => $user->email,
+                'username'            => $user->username,
+                'role'                => $user->role,
+                'department_id'       => $user->department_id,
+                'profile_picture'     => null,
+                'profile_picture_url' => null,
+            ],
+        ]);
     }
 }

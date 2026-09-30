@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCalendarStore } from '../../../store/calendarStore'
+import { useSettingsStore } from '../../../store/settingsStore'
 
 const calendarStore = useCalendarStore()
+const settingsStore = useSettingsStore()
 
 // ── Navigation ───────────────────────────────────────────
 const activeTab = ref('Calendar View')
-const tabs = ['Calendar View', 'Event List', 'Academic Year Setup']
+const tabs = ['Calendar View', 'Event List']
 const showSettings = ref(false)
 
 // ── Category modal state ─────────────────────────────────
@@ -71,8 +73,8 @@ const eventSaveError = ref<string | null>(null)
 const eventForm = ref({
   title: '',
   category_id: '' as string | number,
-  academic_year: '2025/2026',
-  semester: 'Second Semester',
+  academic_year: settingsStore.academicYear || '2025/2026',
+  semester: settingsStore.semester || 'Second Semester',
   start_date: '',
   end_date: '',
   all_day: true,
@@ -88,9 +90,19 @@ const isCustomEventTitle = ref(false)
 
 function openAddEventModal() {
   eventForm.value = {
-    title: '', category_id: '', academic_year: '2025/2026', semester: 'Second Semester',
-    start_date: '', end_date: '', all_day: true, start_time: '', end_time: '',
-    description: '', status: 'upcoming', color: '#6366F1', is_recurring: false,
+    title: '',
+    category_id: calendarStore.categories.length > 0 ? calendarStore.categories[0].id : '',
+    academic_year: settingsStore.academicYear || '2025/2026',
+    semester: settingsStore.semester || 'Second Semester',
+    start_date: todayStr,
+    end_date: todayStr,
+    all_day: true,
+    start_time: '',
+    end_time: '',
+    description: '',
+    status: 'upcoming',
+    color: '#6366F1',
+    is_recurring: false,
   }
   isCustomEventTitle.value = false
   eventSaveError.value = null
@@ -186,9 +198,79 @@ const statsData = computed(() => [
   { label: 'Important Deadlines',value: String(calendarStore.eventStats.upcoming),  sub: 'Upcoming Events',    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', color: 'bg-rose-50 text-rose-500', border: 'border-rose-100' },
 ])
 
+// Calendar view mode toggle
+const calendarViewMode = ref<'month' | 'week' | 'list'>('month')
+
+// Current week start (Monday) for week view
+const weekStart = ref((() => {
+  const d = new Date()
+  const day = d.getDay() // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day
+  const mon = new Date(d)
+  mon.setDate(d.getDate() + diff)
+  mon.setHours(0, 0, 0, 0)
+  return mon
+})())
+
+const weekDays = computed(() => {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart.value)
+    d.setDate(weekStart.value.getDate() + i)
+    return {
+      date: d,
+      dateStr: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
+      label: d.toLocaleString('default', { weekday: 'short' }),
+      dayNum: d.getDate(),
+    }
+  })
+})
+
+const weekTitle = computed(() => {
+  const end = weekDays.value[6].date
+  const start = weekDays.value[0].date
+  if (start.getMonth() === end.getMonth()) {
+    return `${start.toLocaleString('default', { month: 'long' })} ${start.getDate()}–${end.getDate()}, ${start.getFullYear()}`
+  }
+  return `${start.toLocaleString('default', { month: 'short' })} ${start.getDate()} – ${end.toLocaleString('default', { month: 'short' })} ${end.getDate()}, ${start.getFullYear()}`
+})
+
+function prevWeek() {
+  const d = new Date(weekStart.value)
+  d.setDate(d.getDate() - 7)
+  weekStart.value = d
+}
+function nextWeek() {
+  const d = new Date(weekStart.value)
+  d.setDate(d.getDate() + 7)
+  weekStart.value = d
+}
+function goTodayWeek() {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const mon = new Date(d)
+  mon.setDate(d.getDate() + diff)
+  mon.setHours(0, 0, 0, 0)
+  weekStart.value = mon
+}
+
+// List view — events for the current month sorted by date
+const listViewEvents = computed(() => {
+  const y = calendarYear.value, m = calendarMonth.value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const monthStr = `${y}-${pad(m)}`
+  return calendarStore.events
+    .filter(e => e.start_date.startsWith(monthStr) || e.end_date.startsWith(monthStr))
+    .slice()
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+})
+
 // Event List tab — live events search/filter
 const eventSearch = ref('')
 const eventFilterCat = ref('')
+const eventFilterStatus = ref('')
+const eventFilterSemester = ref('')
+
 const filteredEvents = computed(() => {
   let list = calendarStore.events
   if (eventSearch.value.trim()) {
@@ -198,8 +280,21 @@ const filteredEvents = computed(() => {
   if (eventFilterCat.value) {
     list = list.filter(e => String(e.category_id) === eventFilterCat.value)
   }
+  if (eventFilterStatus.value) {
+    list = list.filter(e => e.status === eventFilterStatus.value)
+  }
+  if (eventFilterSemester.value) {
+    list = list.filter(e => e.semester === eventFilterSemester.value)
+  }
   return list
 })
+
+function resetFilters() {
+  eventSearch.value = ''
+  eventFilterCat.value = ''
+  eventFilterStatus.value = ''
+  eventFilterSemester.value = ''
+}
 
 // Status badge helpers
 function statusBadge(status: string) {
@@ -227,17 +322,42 @@ function daysUntilColor(dateStr: string): string {
 }
 
 // Academic summary (static — can be made dynamic later)
-const academicSummary = [
-  { title: 'Academic Year',       date: 'Jul 1, 2025 - Jun 30, 2026', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-[#4338ca] bg-indigo-50' },
-  { title: 'Second Semester',     date: 'May 5, 2025 - Aug 30, 2025', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-[#4338ca] bg-indigo-50' },
+const academicSummary = computed(() => [
+  { title: 'Academic Year',       date: settingsStore.academicYear || '2025/2026', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-[#4338ca] bg-indigo-50' },
+  { title: settingsStore.semester || 'Second Semester', date: 'Active Semester', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-[#4338ca] bg-indigo-50' },
   { title: 'Registration Period', date: 'Apr 20, 2025 - Apr 30, 2025', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-emerald-500 bg-emerald-50' },
   { title: 'Classes Period',      date: 'May 5, 2025 - Aug 15, 2025', icon: 'M12 14l9-5-9-5-9 5 9 5z', color: 'text-emerald-500 bg-emerald-50' },
   { title: 'Midterm Exams',       date: 'May 12, 2025 - May 16, 2025', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-rose-500 bg-rose-50' },
   { title: 'Final Exams',         date: 'May 28, 2025 - Jun 10, 2025', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-blue-500 bg-blue-50' },
-]
+])
+
+const eventListStats = computed(() => [
+  { label: 'Total Events',       value: String(calendarStore.eventStats.total),    sub: 'This Semester',      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',           color: 'bg-indigo-50 text-[#4338ca]',   border: 'border-indigo-100' },
+  { label: 'Academic Weeks',     value: '16',                                       sub: 'Active Period',      icon: 'M12 14l9-5-9-5-9 5 9 5z',                                                                          color: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-100' },
+  { label: 'Holidays',           value: String(calendarStore.eventStats.holidays),  sub: 'Scheduled Breaks',   icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',           color: 'bg-orange-50 text-orange-500',   border: 'border-orange-100' },
+  { label: 'Exam Periods',       value: String(calendarStore.eventStats.exams),     sub: 'Scheduled Periods',  icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', color: 'bg-blue-50 text-blue-500', border: 'border-blue-100' },
+  { label: 'Important Deadlines',value: String(calendarStore.eventStats.upcoming),  sub: 'Upcoming Events',    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2m-6 9l2 2 4-4', color: 'bg-rose-50 text-rose-500', border: 'border-rose-100' },
+])
+
+const statusSummary = computed(() => [
+  { name: 'Upcoming', count: calendarStore.events.filter(e => e.status === 'upcoming').length, color: 'bg-indigo-500' },
+  { name: 'Ongoing', count: calendarStore.events.filter(e => e.status === 'ongoing').length, color: 'bg-emerald-500' },
+  { name: 'Completed', count: calendarStore.events.filter(e => e.status === 'completed').length, color: 'bg-slate-400' },
+  { name: 'Cancelled', count: calendarStore.events.filter(e => e.status === 'cancelled').length, color: 'bg-rose-500' },
+])
+
+const sidebarCategories = computed(() => {
+  return calendarStore.categories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    color: cat.color,
+    count: calendarStore.events.filter(e => e.category_id === cat.id).length
+  }))
+})
 
 // Load data on mount
 onMounted(() => {
+  settingsStore.fetchSettings()
   calendarStore.fetchEvents()
   calendarStore.fetchCategories()
 })
@@ -249,7 +369,9 @@ onMounted(() => {
     <!-- Page Actions -->
     <div class="flex items-center justify-end">
       <div class="flex items-center gap-3">
-        <span class="px-4 py-2 bg-indigo-50 text-[#4338ca] font-bold text-[12px] rounded-full">2025 Second Semester</span>
+        <span class="px-4 py-2 bg-indigo-50 text-[#4338ca] font-bold text-[12px] rounded-full shadow-sm">
+          {{ settingsStore.formattedAcademicTerm }}
+        </span>
       </div>
     </div>
 
@@ -311,22 +433,31 @@ onMounted(() => {
             <div class="flex items-center justify-between mb-6">
               <div class="flex items-center gap-2">
                 <div class="flex bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                  <button @click="prevMonth" class="px-2 py-1 rounded text-slate-500 hover:bg-white hover:shadow-sm hover:text-slate-700 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
-                  <button @click="nextMonth" class="px-2 py-1 rounded text-slate-500 hover:bg-white hover:shadow-sm hover:text-slate-700 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+                  <button @click="calendarViewMode === 'week' ? prevWeek() : prevMonth()" class="px-2 py-1 rounded text-slate-500 hover:bg-white hover:shadow-sm hover:text-slate-700 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                  <button @click="calendarViewMode === 'week' ? nextWeek() : nextMonth()" class="px-2 py-1 rounded text-slate-500 hover:bg-white hover:shadow-sm hover:text-slate-700 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
                 </div>
-                <button @click="goToday" class="px-3 py-1.5 border border-slate-200 bg-slate-50 rounded-lg text-[12px] font-bold text-slate-600 hover:bg-white hover:shadow-sm transition-all">Today</button>
+                <button @click="calendarViewMode === 'week' ? goTodayWeek() : goToday()" class="px-3 py-1.5 border border-slate-200 bg-slate-50 rounded-lg text-[12px] font-bold text-slate-600 hover:bg-white hover:shadow-sm transition-all">Today</button>
               </div>
 
-              <h2 class="text-[18px] font-bold text-slate-800">{{ calendarTitle }}</h2>
+              <h2 class="text-[18px] font-bold text-slate-800">
+                {{ calendarViewMode === 'week' ? weekTitle : calendarTitle }}
+              </h2>
 
               <div class="flex bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                <button class="px-3 py-1 rounded-md bg-white shadow-sm text-[12px] font-bold text-[#4338ca]">Month</button>
-                <button class="px-3 py-1 rounded-md text-[12px] font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors">Week</button>
-                <button class="px-3 py-1 rounded-md text-[12px] font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors">List</button>
+                <button @click="calendarViewMode = 'month'"
+                  :class="calendarViewMode === 'month' ? 'bg-white shadow-sm text-[#4338ca]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+                  class="px-3 py-1 rounded-md text-[12px] font-bold transition-colors">Month</button>
+                <button @click="calendarViewMode = 'week'"
+                  :class="calendarViewMode === 'week' ? 'bg-white shadow-sm text-[#4338ca]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+                  class="px-3 py-1 rounded-md text-[12px] font-bold transition-colors">Week</button>
+                <button @click="calendarViewMode = 'list'"
+                  :class="calendarViewMode === 'list' ? 'bg-white shadow-sm text-[#4338ca]' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+                  class="px-3 py-1 rounded-md text-[12px] font-bold transition-colors">List</button>
               </div>
             </div>
 
-            <div class="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+            <!-- ── MONTH VIEW ── -->
+            <div v-if="calendarViewMode === 'month'" class="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
               <div v-for="day in days" :key="day" class="bg-white py-2 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wide">
                 {{ day }}
               </div>
@@ -354,7 +485,79 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+
+            <!-- ── WEEK VIEW ── -->
+            <template v-else-if="calendarViewMode === 'week'">
+              <!-- 7-column week grid -->
+              <div class="grid grid-cols-7 gap-1">
+                <div v-for="wd in weekDays" :key="wd.dateStr" class="flex flex-col">
+                  <!-- Day header -->
+                  <div :class="[
+                    'text-center py-2 rounded-t-lg text-[11px] font-bold uppercase tracking-wide border border-b-0',
+                    wd.dateStr === todayStr ? 'bg-[#4338ca] text-white border-[#4338ca]' : 'bg-slate-50 text-slate-500 border-slate-200'
+                  ]">
+                    <div>{{ wd.label }}</div>
+                    <div class="text-[15px] font-black mt-0.5">{{ wd.dayNum }}</div>
+                  </div>
+                  <!-- Events column -->
+                  <div :class="[
+                    'min-h-[120px] border border-slate-200 rounded-b-lg p-1 space-y-1 bg-white',
+                    wd.dateStr === todayStr ? 'border-[#4338ca]/30' : ''
+                  ]">
+                    <div v-for="ev in calendarStore.eventsOnDay(wd.dateStr)" :key="ev.id"
+                      class="px-1.5 py-1 text-[10px] font-bold rounded cursor-pointer truncate"
+                      :style="{ backgroundColor: ev.color + '22', color: ev.color }">
+                      <span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle" :style="{ backgroundColor: ev.color }"></span>
+                      {{ ev.title }}
+                    </div>
+                    <div v-if="calendarStore.eventsOnDay(wd.dateStr).length === 0" class="h-full flex items-center justify-center">
+                      <span class="text-[10px] text-slate-300">—</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── LIST VIEW ── -->
+            <template v-else-if="calendarViewMode === 'list'">
+              <div v-if="listViewEvents.length === 0" class="py-12 text-center text-[13px] text-slate-400">
+                No events found for {{ calendarTitle }}.
+              </div>
+              <div v-else class="space-y-2">
+                <div v-for="ev in listViewEvents" :key="ev.id"
+                  class="flex items-start gap-4 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
+                  <!-- Date badge -->
+                  <div class="shrink-0 w-12 text-center">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase">
+                      {{ new Date(ev.start_date + 'T00:00').toLocaleString('default', { month: 'short' }) }}
+                    </div>
+                    <div :class="[
+                      'text-[20px] font-black leading-none',
+                      ev.start_date === todayStr ? 'text-[#4338ca]' : 'text-slate-700'
+                    ]">{{ new Date(ev.start_date + 'T00:00').getDate() }}</div>
+                  </div>
+                  <!-- Color bar -->
+                  <div class="w-1 self-stretch rounded-full shrink-0" :style="{ backgroundColor: ev.color }"></div>
+                  <!-- Content -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <p class="text-[13px] font-bold text-slate-800">{{ ev.title }}</p>
+                      <span v-if="ev.category_name" class="text-[10px] font-bold px-2 py-0.5 rounded"
+                        :style="{ backgroundColor: (ev.category_color ?? ev.color) + '22', color: ev.category_color ?? ev.color }">{{ ev.category_name }}</span>
+                      <span :class="[statusBadge(ev.status), 'text-[10px] font-bold px-2 py-0.5 rounded capitalize']">{{ ev.status }}</span>
+                    </div>
+                    <p v-if="ev.description" class="text-[11px] text-slate-500 mt-1 truncate">{{ ev.description }}</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">
+                      {{ ev.start_date }}{{ ev.end_date !== ev.start_date ? ` → ${ev.end_date}` : '' }}
+                    </p>
+                  </div>
+                  <!-- Days until -->
+                  <span class="shrink-0 text-[11px] font-bold" :class="daysUntilColor(ev.start_date)">{{ daysUntil(ev.start_date) }}</span>
+                </div>
+              </div>
+            </template>
           </div>
+
 
           <!-- Events Table -->
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
@@ -468,10 +671,10 @@ onMounted(() => {
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
             <h3 class="text-[15px] font-bold text-slate-800 mb-5">Event Categories</h3>
             <div class="space-y-3">
-              <div v-for="(cat, i) in categories" :key="i" class="flex items-center justify-between">
+              <div v-for="(cat, i) in sidebarCategories" :key="cat.id || i" class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  <div :class="['w-7 h-7 rounded flex items-center justify-center shrink-0', cat.color]">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="cat.icon"></path></svg>
+                  <div class="w-7 h-7 rounded flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '22', color: cat.color }">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
                   </div>
                   <span class="text-[13px] font-bold text-slate-700">{{ cat.name }}</span>
                 </div>
@@ -483,7 +686,7 @@ onMounted(() => {
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex flex-col h-auto">
             <div class="flex items-center justify-between mb-5">
               <h3 class="text-[15px] font-bold text-slate-800">Academic Year Summary</h3>
-              <span class="text-[11px] font-bold text-[#4338ca] bg-indigo-50 px-2 py-1 rounded">2025/2026</span>
+              <span class="text-[11px] font-bold text-[#4338ca] bg-indigo-50 px-2 py-1 rounded">{{ settingsStore.academicYear }}</span>
             </div>
             <div class="space-y-4 flex-1">
               <div v-for="(block, i) in academicSummary" :key="i" class="flex items-start gap-3">
@@ -496,9 +699,9 @@ onMounted(() => {
                 </div>
               </div>
             </div>
-            <button class="w-full mt-6 py-2.5 bg-[#4338ca] hover:bg-indigo-700 text-white text-[13px] font-bold rounded-lg transition-colors">
+            <router-link to="/admin/settings" class="block text-center w-full mt-6 py-2.5 bg-[#4338ca] hover:bg-indigo-700 text-white text-[13px] font-bold rounded-lg transition-colors">
               Manage Academic Year
-            </button>
+            </router-link>
           </div>
         </div>
       </div>
@@ -537,26 +740,26 @@ onMounted(() => {
             <div class="flex flex-wrap items-center gap-3 p-4 border-b border-slate-100">
               <div class="relative flex-1 min-w-[200px]">
                 <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input placeholder="Search events by title or description..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] focus:outline-none focus:border-[#4338ca] text-slate-700" />
+                <input v-model="eventSearch" placeholder="Search events by title or description..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] focus:outline-none focus:border-[#4338ca] text-slate-700" />
               </div>
-              <select class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[140px]">
-                <option>All Categories</option>
+              <select v-model="eventFilterCat" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[140px]">
+                <option value="">All Categories</option>
+                <option v-for="cat in calendarStore.categories" :key="cat.id" :value="String(cat.id)">{{ cat.name }}</option>
               </select>
-              <select class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[120px]">
-                <option>All Status</option>
+              <select v-model="eventFilterStatus" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[120px]">
+                <option value="">All Status</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
-              <select class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[140px]">
-                <option>All Semesters</option>
+              <select v-model="eventFilterSemester" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-[12px] text-slate-600 focus:outline-none font-medium min-w-[140px]">
+                <option value="">All Semesters</option>
+                <option value="First Semester">First Semester</option>
+                <option value="Second Semester">Second Semester</option>
+                <option value="Summer">Summer</option>
               </select>
-              <div class="flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
-                <input placeholder="Start Date" class="px-3 py-2 text-[12px] text-slate-600 focus:outline-none w-[110px]" />
-                <div class="px-2 text-slate-400 border-l border-slate-200"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>
-              </div>
-              <div class="flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
-                <input placeholder="End Date" class="px-3 py-2 text-[12px] text-slate-600 focus:outline-none w-[110px]" />
-                <div class="px-2 text-slate-400 border-l border-slate-200"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>
-              </div>
-              <button class="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-[12px] hover:bg-slate-50 transition-colors shadow-sm">
+              <button @click="resetFilters" class="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-[12px] hover:bg-slate-50 transition-colors shadow-sm">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Reset
               </button>
             </div>
@@ -575,23 +778,27 @@ onMounted(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="event in eventsListFull" :key="event.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                  <tr v-if="filteredEvents.length === 0">
+                    <td colspan="7" class="px-5 py-10 text-center text-[13px] text-slate-400 font-medium">No events found.</td>
+                  </tr>
+                  <tr v-for="event in filteredEvents" :key="event.id" class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                     <td class="px-5 py-4">
                       <div class="flex items-center gap-2">
-                        <span :class="['w-1.5 h-1.5 rounded-full', event.color]"></span>
+                        <span class="w-2 h-2 rounded-full shrink-0" :style="{ backgroundColor: event.color }"></span>
                         <p class="text-[13px] font-bold text-slate-800">{{ event.title }}</p>
                       </div>
                     </td>
-                    <td class="px-4 py-4"><span :class="[event.badge, 'text-[10px] font-bold px-2 py-1 rounded']">{{ event.cat }}</span></td>
-                    <td class="px-4 py-4 text-[12px] font-semibold text-slate-600">{{ event.start }}</td>
-                    <td class="px-4 py-4 text-[12px] font-semibold text-slate-600">{{ event.end }}</td>
-                    <td class="px-4 py-4 text-[12px] text-slate-500 min-w-[200px] whitespace-normal">{{ event.desc }}</td>
-                    <td class="px-4 py-4"><span class="text-[10px] font-bold text-[#4338ca] bg-indigo-50 px-2.5 py-1 rounded">{{ event.status }}</span></td>
+                    <td class="px-4 py-4">
+                      <span v-if="event.category_name" class="text-[10px] font-bold px-2 py-1 rounded" :style="{ backgroundColor: (event.category_color ?? event.color) + '22', color: event.category_color ?? event.color }">{{ event.category_name }}</span>
+                      <span v-else class="text-[10px] text-slate-400">—</span>
+                    </td>
+                    <td class="px-4 py-4 text-[12px] font-semibold text-slate-600">{{ event.start_date }}</td>
+                    <td class="px-4 py-4 text-[12px] font-semibold text-slate-600">{{ event.end_date }}</td>
+                    <td class="px-4 py-4 text-[12px] text-slate-500 max-w-[200px] truncate">{{ event.description ?? '—' }}</td>
+                    <td class="px-4 py-4"><span :class="[statusBadge(event.status), 'text-[10px] font-bold px-2 py-1 rounded capitalize']">{{ event.status }}</span></td>
                     <td class="px-4 py-4">
                       <div class="flex items-center justify-center gap-2">
-                        <button class="text-blue-500 hover:bg-blue-50 p-1.5 rounded transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
-                        <button class="text-rose-500 hover:bg-rose-50 p-1.5 rounded transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
-                        <button class="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg></button>
+                        <button @click="calendarStore.deleteEvent(event.id)" class="text-rose-500 hover:bg-rose-50 p-1.5 rounded transition-colors" title="Delete event"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                       </div>
                     </td>
                   </tr>
@@ -627,10 +834,10 @@ onMounted(() => {
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
             <h3 class="text-[15px] font-bold text-slate-800 mb-6">Event Categories</h3>
             <div class="space-y-4">
-              <div v-for="(cat, i) in categories" :key="i" class="flex items-center justify-between">
+              <div v-for="(cat, i) in sidebarCategories" :key="cat.id || i" class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  <div :class="['w-8 h-8 rounded-lg flex items-center justify-center shrink-0', cat.color]">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="cat.icon"></path></svg>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '22', color: cat.color }">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
                   </div>
                   <span class="text-[13px] font-bold text-slate-700">{{ cat.name }}</span>
                 </div>

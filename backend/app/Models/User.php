@@ -39,6 +39,19 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'profile_picture_url',
+    ];
+
+    public function getProfilePictureUrlAttribute(): ?string
+    {
+        if (!$this->profile_picture) return null;
+        if (str_starts_with($this->profile_picture, 'http://') || str_starts_with($this->profile_picture, 'https://')) {
+            return $this->profile_picture;
+        }
+        return asset('storage/' . $this->profile_picture);
+    }
+
     protected function casts(): array
     {
         return [

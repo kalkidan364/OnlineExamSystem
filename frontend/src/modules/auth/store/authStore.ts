@@ -5,7 +5,7 @@ import apiClient from '../../../core/api/apiClient'
 import { useSettingsStore } from '../../../store/settingsStore'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<any>(null)
+  const user = ref<any>(JSON.parse(localStorage.getItem('auth_user') || 'null'))
   const token = ref(localStorage.getItem('auth_token') || null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -82,6 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = userData
       token.value = authToken
       localStorage.setItem('auth_token', authToken)
+      localStorage.setItem('auth_user', JSON.stringify(userData))
       
       // Redirect based on user role
       if (user.value.role === 'dept_head') {
@@ -119,6 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
     selectedContext.value = selection
 
     localStorage.setItem('auth_token', authToken)
+    localStorage.setItem('auth_user', JSON.stringify(userData))
     localStorage.setItem('instructor_context', JSON.stringify(selection))
 
     pendingInstructor.value = null
@@ -127,6 +129,27 @@ export const useAuthStore = defineStore('auth', () => {
     settingsStore.fetchSettings()
 
     router.push('/instructor/dashboard')
+  }
+
+  const fetchCurrentUser = async () => {
+    if (!token.value) return
+    try {
+      const response = await apiClient.get('/user/me')
+      if (response.data?.data) {
+        user.value = response.data.data
+        localStorage.setItem('auth_user', JSON.stringify(response.data.data))
+      }
+    } catch (e) {
+      console.warn('Failed to fetch current user profile:', e)
+    }
+  }
+
+  const updateProfilePhoto = (newPhotoUrl: string, newPhotoPath?: string) => {
+    if (user.value) {
+      user.value.profile_picture = newPhotoPath || newPhotoUrl
+      user.value.profile_picture_url = newPhotoUrl
+      localStorage.setItem('auth_user', JSON.stringify(user.value))
+    }
   }
 
   const logout = async () => {
@@ -140,6 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
       pendingInstructor.value = null
       selectedContext.value = null
       localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
       localStorage.removeItem('instructor_context')
       router.push('/login')
     }
@@ -154,6 +178,8 @@ export const useAuthStore = defineStore('auth', () => {
     selectedContext,
     login,
     completeInstructorSetup,
+    fetchCurrentUser,
+    updateProfilePhoto,
     logout
   }
 })
