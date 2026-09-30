@@ -95,6 +95,7 @@ class DepartmentController extends Controller
         $department = Department::create([
             'name'        => $request->name,
             'code'        => $request->code,
+            'college'     => $request->college,
             'established' => $request->established,
             'status'      => 'active',
         ]);
@@ -162,11 +163,12 @@ class DepartmentController extends Controller
         $request->validate([
             'name'        => 'sometimes|string|max:255',
             'code'        => 'sometimes|string|max:20|unique:departments,code,' . $department->id,
+            'college'     => 'nullable|string|max:255',
             'established' => 'nullable|max:4',
             'status'      => 'sometimes|in:active,inactive',
         ]);
 
-        $department->update($request->only(['name', 'code', 'established', 'status']));
+        $department->update($request->only(['name', 'code', 'college', 'established', 'status']));
 
         if ($request->has('status')) {
             LogActivity::record(

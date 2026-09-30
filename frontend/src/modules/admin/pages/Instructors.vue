@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import apiClient from '../../../core/api/apiClient'
 import { useSettingsStore } from '../../../store/settingsStore'
 
+const router = useRouter()
 const settingsStore = useSettingsStore()
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
@@ -36,6 +38,152 @@ const newInstructor = ref({
   employeeId: '', username: '', password: '', confirmPassword: '',
   profilePicture: null as File | null,
 })
+
+// Form Validation Errors
+const formErrors = ref({
+  name: '',
+  email: '',
+  phone: '',
+  gender: '',
+  department_id: '',
+  employeeId: '',
+  username: '',
+  password: '',
+  confirmPassword: '',
+  profilePicture: '',
+})
+
+const isSubmitted = ref(false)
+
+// Real-time password requirement checks (sidebar checklist)
+const passwordCriteria = computed(() => {
+  const pwd = newInstructor.value.password || ''
+  return {
+    length: pwd.length >= 8,
+    uppercase: /[A-Z]/.test(pwd),
+    lowercase: /[a-z]/.test(pwd),
+    number: /[0-9]/.test(pwd),
+    special: /[!@#$%^&*(),.?":{}|<>_\-]/.test(pwd),
+  }
+})
+
+const isPasswordValid = computed(() => {
+  const c = passwordCriteria.value
+  return c.length && c.uppercase && c.lowercase && c.number && c.special
+})
+
+// Field-by-field validation logic
+const validateField = (field: keyof typeof formErrors.value) => {
+  switch (field) {
+    case 'name':
+      if (!newInstructor.value.name.trim()) {
+        formErrors.value.name = 'Full Name is required.'
+      } else if (newInstructor.value.name.trim().length < 2) {
+        formErrors.value.name = 'Full Name must be at least 2 characters.'
+      } else {
+        formErrors.value.name = ''
+      }
+      break
+
+    case 'email':
+      const emailTrim = newInstructor.value.email.trim()
+      if (!emailTrim) {
+        formErrors.value.email = 'Email Address is required.'
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        formErrors.value.email = 'Please enter a valid email address (e.g. name@wu.edu.et).'
+      } else {
+        formErrors.value.email = ''
+      }
+      break
+
+    case 'phone':
+      const phoneTrim = newInstructor.value.phone.trim()
+      if (!phoneTrim) {
+        formErrors.value.phone = 'Phone Number is required.'
+      } else if (!/^\+?[0-9\s\-()]{9,18}$/.test(phoneTrim)) {
+        formErrors.value.phone = 'Please enter a valid phone number (e.g. 0911223344 or +251911223344).'
+      } else {
+        formErrors.value.phone = ''
+      }
+      break
+
+    case 'gender':
+      if (!newInstructor.value.gender) {
+        formErrors.value.gender = 'Please select a gender.'
+      } else {
+        formErrors.value.gender = ''
+      }
+      break
+
+    case 'department_id':
+      if (!newInstructor.value.department_id) {
+        formErrors.value.department_id = 'Please select a department.'
+      } else {
+        formErrors.value.department_id = ''
+      }
+      break
+
+    case 'employeeId':
+      const empIdTrim = newInstructor.value.employeeId.trim()
+      if (!empIdTrim) {
+        formErrors.value.employeeId = 'Employee ID is required.'
+      } else if (empIdTrim.length < 3) {
+        formErrors.value.employeeId = 'Employee ID must be at least 3 characters.'
+      } else {
+        formErrors.value.employeeId = ''
+      }
+      break
+
+    case 'username':
+      const uTrim = newInstructor.value.username.trim()
+      if (!uTrim) {
+        formErrors.value.username = 'Username is required.'
+      } else if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(uTrim)) {
+        formErrors.value.username = 'Username must be 3–30 characters (letters, numbers, _, ., -).'
+      } else {
+        formErrors.value.username = ''
+      }
+      break
+
+    case 'password':
+      if (!newInstructor.value.password) {
+        formErrors.value.password = 'Password is required.'
+      } else if (!isPasswordValid.value) {
+        formErrors.value.password = 'Password must meet all 5 requirements in the sidebar.'
+      } else {
+        formErrors.value.password = ''
+      }
+      if (newInstructor.value.confirmPassword) {
+        validateField('confirmPassword')
+      }
+      break
+
+    case 'confirmPassword':
+      if (!newInstructor.value.confirmPassword) {
+        formErrors.value.confirmPassword = 'Confirm Password is required.'
+      } else if (newInstructor.value.confirmPassword !== newInstructor.value.password) {
+        formErrors.value.confirmPassword = 'Passwords do not match.'
+      } else {
+        formErrors.value.confirmPassword = ''
+      }
+      break
+  }
+}
+
+const validateAll = (): boolean => {
+  isSubmitted.value = true
+  validateField('name')
+  validateField('email')
+  validateField('phone')
+  validateField('gender')
+  validateField('department_id')
+  validateField('employeeId')
+  validateField('username')
+  validateField('password')
+  validateField('confirmPassword')
+
+  return !Object.values(formErrors.value).some(err => err !== '')
+}
 
 const permissions = ref([
   { key: 'create_exams', label: 'Create Exams', desc: 'Create and manage exams', checked: true },
@@ -124,8 +272,20 @@ const chartOptions = {
   plugins: { legend: { display: false }, tooltip: { enabled: true } }
 }
 
-// ── Top Departments ──
+// ── Top Departments (Max 5) ──
 const topDepartments = computed(() => {
+  if (allDepartments.value && allDepartments.value.length > 0) {
+    const list = allDepartments.value.map(d => {
+      const instCount = allInstructors.value.filter(i => i.department_id === d.id || i.departmentName === d.name).length
+      return {
+        id: d.id,
+        name: d.name,
+        count: instCount,
+        created_at: d.created_at
+      }
+    })
+    return list.sort((a, b) => b.count - a.count).slice(0, 5)
+  }
   const map: Record<string, number> = {}
   allInstructors.value.forEach(i => {
     if (i.departmentName && i.departmentName !== '—') {
@@ -140,11 +300,11 @@ const topDepartments = computed(() => {
 
 const deptIcons = ['💻', '⚙️', '📊', '🗄️', '🌐']
 
-// ── Recent Registrations ──
+// ── Recent Registrations (Max 5) ──
 const recentRegistrations = computed(() => {
   return [...allInstructors.value]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 3)
+    .slice(0, 5)
 })
 
 // ── Avatar Color ──
@@ -177,6 +337,8 @@ const viewInstructor = (inst: any) => { viewingInstructor.value = inst }
 const closeView = () => { viewingInstructor.value = null }
 const openAdd = () => {
   newInstructor.value = { name:'', email:'', phone:'', gender:'', department_id:'', semester:'', year:'', employeeId:'', username:'', password:'', confirmPassword:'', profilePicture: null }
+  isSubmitted.value = false
+  Object.keys(formErrors.value).forEach(k => (formErrors.value as any)[k] = '')
   if (previewUrl) previewUrl.value = null
   showPassword.value = false
   showConfirmPassword.value = false
@@ -186,6 +348,8 @@ const openAdd = () => {
 const closeAdd = () => { 
   showAddPage.value = false 
   if (previewUrl) previewUrl.value = null
+  isSubmitted.value = false
+  Object.keys(formErrors.value).forEach(k => (formErrors.value as any)[k] = '')
 }
 const editPermissions = ref([
   { id: 'create_exams', key: 'createExams', label: 'Create Exams', desc: 'Create and manage exams', checked: true },
@@ -206,6 +370,15 @@ const triggerEditFileInput = () => { if (editFileInput.value) editFileInput.valu
 const handleProfilePicture = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (file) {
+    if (file.size > 2 * 1024 * 1024) {
+      formErrors.value.profilePicture = 'Profile photo must be less than 2MB.'
+      return
+    }
+    if (!['image/jpeg', 'image/png', 'image/jpg', 'image/webp'].includes(file.type)) {
+      formErrors.value.profilePicture = 'Only PNG, JPG or WEBP image formats are supported.'
+      return
+    }
+    formErrors.value.profilePicture = ''
     newInstructor.value.profilePicture = file
     previewUrl.value = URL.createObjectURL(file)
   }
@@ -278,27 +451,43 @@ const saveEdit = async () => {
   }
 }
 
+// Toast state for instructor creation
+const successToast = ref<{ show: boolean; message: string }>({ show: false, message: '' })
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showSuccessToast(message: string) {
+  if (toastTimer) clearTimeout(toastTimer)
+  successToast.value = { show: true, message }
+  toastTimer = setTimeout(() => { successToast.value.show = false }, 4000)
+}
+
 const addInstructor = async () => {
-  if (!newInstructor.value.name || !newInstructor.value.email || !newInstructor.value.password) return
-  if (newInstructor.value.password !== newInstructor.value.confirmPassword) {
-    alert('Passwords do not match.')
+  if (!validateAll()) {
+    // Smooth scroll to the first invalid field
+    const firstErrorKey = Object.keys(formErrors.value).find(k => (formErrors.value as any)[k] !== '')
+    if (firstErrorKey) {
+      const el = document.getElementById(`field-${firstErrorKey}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
     return
   }
+
   isLoading.value = true
   try {
     const formData = new FormData()
-    formData.append('name', newInstructor.value.name)
-    formData.append('email', newInstructor.value.email)
+    const instructorName = newInstructor.value.name.trim()
+    formData.append('name', instructorName)
+    formData.append('email', newInstructor.value.email.trim())
     formData.append('role', 'instructor')
     formData.append('password', newInstructor.value.password)
     
-    if (newInstructor.value.username) formData.append('username', newInstructor.value.username)
-    if (newInstructor.value.phone) formData.append('phone', newInstructor.value.phone)
+    if (newInstructor.value.username) formData.append('username', newInstructor.value.username.trim())
+    if (newInstructor.value.phone) formData.append('phone', newInstructor.value.phone.trim())
     if (newInstructor.value.gender) formData.append('gender', newInstructor.value.gender)
     if (newInstructor.value.department_id) formData.append('department_id', newInstructor.value.department_id)
     if (newInstructor.value.year) formData.append('year_level', newInstructor.value.year)
     if (settingsStore.semester) formData.append('semester', settingsStore.semester)
-    if (newInstructor.value.employeeId) formData.append('id_no', newInstructor.value.employeeId)
+    if (newInstructor.value.employeeId) formData.append('id_no', newInstructor.value.employeeId.trim())
     if (newInstructor.value.profilePicture) {
       formData.append('profile_picture', newInstructor.value.profilePicture)
     }
@@ -308,11 +497,20 @@ const addInstructor = async () => {
     })
     await fetchInstructors()
     showAddPage.value = false
+    showSuccessToast(`Instructor "${instructorName}" was created successfully!`)
   } catch (err: any) {
     let msg = 'Failed to create instructor.'
     if (err.response?.data) {
       msg = err.response.data.message || msg
       if (err.response.data.errors) {
+        const errs = err.response.data.errors
+        if (errs.email) formErrors.value.email = errs.email[0]
+        if (errs.name) formErrors.value.name = errs.name[0]
+        if (errs.phone) formErrors.value.phone = errs.phone[0]
+        if (errs.username) formErrors.value.username = errs.username[0]
+        if (errs.department_id) formErrors.value.department_id = errs.department_id[0]
+        if (errs.id_no) formErrors.value.employeeId = errs.id_no[0]
+        if (errs.password) formErrors.value.password = errs.password[0]
         msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
       }
     }
@@ -399,34 +597,133 @@ const handleExport = async (format: string) => {
   }
 }
 
+// ── Import Modal, Validation & Results State ──
+const showImportModal = ref(false)
+const selectedImportFile = ref<File | null>(null)
+const isImporting = ref(false)
+const importDragOver = ref(false)
 const importFileInput = ref<HTMLInputElement | null>(null)
-const triggerImport = () => { if (importFileInput.value) importFileInput.value.click() }
+const modalFileInput = ref<HTMLInputElement | null>(null)
+
+// Error / Format Issues Modal State
+const showImportErrorModal = ref(false)
+const importErrorMessage = ref('')
+const importErrorList = ref<string[]>([])
+const importFormatGuide = ref<any>(null)
+
+// Success Modal State
+const showImportSuccessModal = ref(false)
+const importSuccessMessage = ref('')
+const importedInstructorsList = ref<any[]>([])
+
+const triggerImport = () => {
+  selectedImportFile.value = null
+  showImportModal.value = true
+}
+
+const onModalFileSelect = (event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (file) {
+    selectedImportFile.value = file
+  }
+}
+
+const onFileDrop = (event: DragEvent) => {
+  importDragOver.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (file) {
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext === 'csv' || ext === 'pdf') {
+      selectedImportFile.value = file
+    } else {
+      importErrorMessage.value = 'Invalid file type. Please upload a CSV (.csv) or PDF (.pdf) file.'
+      importErrorList.value = ['Only .csv and .pdf file formats are supported.']
+      showImportErrorModal.value = true
+    }
+  }
+}
+
 const handleImport = async (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (file) {
-    isLoading.value = true
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('role', 'instructor')
-      await apiClient.post('/admin/users-import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      alert(`Successfully imported ${file.name}`)
-      await fetchInstructors()
-    } catch (err: any) { 
-        alert(err.response?.data?.message || 'Failed to import instructors') 
-    }
-    finally {
-      isLoading.value = false
-      if (importFileInput.value) importFileInput.value.value = ''
-    }
+    await executeImport(file)
   }
+}
+
+const executeImport = async (fileOverride?: File) => {
+  const file = fileOverride || selectedImportFile.value
+  if (!file) {
+    importErrorMessage.value = 'Please select a file to import.'
+    importErrorList.value = ['No file selected. Please choose a CSV or PDF file.']
+    showImportErrorModal.value = true
+    return
+  }
+
+  isImporting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('role', 'instructor')
+
+    const res = await apiClient.post('/admin/users-import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    showImportModal.value = false
+    selectedImportFile.value = null
+    importSuccessMessage.value = res.data.message || `Successfully imported instructors from ${file.name}.`
+    importedInstructorsList.value = res.data.instructors || []
+    showImportSuccessModal.value = true
+
+    await fetchInstructors()
+  } catch (err: any) {
+    showImportModal.value = false
+    const data = err.response?.data
+    importErrorMessage.value = data?.message || 'Failed to import instructors.'
+    importErrorList.value = Array.isArray(data?.errors)
+      ? data.errors
+      : (data?.message ? [data.message] : ['An unexpected error occurred during file import.'])
+    importFormatGuide.value = data?.format_guide || null
+    showImportErrorModal.value = true
+  } finally {
+    isImporting.value = false
+    if (importFileInput.value) importFileInput.value.value = ''
+    if (modalFileInput.value) modalFileInput.value.value = ''
+  }
+}
+
+const downloadSampleCsv = () => {
+  const deptExample1 = allDepartments.value.length > 0 ? allDepartments.value[0].name : 'Software Engineering'
+  const deptExample2 = allDepartments.value.length > 1 ? allDepartments.value[1].name : 'Computer Science'
+
+  const headers = ['Full Name', 'Email', 'Phone', 'Department', 'Gender', 'Employee ID', 'Academic Year Level', 'Semester', 'Section', 'Password']
+  const row1 = ['Dr. Kebede Tessema', 'kebede.t@wu.edu.et', '0911223344', deptExample1, 'Male', 'WU-INS-0101', '3rd Year', 'Second Semester', 'Sec A', 'Password123!']
+  const row2 = ['Sara Mohammed', 'sara.m@wu.edu.et', '0922334455', deptExample2, 'Female', 'WU-INS-0102', '2nd Year', 'Second Semester', 'Sec B', 'Password123!']
+
+  const csvContent = [headers.join(','), row1.join(','), row2.join(',')].join('\n')
+  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'instructor_import_template.csv'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 </script>
 
 <template>
-  <div class="w-full">
+  <div class="w-full relative">
+
+    <!-- Success Toast Notification -->
+    <transition name="toast">
+      <div v-if="successToast.show" class="fixed top-6 right-6 z-[100] flex items-center gap-3 bg-emerald-600 text-white px-5 py-3.5 rounded-xl shadow-xl border border-emerald-500">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <span class="text-[13px] font-bold">{{ successToast.message }}</span>
+        <button @click="successToast.show = false" class="ml-2 text-white/70 hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+      </div>
+    </transition>
 
     <!-- ════════════════ LIST VIEW ════════════════ -->
     <div v-if="!viewingInstructor && !showAddPage" class="space-y-6 pb-12 min-w-0 w-full">
@@ -434,7 +731,7 @@ const handleImport = async (event: Event) => {
       <!-- Page Actions -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div class="flex flex-wrap items-center gap-3">
-          <input type="file" ref="importFileInput" class="hidden" accept=".csv" @change="handleImport">
+          <input type="file" ref="importFileInput" class="hidden" accept=".csv,.pdf,application/pdf,text/csv" @change="handleImport">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Import Instructors
           </button>
@@ -685,7 +982,7 @@ const handleImport = async (event: Event) => {
               </div>
               <div v-if="topDepartments.length === 0" class="text-[12px] text-slate-400 text-center py-2">No department data</div>
             </div>
-            <button class="text-[12px] font-bold text-[#4338ca] hover:underline mt-3">View All</button>
+            <button @click="router.push('/admin/departments')" class="text-[12px] font-bold text-[#4338ca] hover:underline mt-3">View All</button>
           </div>
 
           <!-- Recent Registrations -->
@@ -704,7 +1001,7 @@ const handleImport = async (event: Event) => {
               </div>
               <div v-if="recentRegistrations.length === 0" class="text-[12px] text-slate-400 text-center py-2">No recent registrations</div>
             </div>
-            <button class="text-[12px] font-bold text-[#4338ca] hover:underline mt-3">View All</button>
+            <button @click="window?.scrollTo({ top: 0, behavior: 'smooth' })" class="text-[12px] font-bold text-[#4338ca] hover:underline mt-3">View All</button>
           </div>
 
           <!-- Quick Actions -->
@@ -723,7 +1020,7 @@ const handleImport = async (event: Event) => {
                 <svg class="w-4 h-4 text-[#4338ca]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 <span class="text-[11px] font-bold text-slate-700 group-hover:text-[#4338ca]">Export Instructors</span>
               </button>
-              <button class="flex items-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-[#4338ca] group transition-colors text-left">
+              <button @click="router.push('/admin/departments')" class="flex items-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-[#4338ca] group transition-colors text-left">
                 <svg class="w-4 h-4 text-[#4338ca]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                 <span class="text-[11px] font-bold text-slate-700 group-hover:text-[#4338ca]">Manage Departments</span>
               </button>
@@ -882,30 +1179,81 @@ const handleImport = async (event: Event) => {
             <div class="grid grid-cols-3 gap-6">
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Full Name <span class="text-rose-500">*</span></label>
-                <input v-model="newInstructor.name" type="text" placeholder="Enter full name" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <input
+                  id="field-name"
+                  v-model="newInstructor.name"
+                  type="text"
+                  placeholder="Enter full name"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors"
+                  :class="formErrors.name ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @input="validateField('name')"
+                  @blur="validateField('name')"
+                >
+                <p v-if="formErrors.name" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.name }}
+                </p>
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Email Address <span class="text-rose-500">*</span></label>
-                <input v-model="newInstructor.email" type="email" placeholder="Enter email address" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <input
+                  id="field-email"
+                  v-model="newInstructor.email"
+                  type="email"
+                  placeholder="Enter email address"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors"
+                  :class="formErrors.email ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @input="validateField('email')"
+                  @blur="validateField('email')"
+                >
+                <p v-if="formErrors.email" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.email }}
+                </p>
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Phone Number <span class="text-rose-500">*</span></label>
-                <input v-model="newInstructor.phone" type="text" placeholder="Enter phone number" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <input
+                  id="field-phone"
+                  v-model="newInstructor.phone"
+                  type="text"
+                  placeholder="e.g. 0911223344 or +251911223344"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors"
+                  :class="formErrors.phone ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @input="validateField('phone')"
+                  @blur="validateField('phone')"
+                >
+                <p v-if="formErrors.phone" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.phone }}
+                </p>
               </div>
             </div>
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Gender</label>
-                <select v-model="newInstructor.gender" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Gender <span class="text-rose-500">*</span></label>
+                <select
+                  id="field-gender"
+                  v-model="newInstructor.gender"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors bg-white"
+                  :class="formErrors.gender ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @change="validateField('gender')"
+                >
                   <option value="">Select gender</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                 </select>
+                <p v-if="formErrors.gender" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.gender }}
+                </p>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Profile Picture</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">
+                  Profile Picture <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                </label>
                 <div class="relative border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center hover:border-[#4338ca] hover:bg-slate-50 transition-colors cursor-pointer overflow-hidden" @click="triggerFileInput">
-                  <input type="file" ref="fileInput" class="hidden" accept="image/png, image/jpeg" @change="handleProfilePicture">
+                  <input type="file" ref="fileInput" class="hidden" accept="image/png, image/jpeg, image/webp" @change="handleProfilePicture">
                   <template v-if="previewUrl">
                     <img :src="previewUrl" class="w-full h-full object-cover absolute inset-0 opacity-20">
                     <img :src="previewUrl" class="w-16 h-16 rounded-full object-cover z-10 border-2 border-white shadow-sm mb-2">
@@ -915,9 +1263,13 @@ const handleImport = async (event: Event) => {
                   <template v-else>
                     <svg class="w-6 h-6 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                     <span class="text-[13px] font-bold text-slate-700 mb-1">Upload Photo</span>
-                    <span class="text-[11px] text-slate-400">PNG, JPG up to 2MB</span>
+                    <span class="text-[11px] text-slate-400">PNG, JPG up to 2MB (Optional)</span>
                   </template>
                 </div>
+                <p v-if="formErrors.profilePicture" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.profilePicture }}
+                </p>
               </div>
             </div>
           </div>
@@ -928,23 +1280,50 @@ const handleImport = async (event: Event) => {
             <div class="grid grid-cols-2 gap-6">
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Department <span class="text-rose-500">*</span></label>
-                <select v-model="newInstructor.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
+                <select
+                  id="field-department_id"
+                  v-model="newInstructor.department_id"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors bg-white"
+                  :class="formErrors.department_id ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @change="validateField('department_id')"
+                >
                   <option value="">Select department</option>
                   <option v-for="d in allDepartments" :key="d.id" :value="d.id">{{ d.name }}</option>
                 </select>
+                <p v-if="formErrors.department_id" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.department_id }}
+                </p>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Employee ID</label>
-                <input v-model="newInstructor.employeeId" type="text" placeholder="Enter employee ID" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Employee ID <span class="text-rose-500">*</span></label>
+                <input
+                  id="field-employeeId"
+                  v-model="newInstructor.employeeId"
+                  type="text"
+                  placeholder="Enter employee ID (e.g. WU-INS-0101)"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors"
+                  :class="formErrors.employeeId ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @input="validateField('employeeId')"
+                  @blur="validateField('employeeId')"
+                >
+                <p v-if="formErrors.employeeId" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.employeeId }}
+                </p>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Semester</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">
+                  Semester <span class="text-slate-400 font-normal text-[11px]">(Auto-set)</span>
+                </label>
                 <input type="text" disabled :value="settingsStore.semester" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed font-bold">
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Academic Year Level</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">
+                  Academic Year Level <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                </label>
                 <select v-model="newInstructor.year" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca] bg-white">
-                  <option value="">Select level</option>
+                  <option value="">Select level (optional)</option>
                   <option value="1st Year">1st Year</option>
                   <option value="2nd Year">2nd Year</option>
                   <option value="3rd Year">3rd Year</option>
@@ -961,45 +1340,67 @@ const handleImport = async (event: Event) => {
             <div class="grid grid-cols-3 gap-6">
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Username <span class="text-rose-500">*</span></label>
-                <input v-model="newInstructor.username" type="text" placeholder="Enter username" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
+                <input
+                  id="field-username"
+                  v-model="newInstructor.username"
+                  type="text"
+                  placeholder="Enter username (min 3 chars)"
+                  class="w-full border rounded-xl px-4 py-2.5 text-[13px] focus:outline-none transition-colors"
+                  :class="formErrors.username ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                  @input="validateField('username')"
+                  @blur="validateField('username')"
+                >
+                <p v-if="formErrors.username" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.username }}
+                </p>
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Password <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input v-model="newInstructor.password" :type="showPassword ? 'text' : 'password'" placeholder="Enter password" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
-                  <button @click="showPassword = !showPassword" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                  <input
+                    id="field-password"
+                    v-model="newInstructor.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    placeholder="Enter password"
+                    class="w-full border rounded-xl pl-4 pr-10 py-2.5 text-[13px] focus:outline-none transition-colors"
+                    :class="formErrors.password ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                    @input="validateField('password')"
+                    @blur="validateField('password')"
+                  >
+                  <button @click="showPassword = !showPassword" type="button" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
                     <svg v-if="!showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
                     <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                   </button>
                 </div>
+                <p v-if="formErrors.password" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.password }}
+                </p>
               </div>
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Confirm Password <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input v-model="newInstructor.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="Confirm password" class="w-full border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]">
-                  <button @click="showConfirmPassword = !showConfirmPassword" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                  <input
+                    id="field-confirmPassword"
+                    v-model="newInstructor.confirmPassword"
+                    :type="showConfirmPassword ? 'text' : 'password'"
+                    placeholder="Confirm password"
+                    class="w-full border rounded-xl pl-4 pr-10 py-2.5 text-[13px] focus:outline-none transition-colors"
+                    :class="formErrors.confirmPassword ? 'border-rose-400 bg-rose-50/20 focus:border-rose-500' : 'border-slate-200 focus:border-[#4338ca]'"
+                    @input="validateField('confirmPassword')"
+                    @blur="validateField('confirmPassword')"
+                  >
+                  <button @click="showConfirmPassword = !showConfirmPassword" type="button" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
                     <svg v-if="!showConfirmPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
                     <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                   </button>
                 </div>
+                <p v-if="formErrors.confirmPassword" class="text-[11px] font-semibold text-rose-500 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  {{ formErrors.confirmPassword }}
+                </p>
               </div>
-            </div>
-          </div>
-
-          <!-- Permissions & Access -->
-          <div class="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm space-y-6">
-            <h3 class="text-[15px] font-bold text-slate-800">Instructor Permissions</h3>
-            <div class="grid grid-cols-3 gap-6">
-              <label v-for="perm in permissions" :key="perm.key" class="flex items-start gap-3 cursor-pointer group">
-                <div class="relative flex items-center justify-center shrink-0 mt-0.5">
-                  <input type="checkbox" v-model="perm.checked" class="peer appearance-none w-5 h-5 border-2 border-slate-200 rounded text-[#4338ca] focus:ring-[#4338ca] checked:bg-[#4338ca] checked:border-[#4338ca] transition-colors cursor-pointer">
-                  <svg class="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                </div>
-                <div>
-                  <div class="text-[13px] font-bold text-slate-700 group-hover:text-[#4338ca] transition-colors">{{ perm.label }}</div>
-                  <div class="text-[12px] text-slate-500 mt-0.5">{{ perm.desc }}</div>
-                </div>
-              </label>
             </div>
           </div>
 
@@ -1030,18 +1431,46 @@ const handleImport = async (event: Event) => {
             <div class="space-y-4">
               <div class="flex justify-between items-center"><span class="text-[12px] text-slate-500">Department</span><span class="text-[12px] font-bold text-slate-800">{{ allDepartments.find(d => d.id === newInstructor.department_id)?.name || 'Not Selected' }}</span></div>
               <div class="flex justify-between items-center"><span class="text-[12px] text-slate-500">Status</span><span class="text-[11px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">Active</span></div>
-              <div class="flex justify-between items-center"><span class="text-[12px] text-slate-500">Permissions</span><span class="text-[12px] font-bold text-slate-800">{{ permissions.filter(p=>p.checked).length }} Modules</span></div>
             </div>
           </div>
 
+          <!-- Dynamic Password Requirements -->
           <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-            <h3 class="text-[14px] font-bold text-slate-800 mb-4">Password Requirements</h3>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-[14px] font-bold text-slate-800">Password Requirements</h3>
+              <span
+                v-if="isPasswordValid"
+                class="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-600 rounded-full"
+              >
+                All Met
+              </span>
+            </div>
             <ul class="space-y-2.5">
-              <li class="flex items-center gap-2.5 text-[12px] font-medium text-emerald-600"><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> At least 8 characters long</li>
-              <li class="flex items-center gap-2.5 text-[12px] font-medium text-emerald-600"><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Include uppercase letter</li>
-              <li class="flex items-center gap-2.5 text-[12px] font-medium text-emerald-600"><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Include lowercase letter</li>
-              <li class="flex items-center gap-2.5 text-[12px] font-medium text-emerald-600"><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Include number</li>
-              <li class="flex items-center gap-2.5 text-[12px] font-medium text-emerald-600"><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Include special character</li>
+              <li class="flex items-center gap-2.5 text-[12px] transition-colors" :class="passwordCriteria.length ? 'font-semibold text-emerald-600' : 'text-slate-400'">
+                <svg v-if="passwordCriteria.length" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                <div v-else class="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"></div>
+                At least 8 characters long
+              </li>
+              <li class="flex items-center gap-2.5 text-[12px] transition-colors" :class="passwordCriteria.uppercase ? 'font-semibold text-emerald-600' : 'text-slate-400'">
+                <svg v-if="passwordCriteria.uppercase" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                <div v-else class="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"></div>
+                Include uppercase letter
+              </li>
+              <li class="flex items-center gap-2.5 text-[12px] transition-colors" :class="passwordCriteria.lowercase ? 'font-semibold text-emerald-600' : 'text-slate-400'">
+                <svg v-if="passwordCriteria.lowercase" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                <div v-else class="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"></div>
+                Include lowercase letter
+              </li>
+              <li class="flex items-center gap-2.5 text-[12px] transition-colors" :class="passwordCriteria.number ? 'font-semibold text-emerald-600' : 'text-slate-400'">
+                <svg v-if="passwordCriteria.number" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                <div v-else class="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"></div>
+                Include number
+              </li>
+              <li class="flex items-center gap-2.5 text-[12px] transition-colors" :class="passwordCriteria.special ? 'font-semibold text-emerald-600' : 'text-slate-400'">
+                <svg v-if="passwordCriteria.special" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                <div v-else class="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"></div>
+                Include special character
+              </li>
             </ul>
           </div>
 
@@ -1143,21 +1572,6 @@ const handleImport = async (event: Event) => {
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Username <span class="text-rose-500">*</span></label><input v-model="editInstructorForm.username" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]"></div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Password <span class="text-rose-500">*</span></label><input v-model="editInstructorForm.password" type="password" placeholder="Leave blank to keep current" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#4338ca]"></div>
             </div>
-
-            <div>
-              <h4 class="text-[13px] font-bold text-slate-800 mb-3">Instructor Permissions</h4>
-              <div class="grid grid-cols-2 gap-4">
-                <label v-for="perm in editPermissions" :key="perm.key" class="flex items-start gap-2.5 cursor-pointer group">
-                  <div class="relative flex items-center justify-center shrink-0 mt-0.5">
-                    <input type="checkbox" v-model="perm.checked" class="peer appearance-none w-4 h-4 border-2 border-slate-200 rounded text-[#4338ca] focus:ring-[#4338ca] checked:bg-[#4338ca] checked:border-[#4338ca] transition-colors cursor-pointer">
-                    <svg class="absolute w-2.5 h-2.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-                  </div>
-                  <div>
-                    <div class="text-[12px] font-bold text-slate-700 group-hover:text-[#4338ca] transition-colors">{{ perm.label }}</div>
-                  </div>
-                </label>
-              </div>
-            </div>
           </div>
           <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50 shrink-0">
             <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
@@ -1165,6 +1579,232 @@ const handleImport = async (event: Event) => {
           </div>
         </div>
       </div>
+
+      <!-- ════════════════ IMPORT INSTRUCTORS MODAL ════════════════ -->
+      <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col my-8">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-indigo-50 text-[#4338ca] flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              </div>
+              <div>
+                <h3 class="text-[16px] font-bold text-slate-800">Import Instructors</h3>
+                <p class="text-[12px] text-slate-500">Upload a CSV or PDF file to batch import instructors.</p>
+              </div>
+            </div>
+            <button @click="showImportModal = false" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-5">
+            <!-- Format Requirements Banner -->
+            <div class="p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[12px] font-bold text-[#4338ca] uppercase tracking-wide flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  Required Format: Add Instructor Form
+                </span>
+                <button @click="downloadSampleCsv" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-indigo-200 text-[#4338ca] hover:bg-indigo-50 font-bold text-[11px] rounded-lg transition-colors shadow-xs">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Download Sample CSV
+                </button>
+              </div>
+              <p class="text-[12px] text-slate-600 leading-relaxed">
+                The file (CSV or PDF) must fulfill the Add Instructor form fields.
+              </p>
+              <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div class="bg-white p-2 rounded-lg border border-indigo-100">
+                  <span class="font-bold text-slate-700 block mb-0.5">Required Fields:</span>
+                  <span class="text-rose-600 font-medium">Full Name, Email Address, Phone Number, Department</span>
+                </div>
+                <div class="bg-white p-2 rounded-lg border border-indigo-100">
+                  <span class="font-bold text-slate-700 block mb-0.5">Optional Fields:</span>
+                  <span class="text-slate-500">Gender, Employee ID, Year Level, Semester, Section, Password</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-2">Select CSV or PDF File</label>
+              <div
+                class="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
+                :class="importDragOver ? 'border-[#4338ca] bg-indigo-50/50' : 'border-slate-200 hover:border-[#4338ca] hover:bg-slate-50/50'"
+                @dragover.prevent="importDragOver = true"
+                @dragleave.prevent="importDragOver = false"
+                @drop.prevent="onFileDrop"
+                @click="modalFileInput?.click()"
+              >
+                <input
+                  type="file"
+                  ref="modalFileInput"
+                  class="hidden"
+                  accept=".csv,.pdf,application/pdf,text/csv"
+                  @change="onModalFileSelect"
+                />
+
+                <template v-if="selectedImportFile">
+                  <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-[13px] uppercase shadow-sm"
+                    :class="selectedImportFile.name.endsWith('.pdf') ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'">
+                    {{ selectedImportFile.name.split('.').pop() }}
+                  </div>
+                  <div>
+                    <p class="text-[13px] font-bold text-slate-800">{{ selectedImportFile.name }}</p>
+                    <p class="text-[11px] text-slate-500">{{ (selectedImportFile.size / 1024).toFixed(1) }} KB</p>
+                  </div>
+                  <button @click.stop="selectedImportFile = null" class="mt-1 text-[11px] font-bold text-rose-500 hover:underline">
+                    Choose different file
+                  </button>
+                </template>
+
+                <template v-else>
+                  <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                  </div>
+                  <p class="text-[13px] font-bold text-slate-700">
+                    Click to browse or drag and drop file here
+                  </p>
+                  <p class="text-[11px] text-slate-400">Supports CSV (.csv) or PDF (.pdf) files</p>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50">
+            <button
+              @click="showImportModal = false"
+              class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              @click="executeImport()"
+              :disabled="!selectedImportFile || isImporting"
+              class="flex items-center gap-2 px-6 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50"
+            >
+              <svg v-if="isImporting" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              {{ isImporting ? 'Importing Instructors...' : 'Upload & Import' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════ FORMAT ISSUES / ERROR POPUP MODAL ════════════════ -->
+      <div v-if="showImportErrorModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col my-8 border border-rose-200">
+          <!-- Alert Header -->
+          <div class="bg-rose-50 px-6 py-5 border-b border-rose-100 flex items-start gap-4">
+            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-[16px] font-bold text-rose-900">Import Format Issues Detected</h3>
+              <p class="text-[12px] text-rose-700 mt-0.5">{{ importErrorMessage }}</p>
+            </div>
+            <button @click="showImportErrorModal = false" class="text-rose-400 hover:text-rose-600 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+            <!-- Specific Error List -->
+            <div>
+              <p class="text-[12px] font-bold text-slate-700 uppercase tracking-wide mb-2">Detected Issue(s):</p>
+              <div class="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <div v-for="(err, idx) in importErrorList" :key="idx" class="flex items-start gap-2.5 text-[12px] text-slate-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5"></span>
+                  <span class="leading-relaxed">{{ err }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Required Add Instructor Format Reference -->
+            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 space-y-2 text-[12px]">
+              <p class="font-bold text-[#4338ca]">How to fix this file:</p>
+              <ul class="list-disc list-inside text-slate-600 space-y-1 text-[11px]">
+                <li>File must include columns: <strong class="text-slate-800">Full Name, Email, Phone, Department</strong></li>
+                <li>Department must match one of the system departments: <strong class="text-slate-800" v-for="d in allDepartments" :key="d.id">{{ d.name }}, </strong></li>
+                <li>Email addresses must be valid and not already registered</li>
+                <li>Phone number is required for every instructor</li>
+              </ul>
+              <div class="pt-2">
+                <button @click="downloadSampleCsv" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#4338ca] text-[#4338ca] hover:bg-indigo-50 font-bold text-[12px] rounded-lg transition-colors shadow-xs">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Download Valid Template (.CSV)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <span class="text-[12px] text-slate-500">Fix the file and try importing again</span>
+            <button
+              @click="showImportErrorModal = false; showImportModal = true"
+              class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl transition-colors shadow-sm"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════ SUCCESS CONFIRMATION POPUP MODAL ════════════════ -->
+      <div v-if="showImportSuccessModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col my-8 border border-emerald-200">
+          <div class="p-6 text-center space-y-4">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-[18px] font-bold text-slate-800">Instructors Imported Successfully!</h3>
+              <p class="text-[13px] text-slate-500 mt-1">{{ importSuccessMessage }}</p>
+            </div>
+
+            <!-- List of imported instructors -->
+            <div v-if="importedInstructorsList.length > 0" class="max-h-48 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-100 text-left">
+              <div v-for="inst in importedInstructorsList" :key="inst.id" class="p-3 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <p class="text-[13px] font-bold text-slate-800">{{ inst.name }}</p>
+                  <p class="text-[11px] text-slate-400">{{ inst.email }}</p>
+                </div>
+                <span class="px-2.5 py-0.5 text-[11px] font-bold rounded-md bg-indigo-50 text-[#4338ca]">
+                  {{ inst.department }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end bg-slate-50/50">
+            <button
+              @click="showImportSuccessModal = false"
+              class="w-full sm:w-auto px-6 py-2.5 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm"
+            >
+              Done & View Instructors
+            </button>
+          </div>
+        </div>
+      </div>
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+</style>
