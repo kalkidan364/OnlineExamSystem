@@ -69,15 +69,24 @@ const allDepts = ref<any[]>([])
 const newDeptForm = ref({
   name: '',
   code: '',
-  college: '',
+  college: 'College of Computing and Informatics',
 })
 
+// Success toast state
+const successToast = ref<{ show: boolean; message: string }>({ show: false, message: '' })
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showSuccessToast(message: string) {
+  if (toastTimer) clearTimeout(toastTimer)
+  successToast.value = { show: true, message }
+  toastTimer = setTimeout(() => { successToast.value.show = false }, 4000)
+}
 
 const resetAddForm = () => {
   newDeptForm.value = {
     name: '',
     code: '',
-    college: '',
+    college: 'College of Computing and Informatics',
   }
 }
 
@@ -153,8 +162,10 @@ const saveDepartment = async () => {
       college: newDeptForm.value.college,
     })
     await fetchDepartments()
+    const createdName = newDeptForm.value.name
     showAddForm.value = false
     resetAddForm()
+    showSuccessToast(`Department "${createdName}" created successfully!`)
   } catch (err: any) {
     console.error('Error creating department:', err)
     let errorMessage = err.response?.data?.message || 'Failed to create department.'
@@ -274,7 +285,28 @@ const deleteDept = async () => {
 <template>
   <div class="space-y-6">
 
-    <!-- ==================== DEPARTMENT DETAIL VIEW ==================== -->
+    <!-- ── SUCCESS TOAST ── -->
+    <Transition name="toast">
+      <div v-if="successToast.show"
+        class="fixed top-6 right-6 z-[9999] flex items-center gap-3 bg-white border border-emerald-200 shadow-xl rounded-xl px-5 py-4 min-w-[300px] max-w-sm">
+        <div class="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13px] font-bold text-slate-800">Department Created!</p>
+          <p class="text-[12px] text-slate-500 mt-0.5 truncate">{{ successToast.message }}</p>
+        </div>
+        <button @click="successToast.show = false" class="text-slate-300 hover:text-slate-500 transition-colors shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+    </Transition>
+
+    <!-- ==================== DEPARTMENT DETAIL VIEW ====================  -->
     <template v-if="showDetailView && viewingDept">
       
       <!-- Breadcrumbs -->
@@ -692,13 +724,7 @@ const deleteDept = async () => {
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">College/School <span class="text-rose-500">*</span></label>
               <div class="relative">
                 <select v-model="newDeptForm.college" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="" disabled>Select college or school</option>
                   <option value="College of Computing and Informatics">College of Computing and Informatics</option>
-                  <option value="College of Engineering and Technology">College of Engineering and Technology</option>
-                  <option value="College of Natural Sciences">College of Natural Sciences</option>
-                  <option value="College of Social Sciences">College of Social Sciences</option>
-                  <option value="College of Business and Economics">College of Business and Economics</option>
-                  <option value="College of Health Sciences">College of Health Sciences</option>
                 </select>
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
@@ -991,13 +1017,7 @@ const deleteDept = async () => {
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Dept Code <span class="text-rose-500">*</span></label><input v-model="editData.code" type="text" placeholder="e.g. CS" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-mono focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">College/School</label>
                 <select v-model="editData.college" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
-                  <option value="" disabled>Select college</option>
                   <option value="College of Computing and Informatics">College of Computing and Informatics</option>
-                  <option value="College of Engineering and Technology">College of Engineering and Technology</option>
-                  <option value="College of Natural Sciences">College of Natural Sciences</option>
-                  <option value="College of Social Sciences">College of Social Sciences</option>
-                  <option value="College of Business and Economics">College of Business and Economics</option>
-                  <option value="College of Health Sciences">College of Health Sciences</option>
                 </select>
               </div>
             </div>
@@ -1038,3 +1058,15 @@ const deleteDept = async () => {
 
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(2rem);
+}
+</style>
