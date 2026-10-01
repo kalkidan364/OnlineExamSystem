@@ -11,12 +11,22 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null)
   const pendingInstructor = ref<any>(null)
   const selectedContext = ref<any>(JSON.parse(localStorage.getItem('instructor_context') || 'null'))
+  const notAssignedModal = ref<{
+    show: boolean
+    instructor?: { name: string; email: string; department?: string } | null
+    message: string
+  }>({
+    show: false,
+    instructor: null,
+    message: ''
+  })
   const router = useRouter()
 
   const login = async (credentials: any) => {
     isLoading.value = true
     error.value = null
     pendingInstructor.value = null
+    notAssignedModal.value.show = false
     const settingsStore = useSettingsStore()
 
     try {
@@ -100,10 +110,21 @@ export const useAuthStore = defineStore('auth', () => {
       return { step: 1 }
       
     } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.message) {
-        error.value = err.response.data.message
+      const respData = err.response?.data
+      const errorMsg = respData?.message || (Array.isArray(respData?.errors?.login) ? respData.errors.login[0] : 'An unexpected error occurred or invalid credentials.')
+
+      const isNotAssigned = respData?.error_type === 'instructor_not_assigned' ||
+                            errorMsg.toLowerCase().includes('not been assigned to any course')
+
+      if (isNotAssigned) {
+        error.value = null // Suppress top error message banner
+        notAssignedModal.value = {
+          show: true,
+          instructor: respData?.instructor || null,
+          message: errorMsg
+        }
       } else {
-        error.value = 'An unexpected error occurred or invalid credentials.'
+        error.value = errorMsg
       }
       throw err
     } finally {
@@ -169,6 +190,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const closeNotAssignedModal = () => {
+    notAssignedModal.value.show = false
+  }
+
   return {
     user,
     token,
@@ -176,6 +201,8 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     pendingInstructor,
     selectedContext,
+    notAssignedModal,
+    closeNotAssignedModal,
     login,
     completeInstructorSetup,
     fetchCurrentUser,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '../../../core/api/apiClient'
 import { useSettingsStore } from '../../../store/settingsStore'
@@ -330,6 +330,38 @@ const visiblePages = computed(() => {
     pages.push(total)
   }
   return pages
+})
+
+// ── Pagination Controls ──
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const goToPage = (page: number | string) => {
+  if (typeof page === 'number' && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset to first page when any search or filter criteria changes
+watch([search, deptFilter, statusFilter, sectionFilter, yearFilter], () => {
+  currentPage.value = 1
+})
+
+// Ensure currentPage stays within valid bounds if dataset changes
+watch(filtered, (newVal) => {
+  const max = Math.max(1, Math.ceil(newVal.length / perPage))
+  if (currentPage.value > max) {
+    currentPage.value = max
+  }
 })
 
 // ── Actions ──
@@ -921,19 +953,36 @@ const downloadSampleCsv = () => {
           </div>
 
           <!-- Pagination -->
-          <div class="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-[12px] text-slate-500">Showing {{ filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, filtered.length) }} of {{ filtered.length }} instructors</span>
+          <div class="px-5 py-3.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span class="text-[12px] text-slate-500">
+              Showing <span class="font-bold text-slate-700">{{ filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }}</span> to <span class="font-bold text-slate-700">{{ Math.min(currentPage * perPage, filtered.length) }}</span> of <span class="font-bold text-slate-700">{{ filtered.length }}</span> instructors
+            </span>
             <div class="flex items-center gap-1.5">
-              <button @click="currentPage--" :disabled="currentPage === 1" class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+              <button 
+                @click="prevPage" 
+                :disabled="currentPage <= 1" 
+                title="Previous page"
+                class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#4338ca] hover:border-[#4338ca] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors"
+              >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
               </button>
               <template v-for="(page, idx) in visiblePages" :key="idx">
                 <span v-if="page === '...'" class="w-8 h-8 flex items-center justify-center text-[12px] text-slate-400">…</span>
-                <button v-else @click="currentPage = page as number" :class="currentPage === page ? 'bg-[#4338ca] text-white border-[#4338ca]' : 'border-slate-200 text-slate-600 hover:bg-slate-50'" class="w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] font-bold transition-colors">
+                <button 
+                  v-else 
+                  @click="goToPage(page)" 
+                  :class="currentPage === page ? 'bg-[#4338ca] text-white border-[#4338ca] shadow-sm' : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'" 
+                  class="w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] font-bold transition-colors"
+                >
                   {{ page }}
                 </button>
               </template>
-              <button @click="currentPage++" :disabled="currentPage === totalPages" class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+              <button 
+                @click="nextPage" 
+                :disabled="currentPage >= totalPages" 
+                title="Next page"
+                class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#4338ca] hover:border-[#4338ca] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors"
+              >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
               </button>
             </div>

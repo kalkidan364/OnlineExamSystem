@@ -65,9 +65,18 @@ class AuthController extends Controller
                 ->get();
 
             if ($coursesQuery->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'login' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
-                ]);
+                return response()->json([
+                    'message'    => 'Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.',
+                    'error_type' => 'instructor_not_assigned',
+                    'instructor' => [
+                        'name'       => $user->name,
+                        'email'      => $user->email,
+                        'department' => $user->department?->name ?? 'Unassigned',
+                    ],
+                    'errors'     => [
+                        'login' => ['Access denied. You have not been assigned to any courses yet. Please wait for an administrator to assign you to a course.'],
+                    ],
+                ], 422);
             }
 
             // Extract unique departments

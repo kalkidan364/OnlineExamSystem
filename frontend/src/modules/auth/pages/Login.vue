@@ -385,6 +385,55 @@ const cancelStep2 = () => {
 
       </div>
     </div>
+
+    <!-- Instructor Not Assigned Confirmation Modal Popup -->
+    <Teleport to="body">
+      <div 
+        v-if="authStore.notAssignedModal.show" 
+        @click.self="authStore.closeNotAssignedModal()"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+      >
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl flex flex-col items-center transform transition-all animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+          
+          <!-- Warning Icon Badge -->
+          <div class="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mb-4 border border-amber-100 shadow-sm">
+            <svg class="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+
+          <!-- Modal Title -->
+          <h3 class="text-xl font-black text-slate-800 mb-2">No Course Assigned</h3>
+
+          <!-- Instructor Identity Box -->
+          <div v-if="authStore.notAssignedModal.instructor" class="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 mb-4 text-left">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-slate-800">{{ authStore.notAssignedModal.instructor.name }}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-[#4338ca] uppercase">Instructor</span>
+            </div>
+            <div class="text-[11px] text-slate-500 space-y-0.5">
+              <p class="truncate">{{ authStore.notAssignedModal.instructor.email }}</p>
+              <p v-if="authStore.notAssignedModal.instructor.department" class="text-slate-600 font-medium">Department: {{ authStore.notAssignedModal.instructor.department }}</p>
+            </div>
+          </div>
+
+          <!-- Reassuring Message -->
+          <p class="text-[13px] text-slate-600 leading-relaxed mb-6">
+            Your login credentials are valid, but your account is not yet assigned to any teaching courses. Please contact the <strong>Department Head</strong> or <strong>System Administrator</strong> to assign your course(s). Once assigned, you will be able to log in.
+          </p>
+
+          <!-- Dismiss Button -->
+          <button 
+            type="button" 
+            @click="authStore.closeNotAssignedModal()"
+            class="w-full py-3 px-5 bg-[#4338ca] hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span>Understood</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 

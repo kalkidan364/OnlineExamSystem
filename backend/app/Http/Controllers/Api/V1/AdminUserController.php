@@ -108,10 +108,35 @@ class AdminUserController extends Controller
     }
 
     /**
+     * Display a specific user.
+     */
+    public function show($user): JsonResponse
+    {
+        $userModel = $user instanceof User ? $user : User::find($user);
+        if (!$userModel) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
+
+        return response()->json([
+            'data' => $userModel->load([
+                'department:id,name',
+                'assignedCourses:id,title,instructor_id',
+                'coInstructorCourses:id,title,co_instructor_id'
+            ])
+        ]);
+    }
+
+    /**
      * Update a user.
      */
-    public function update(Request $request, User $user): JsonResponse
+    public function update(Request $request, $user): JsonResponse
     {
+        $userModel = $user instanceof User ? $user : User::find($user);
+        if (!$userModel) {
+            return response()->json(['message' => 'User not found or has already been removed.'], 404);
+        }
+        $user = $userModel;
+
         $request->validate([
             'name'          => 'sometimes|string|max:255',
             'email'         => 'sometimes|email|unique:users,email,' . $user->id,
@@ -170,8 +195,14 @@ class AdminUserController extends Controller
     /**
      * Delete a user.
      */
-    public function destroy(User $user): JsonResponse
+    public function destroy($user): JsonResponse
     {
+        $userModel = $user instanceof User ? $user : User::find($user);
+        if (!$userModel) {
+            return response()->json(['message' => 'User has already been removed or does not exist.'], 200);
+        }
+        $user = $userModel;
+
         $roleName = ucfirst(str_replace('_', ' ', $user->role));
         $userName = $user->name;
         $module = match($user->role) {
@@ -374,10 +405,12 @@ class AdminUserController extends Controller
             ], 422);
         }
 
+        $targetRoleName = $role === 'student' ? 'Student' : 'Instructor';
+
         if (empty($rows)) {
             return response()->json([
                 'success' => false,
-                'message' => 'The uploaded file is empty or contains no readable instructor table data.',
+                'message' => "The uploaded file is empty or contains no readable {$targetRoleName} table data.",
                 'errors' => ['No data rows could be extracted from the uploaded file. Please ensure the file has a valid table with headers.']
             ], 422);
         }
@@ -433,6 +466,43 @@ class AdminUserController extends Controller
                     ]
                 ], 422);
             }
+        } elseif ($role === 'student') {
+            // For student role: Verify required Add Student form columns exist
+            $hasName = false;
+            $hasEmail = false;
+            $hasDept = false;
+
+            foreach ($normalizedRows as $r) {
+                if (!empty($r['name'])) $hasName = true;
+                if (!empty($r['email'])) $hasEmail = true;
+                if (!empty($r['department'])) $hasDept = true;
+            }
+
+            $missingHeaders = [];
+            if (!$hasName) $missingHeaders[] = 'Full Name';
+            if (!$hasEmail) $missingHeaders[] = 'Email Address';
+            if (!$hasDept) $missingHeaders[] = 'Department';
+
+            if (!empty($missingHeaders)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The file format does not fulfill the Add Student form requirements. Missing column(s): ' . implode(', ', $missingHeaders),
+                    'errors' => [
+                        'Missing required column(s): ' . implode(', ', $missingHeaders) . '.',
+                        'The student file MUST fulfill the Add Student form format with these columns:',
+                        '• Full Name (required)',
+                        '• Email Address (required)',
+                        '• Department (required, e.g. "Software Engineering", "Computer Science")',
+                        'Optional columns: Academic Year Level (defaults to 1st Year if blank), Student ID, Phone Number, Gender, Section, Semester, Password'
+                    ],
+                    'format_guide' => [
+                        'required_columns' => ['Full Name', 'Email Address', 'Department'],
+                        'optional_columns' => ['Academic Year Level', 'Student ID', 'Phone Number', 'Gender', 'Section', 'Semester', 'Password'],
+                        'available_departments' => $availableDeptNames,
+                        'available_year_levels' => ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year'],
+                    ]
+                ], 422);
+            }
         }
 
         // Validate each row
@@ -449,14 +519,14 @@ class AdminUserController extends Controller
             $deptVal = trim($r['department'] ?? '');
             $idNo = trim($r['id_no'] ?? '');
             $gender = trim($r['gender'] ?? '');
-            $yearLevel = trim($r['year_level'] ?? '');
+            $yearLevelRaw = trim($r['year_level'] ?? '');
             $semester = trim($r['semester'] ?? '');
             $section = trim($r['section'] ?? '');
             $username = trim($r['username'] ?? '');
             $password = trim($r['password'] ?? '');
 
             // Skip completely empty rows
-            if (empty($name) && empty($email) && empty($phone) && empty($deptVal)) {
+            if (empty($name) && empty($email) && empty($phone) && empty($deptVal) && empty($yearLevelRaw)) {
                 continue;
             }
 
@@ -486,9 +556,7 @@ class AdminUserController extends Controller
             // 4. Department validation
             $deptId = null;
             if (empty($deptVal)) {
-                if ($role === 'instructor') {
-                    $errors[] = "Row {$rowNum}: Department is required.";
-                }
+                $errors[] = "Row {$rowNum}: Department is required.";
             } else {
                 $deptId = $this->findDepartmentId($deptVal, $departments);
                 if (!$deptId) {
@@ -496,7 +564,24 @@ class AdminUserController extends Controller
                 }
             }
 
-            // 5. Gender normalization
+            // 5. Academic Year Level validation
+            $normalizedYearLevel = null;
+            if ($role === 'student') {
+                if (empty($yearLevelRaw)) {
+                    $normalizedYearLevel = '1st Year';
+                } else {
+                    $normalizedYearLevel = $this->normalizeYearLevel($yearLevelRaw);
+                    if (!$normalizedYearLevel) {
+                        $errors[] = "Row {$rowNum}: Invalid Academic Year Level '{$yearLevelRaw}'. Allowed values: 1st Year, 2nd Year, 3rd Year, 4th Year, 5th Year.";
+                    }
+                }
+            } else {
+                if ($yearLevelRaw) {
+                    $normalizedYearLevel = $this->normalizeYearLevel($yearLevelRaw) ?: $yearLevelRaw;
+                }
+            }
+
+            // 6. Gender normalization
             if ($gender) {
                 $normGender = strtolower($gender);
                 if (in_array($normGender, ['m', 'male'])) {
@@ -510,15 +595,21 @@ class AdminUserController extends Controller
                 }
             }
 
-            // 6. Employee ID uniqueness
+            // 7. Student ID / Employee ID uniqueness
+            $idFieldLabel = $role === 'student' ? 'Student ID' : 'Employee ID';
             if ($idNo) {
                 if (isset($seenIdNos[$idNo])) {
-                    $errors[] = "Row {$rowNum}: Employee ID '{$idNo}' is duplicated in the uploaded file.";
+                    $errors[] = "Row {$rowNum}: {$idFieldLabel} '{$idNo}' is duplicated in the uploaded file.";
                 } elseif (User::where('id_no', $idNo)->exists()) {
-                    $errors[] = "Row {$rowNum}: Employee ID '{$idNo}' already belongs to another user in the system.";
+                    $errors[] = "Row {$rowNum}: {$idFieldLabel} '{$idNo}' already belongs to another user in the system.";
                 } else {
                     $seenIdNos[$idNo] = true;
                 }
+            }
+
+            // 8. Section normalization
+            if ($section) {
+                $section = strtoupper(trim(preg_replace('/^(sec|section)\s*/i', '', $section)));
             }
 
             $validRecords[] = [
@@ -528,7 +619,7 @@ class AdminUserController extends Controller
                 'department_id' => $deptId,
                 'gender'        => $gender ?: null,
                 'id_no'         => $idNo ?: null,
-                'year_level'    => $yearLevel ?: null,
+                'year_level'    => $normalizedYearLevel ?: ($yearLevelRaw ?: '1st Year'),
                 'semester'      => $semester ?: null,
                 'section'       => $section ?: null,
                 'username'      => $username ?: null,
@@ -540,14 +631,22 @@ class AdminUserController extends Controller
 
         // If any format errors were found, reject import and report all issues
         if (!empty($errors)) {
+            $requiredCols = $role === 'student'
+                ? ['Full Name', 'Email Address', 'Department']
+                : ['Full Name', 'Email Address', 'Phone Number', 'Department'];
+            $optionalCols = $role === 'student'
+                ? ['Academic Year Level', 'Student ID', 'Phone Number', 'Gender', 'Section', 'Semester', 'Password']
+                : ['Gender', 'Employee ID', 'Academic Year Level', 'Semester', 'Section', 'Password'];
+
             return response()->json([
                 'success' => false,
-                'message' => 'The uploaded file does not fulfill the Add Instructor format. Found ' . count($errors) . ' issue(s).',
+                'message' => "The uploaded file does not fulfill the Add {$targetRoleName} format. Found " . count($errors) . ' issue(s).',
                 'errors'  => $errors,
                 'format_guide' => [
-                    'required_columns' => ['Full Name', 'Email Address', 'Phone Number', 'Department'],
-                    'optional_columns' => ['Gender', 'Employee ID', 'Academic Year Level', 'Semester', 'Section', 'Password'],
+                    'required_columns' => $requiredCols,
+                    'optional_columns' => $optionalCols,
                     'available_departments' => $availableDeptNames,
+                    'available_year_levels' => ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year'],
                 ]
             ], 422);
         }
@@ -555,19 +654,22 @@ class AdminUserController extends Controller
         if (empty($validRecords)) {
             return response()->json([
                 'success' => false,
-                'message' => 'No valid instructor records found in the file to import.',
-                'errors'  => ['The file contains no instructor data rows.']
+                'message' => "No valid {$targetRoleName} records found in the file to import.",
+                'errors'  => ["The file contains no {$targetRoleName} data rows."]
             ], 422);
         }
 
         // Insert inside transaction
         $createdUsers = [];
-        DB::transaction(function () use ($validRecords, &$createdUsers) {
+        $logModule = $role === 'student' ? 'Students' : 'Instructors';
+        $logAction = $role === 'student' ? 'Student' : 'Instructor';
+
+        DB::transaction(function () use ($validRecords, $role, $logModule, $logAction, &$createdUsers) {
             foreach ($validRecords as $r) {
                 $username = $r['username'];
                 if (!$username) {
                     $base = strtolower(explode('@', $r['email'])[0]);
-                    $clean = preg_replace('/[^a-z0-9_.]/', '', $base) ?: 'instructor';
+                    $clean = preg_replace('/[^a-z0-9_.]/', '', $base) ?: ($role === 'student' ? 'student' : 'instructor');
                     $candidate = $clean;
                     $counter = 1;
                     while (User::where('username', $candidate)->exists()) {
@@ -587,8 +689,9 @@ class AdminUserController extends Controller
                     'phone'         => $r['phone'],
                     'gender'        => $r['gender'],
                     'year_level'    => $r['year_level'],
-                    'semester'      => $r['semester'],
-                    'section'       => $r['section'],
+                    'academic_year' => '2025/2026',
+                    'semester'      => $r['semester'] ?: '1st Semester',
+                    'section'       => $r['section'] ?: 'A',
                     'status'        => 'active',
                 ]);
 
@@ -597,14 +700,23 @@ class AdminUserController extends Controller
                     'name'           => $user->name,
                     'email'          => $user->email,
                     'department'     => $user->department?->name ?? 'N/A',
+                    'departmentName' => $user->department?->name ?? 'N/A',
+                    'department_id'  => $user->department_id,
                     'employeeId'     => $user->id_no,
+                    'studentId'      => $user->id_no,
+                    'id_no'          => $user->id_no,
                     'phone'          => $user->phone,
+                    'year_level'     => $user->year_level,
+                    'year'           => $user->year_level,
+                    'section'        => $user->section,
+                    'semester'       => $user->semester,
+                    'status'         => $user->status,
                 ];
 
                 LogActivity::record(
                     'Created',
-                    'Instructors',
-                    "Imported Instructor \"{$user->name}\""
+                    $logModule,
+                    "Imported {$logAction} \"{$user->name}\""
                 );
             }
         });
@@ -612,8 +724,9 @@ class AdminUserController extends Controller
         $count = count($createdUsers);
         return response()->json([
             'success'     => true,
-            'message'     => "Successfully imported {$count} instructor(s) into the system.",
+            'message'     => "Successfully imported {$count} {$targetRoleName}(s) into the system.",
             'imported'    => $count,
+            'students'    => $createdUsers,
             'instructors' => $createdUsers,
         ]);
     }
@@ -681,6 +794,7 @@ class AdminUserController extends Controller
 
     /**
      * Parse table rows from PDF file.
+     * Uses robust coordinate-based (Y/X) table extraction to handle empty cells and column offsets accurately.
      */
     private function parsePdfRows(string $filePath): array
     {
@@ -689,55 +803,7 @@ class AdminUserController extends Controller
         $allRows = [];
 
         foreach ($pdf->getPages() as $page) {
-            $textArray = array_values(array_filter(array_map('trim', $page->getTextArray()), fn($v) => $v !== ''));
-            if (empty($textArray)) continue;
-
-            // Strategy 1: Table text array matching
-            $headerStartIndex = null;
-            foreach ($textArray as $idx => $item) {
-                $lower = strtolower($item);
-                if ($lower === '#' || $lower === 'full name' || $lower === 'name' || $lower === 'email') {
-                    $headerStartIndex = $idx;
-                    break;
-                }
-            }
-
-            if ($headerStartIndex !== null) {
-                $headers = [];
-                $dataStartIndex = null;
-                for ($i = $headerStartIndex; $i < count($textArray); $i++) {
-                    $item = $textArray[$i];
-                    if (!empty($headers) && ($item === '1' || filter_var($item, FILTER_VALIDATE_EMAIL))) {
-                        $dataStartIndex = $i;
-                        break;
-                    }
-                    $normHeader = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $item), '_'));
-                    if ($normHeader !== '') {
-                        $headers[] = $normHeader;
-                    }
-                }
-
-                $numCols = count($headers);
-                if ($dataStartIndex !== null && $numCols >= 3) {
-                    $dataSlice = array_slice($textArray, $dataStartIndex);
-                    $chunks = array_chunk($dataSlice, $numCols);
-                    $pageRows = [];
-                    foreach ($chunks as $chunk) {
-                        if (count($chunk) === $numCols) {
-                            $row = array_combine($headers, $chunk);
-                            if (strtolower($row['email'] ?? '') !== 'email') {
-                                $pageRows[] = $row;
-                            }
-                        }
-                    }
-                    if (!empty($pageRows)) {
-                        $allRows = array_merge($allRows, $pageRows);
-                        continue;
-                    }
-                }
-            }
-
-            // Strategy 2: Y-coordinate text grouping
+            // Strategy 1: Y-coordinate text grouping and X-coordinate column boundary matching
             $tm = $page->getDataTm();
             if (!empty($tm)) {
                 $rowsByY = [];
@@ -749,7 +815,7 @@ class AdminUserController extends Controller
 
                     $foundY = null;
                     foreach (array_keys($rowsByY) as $existingY) {
-                        if (abs($existingY - $y) <= 3.5) {
+                        if (abs($existingY - $y) <= 4.0) {
                             $foundY = $existingY;
                             break;
                         }
@@ -769,12 +835,12 @@ class AdminUserController extends Controller
                     usort($cells, fn($a, $b) => $a['x'] <=> $b['x']);
                     $rowText = strtolower(implode(' ', array_map(fn($c) => $c['text'], $cells)));
 
-                    if (!$headerRow && (str_contains($rowText, 'name') || str_contains($rowText, 'email'))) {
+                    if (!$headerRow && count($cells) >= 3 && (str_contains($rowText, 'name') || str_contains($rowText, 'email'))) {
                         $headerRow = $cells;
                         continue;
                     }
                     if ($headerRow) {
-                        if (str_contains($rowText, 'name') && str_contains($rowText, 'email')) {
+                        if (count($cells) >= 3 && str_contains($rowText, 'name') && str_contains($rowText, 'email')) {
                             continue; // repeated header on multi-page
                         }
                         $dataRows[] = $cells;
@@ -789,6 +855,9 @@ class AdminUserController extends Controller
                         $prevMid = ($i === 0) ? -9999 : ($headerRow[$i - 1]['x'] + $currentX) / 2;
                         $nextMid = ($i === $colsCount - 1) ? 9999 : ($currentX + $headerRow[$i + 1]['x']) / 2;
                         $rawName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $headerRow[$i]['text']), '_'));
+                        if ($rawName === '') {
+                            $rawName = ($headerRow[$i]['text'] === '#') ? 'row_index' : 'col_' . $i;
+                        }
                         $colDefs[] = [
                             'name'  => $rawName,
                             'min_x' => $prevMid,
@@ -819,7 +888,58 @@ class AdminUserController extends Controller
                 }
             }
 
-            // Strategy 3: Line-by-line fallback regex
+            // Strategy 2: Text array matching (fallback if getDataTm is unavailable)
+            $textArray = array_values(array_filter(array_map('trim', $page->getTextArray()), fn($v) => $v !== ''));
+            if (!empty($textArray)) {
+                $headerStartIndex = null;
+                foreach ($textArray as $idx => $item) {
+                    $lower = strtolower($item);
+                    if ($lower === '#' || $lower === 'full name' || $lower === 'name' || $lower === 'email' || $lower === 'student' || $lower === 'student name' || $lower === 'student id' || $lower === 'stud id') {
+                        $headerStartIndex = $idx;
+                        break;
+                    }
+                }
+
+                if ($headerStartIndex !== null) {
+                    $headers = [];
+                    $dataStartIndex = null;
+                    for ($i = $headerStartIndex; $i < count($textArray); $i++) {
+                        $item = $textArray[$i];
+                        if (!empty($headers) && ($item === '1' || filter_var($item, FILTER_VALIDATE_EMAIL))) {
+                            $dataStartIndex = $i;
+                            break;
+                        }
+                        $normHeader = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $item), '_'));
+                        if ($normHeader === '' && $item === '#') {
+                            $normHeader = 'row_index';
+                        }
+                        if ($normHeader !== '') {
+                            $headers[] = $normHeader;
+                        }
+                    }
+
+                    $numCols = count($headers);
+                    if ($dataStartIndex !== null && $numCols >= 3) {
+                        $dataSlice = array_slice($textArray, $dataStartIndex);
+                        $chunks = array_chunk($dataSlice, $numCols);
+                        $pageRows = [];
+                        foreach ($chunks as $chunk) {
+                            if (count($chunk) === $numCols) {
+                                $row = array_combine($headers, $chunk);
+                                if (strtolower($row['email'] ?? '') !== 'email') {
+                                    $pageRows[] = $row;
+                                }
+                            }
+                        }
+                        if (!empty($pageRows)) {
+                            $allRows = array_merge($allRows, $pageRows);
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Strategy 3: Line-by-line regex fallback
             $lines = explode("\n", $page->getText());
             foreach ($lines as $line) {
                 $line = trim($line);
@@ -870,7 +990,7 @@ class AdminUserController extends Controller
             $k = strtolower(trim(preg_replace('/[^a-z0-9]+/', '_', (string)$key), '_'));
 
             // Name
-            if (in_array($k, ['full_name', 'name', 'instructor_name', 'instructor', 'teacher'])) {
+            if (in_array($k, ['full_name', 'name', 'student_name', 'student', 'student_full_name', 'instructor_name', 'instructor', 'teacher'])) {
                 if (empty($norm['name'])) $norm['name'] = $val;
             }
             // Email
@@ -889,8 +1009,8 @@ class AdminUserController extends Controller
             elseif (in_array($k, ['gender', 'sex'])) {
                 if (empty($norm['gender'])) $norm['gender'] = $val;
             }
-            // Employee ID / ID No
-            elseif (in_array($k, ['id_no', 'employee_id', 'employee_id_no', 'student_id_employee_id', 'id_employee_id', 'emp_id', 'id'])) {
+            // Employee ID / Student ID / ID No
+            elseif (in_array($k, ['id_no', 'student_id', 'student_id_no', 'stud_id', 'admission_no', 'admission_number', 'employee_id', 'employee_id_no', 'student_id_employee_id', 'id_employee_id', 'emp_id', 'id'])) {
                 if ($k === 'id' && is_numeric($val) && strlen($val) < 4) {
                     // row number index
                 } else {
@@ -898,7 +1018,7 @@ class AdminUserController extends Controller
                 }
             }
             // Year level
-            elseif (in_array($k, ['year_level', 'academic_year_level', 'year', 'level'])) {
+            elseif (in_array($k, ['year_level', 'academic_year_level', 'year', 'level', 'academic_year'])) {
                 if (empty($norm['year_level'])) $norm['year_level'] = $val;
             }
             // Semester
@@ -920,6 +1040,21 @@ class AdminUserController extends Controller
         }
 
         return $norm;
+    }
+
+    /**
+     * Normalize Academic Year Level to standard strings (1st Year, 2nd Year, etc.)
+     */
+    private function normalizeYearLevel(string $val): ?string
+    {
+        $clean = strtolower(trim($val));
+        if ($clean === '') return null;
+        if (preg_match('/\b(1st|first|1)\b/i', $clean) || $clean === '1st year' || $clean === 'year 1' || $clean === '1') return '1st Year';
+        if (preg_match('/\b(2nd|second|2)\b/i', $clean) || $clean === '2nd year' || $clean === 'year 2' || $clean === '2') return '2nd Year';
+        if (preg_match('/\b(3rd|third|3)\b/i', $clean) || $clean === '3rd year' || $clean === 'year 3' || $clean === '3') return '3rd Year';
+        if (preg_match('/\b(4th|fourth|4)\b/i', $clean) || $clean === '4th year' || $clean === 'year 4' || $clean === '4') return '4th Year';
+        if (preg_match('/\b(5th|fifth|5)\b/i', $clean) || $clean === '5th year' || $clean === 'year 5' || $clean === '5') return '5th Year';
+        return null;
     }
 
     /**

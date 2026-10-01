@@ -61,8 +61,8 @@ window.addEventListener('activity-logged', async () => {
   >
     
     <!-- Logo Area -->
-    <div class="flex items-center px-5 pt-10 pb-4 border-b border-slate-50" :class="!sidebarOpen && 'justify-center'">
-      <div class="flex items-center gap-2">
+    <div class="flex items-center px-5 pt-6 pb-4 border-b border-slate-50 shrink-0" :class="!sidebarOpen && 'justify-center'">
+      <div class="flex items-center gap-2.5">
         <img src="../../assets/images/logo.png" alt="Wollo University" class="w-9 h-9 object-contain rounded-full shadow-sm" />
         <div v-if="sidebarOpen" class="flex flex-col whitespace-nowrap">
           <span class="text-[14px] font-bold text-slate-900 leading-tight">Wollo University</span>
@@ -72,17 +72,17 @@ window.addEventListener('activity-logged', async () => {
     </div>
 
     <!-- Navigation Links -->
-    <nav class="flex-1 px-4 pt-4 pb-6 space-y-1">
+    <nav class="flex-1 px-4 py-3 space-y-1.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-none">
       <router-link 
         v-for="item in navItems" 
         :key="item.name"
         :to="item.path"
-        class="flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group relative"
+        class="flex items-center gap-3 py-2.5 rounded-xl transition-all duration-200 group relative"
         :class="[
           route.path.startsWith(item.path) 
             ? 'bg-rose-50 text-rose-600 font-semibold' 
             : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-          sidebarOpen ? 'px-4' : 'justify-center px-0'
+          sidebarOpen ? 'px-3.5' : 'justify-center px-0'
         ]"
         :title="!sidebarOpen ? item.name : undefined"
       >
@@ -105,18 +105,28 @@ window.addEventListener('activity-logged', async () => {
     </nav>
 
     <!-- Bottom Graphic -->
-    <div class="p-6 mt-auto">
-      <div class="w-full flex flex-col items-center justify-center opacity-60">
-        <div class="w-16 h-16 border-2 border-slate-200 rounded-t-full mb-2" :class="!sidebarOpen && 'w-8 h-8 border'"></div>
-        <div class="flex gap-1 mb-2">
-           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
-           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
-           <div class="w-3 h-4 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
+    <div class="px-4 py-3.5 mt-auto shrink-0 border-t border-slate-50">
+      <div class="w-full flex flex-col items-center justify-center opacity-70">
+        <div class="w-12 h-12 border-2 border-slate-200 rounded-t-full mb-1.5" :class="!sidebarOpen && 'w-8 h-8 border'"></div>
+        <div class="flex gap-1 mb-1.5">
+           <div class="w-2.5 h-3.5 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
+           <div class="w-2.5 h-3.5 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
+           <div class="w-2.5 h-3.5 border border-slate-200" :class="!sidebarOpen && 'w-1 h-2'"></div>
         </div>
-        <span v-if="sidebarOpen" class="text-xs font-bold text-[#2b4c7e] tracking-wide uppercase whitespace-nowrap">Wollo University</span>
-        <span v-if="sidebarOpen" class="text-[9px] text-slate-400 font-medium whitespace-nowrap">Super Admin Portal</span>
+        <span v-if="sidebarOpen" class="text-xs font-bold text-[#2b4c7e] tracking-wider uppercase whitespace-nowrap leading-tight">Wollo University</span>
+        <span v-if="sidebarOpen" class="text-[9px] text-slate-400 font-medium whitespace-nowrap leading-tight">Super Admin Portal</span>
       </div>
     </div>
 
   </aside>
 </template>
+
+<style scoped>
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+</style>

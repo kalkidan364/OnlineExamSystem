@@ -69,8 +69,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('dashboard-stats', [\App\Http\Controllers\Api\V1\AdminDashboardController::class, 'index']);
         Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
-        Route::post('departments/{department}/assign-head', [\App\Http\Controllers\Api\V1\DepartmentController::class, 'assignHead']);
-        Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class);
+        Route::post('users/{user}', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'update']);
         Route::get('users-export', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'export']);
         Route::post('users-import', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'import']);
         
