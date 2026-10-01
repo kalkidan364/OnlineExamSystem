@@ -315,29 +315,109 @@ const chartOptions = {
     tooltip: { enabled: true }
   }
 }
-const importFileInput = ref<HTMLInputElement | null>(null)
-const triggerImport = () => { if (importFileInput.value) importFileInput.value.click() }
+// ── Import Modal, Validation & Results State ──
+const showImportModal = ref(false)
+const selectedImportFile = ref<File | null>(null)
+const isImporting = ref(false)
+const importDragOver = ref(false)
+const modalFileInput = ref<HTMLInputElement | null>(null)
 
-const handleImport = async (event: Event) => {
+// Error / Format Issues Modal State
+const showImportErrorModal = ref(false)
+const importErrorMessage = ref('')
+const importErrorList = ref<string[]>([])
+const importFormatGuide = ref<any>(null)
+
+// Success Modal State
+const showImportSuccessModal = ref(false)
+const importSuccessMessage = ref('')
+const importedCoursesList = ref<any[]>([])
+
+const triggerImport = () => {
+  selectedImportFile.value = null
+  showImportModal.value = true
+}
+
+const onModalFileSelect = (event: Event) => {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (file) {
-    isLoading.value = true
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      await apiClient.post('/admin/courses-import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      alert(`Successfully imported ${file.name}`)
-      await fetchCourses()
-    } catch (err: any) { 
-        alert(err.response?.data?.message || 'Failed to import courses') 
-    }
-    finally {
-      isLoading.value = false
-      if (importFileInput.value) importFileInput.value.value = ''
+    selectedImportFile.value = file
+  }
+}
+
+const onFileDrop = (event: DragEvent) => {
+  importDragOver.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (file) {
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext === 'csv' || ext === 'pdf') {
+      selectedImportFile.value = file
+    } else {
+      importErrorMessage.value = 'Invalid file type. Please upload a CSV (.csv) or PDF (.pdf) file.'
+      importErrorList.value = ['Only .csv and .pdf file formats are supported.']
+      showImportErrorModal.value = true
     }
   }
+}
+
+const executeImport = async (fileOverride?: File) => {
+  const file = fileOverride || selectedImportFile.value
+  if (!file) {
+    importErrorMessage.value = 'Please select a file to import.'
+    importErrorList.value = ['No file selected. Please choose a CSV or PDF file.']
+    showImportErrorModal.value = true
+    return
+  }
+
+  isImporting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const res = await apiClient.post('/admin/courses-import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    showImportModal.value = false
+    selectedImportFile.value = null
+    importSuccessMessage.value = res.data.message || `Successfully imported courses from ${file.name}.`
+    importedCoursesList.value = res.data.courses || []
+    showImportSuccessModal.value = true
+
+    await fetchCourses()
+  } catch (err: any) {
+    showImportModal.value = false
+    const data = err.response?.data
+    importErrorMessage.value = data?.message || 'Failed to import courses.'
+    importErrorList.value = Array.isArray(data?.errors)
+      ? data.errors
+      : (data?.message ? [data.message] : ['An unexpected error occurred during file import.'])
+    importFormatGuide.value = data?.format_guide || null
+    showImportErrorModal.value = true
+  } finally {
+    isImporting.value = false
+    if (modalFileInput.value) modalFileInput.value.value = ''
+  }
+}
+
+const downloadSampleCsv = () => {
+  const deptExample1 = allDepartments.value.length > 0 ? (allDepartments.value[0].name || allDepartments.value[0]) : 'Software Engineering'
+  const deptExample2 = allDepartments.value.length > 1 ? (allDepartments.value[1].name || allDepartments.value[1]) : 'Computer Science'
+
+  const headers = ['Course Code', 'Course Title', 'Department', 'Academic Year Level', 'Credits', 'Semester', 'Section', 'Status', 'Description']
+  const row1 = ['CS-301', 'Compiler Design', deptExample1, '3rd Year', '4', '1st Semester', 'Section A', 'Active', 'Study of compiler principles and construction techniques']
+  const row2 = ['SE-204', 'Software Architecture', deptExample2, '2nd Year', '3', '1st Semester', 'Section B', 'Active', 'Fundamental software architecture styles and patterns']
+
+  const csvContent = [headers.join(','), row1.join(','), row2.join(',')].join('\n')
+  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'course_import_template.csv'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 const showExportDropdown = ref(false)
@@ -387,7 +467,6 @@ const handleExport = async (format: string) => {
       <!-- Page Actions -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div class="flex flex-wrap items-center gap-3">
-          <input type="file" ref="importFileInput" @change="handleImport" accept=".csv" class="hidden">
           <button @click="triggerImport" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-[#4338ca] font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Import Courses
           </button>
@@ -611,7 +690,7 @@ const handleExport = async (format: string) => {
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
               <span class="text-[10px] font-bold text-center">Add New<br>Course</span>
             </button>
-            <button class="flex flex-col items-center justify-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors text-slate-600">
+            <button @click="triggerImport" class="flex flex-col items-center justify-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors text-slate-600">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
               <span class="text-[10px] font-bold text-center">Import<br>Courses</span>
             </button>
@@ -1148,6 +1227,223 @@ const handleExport = async (format: string) => {
             <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>
             <button @click="saveCourse" :disabled="isLoading" class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed">
               {{ isLoading ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ════════════════ IMPORT COURSES MODAL ════════════════ -->
+    <Teleport to="body">
+      <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col my-8 border border-slate-100">
+          <!-- Modal Header -->
+          <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 class="text-[17px] font-bold text-slate-800">Import Courses</h3>
+              <p class="text-[12px] text-slate-500 mt-0.5">Upload a CSV or PDF file to batch register courses.</p>
+            </div>
+            <button @click="showImportModal = false" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-5">
+            <!-- Format Requirements Banner -->
+            <div class="p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[12px] font-bold text-[#4338ca] uppercase tracking-wide flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  Required Format: Add Course Form
+                </span>
+                <button @click="downloadSampleCsv" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-indigo-200 text-[#4338ca] hover:bg-indigo-50 font-bold text-[11px] rounded-lg transition-colors shadow-xs">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Download Sample CSV
+                </button>
+              </div>
+              <p class="text-[12px] text-slate-600 leading-relaxed">
+                The file (CSV or PDF) must fulfill the Add Course form format.
+              </p>
+              <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div class="bg-white p-2 rounded-lg border border-indigo-100">
+                  <span class="font-bold text-slate-700 block mb-0.5">Required Fields:</span>
+                  <span class="text-rose-600 font-medium">Course Code, Course Title, Department</span>
+                </div>
+                <div class="bg-white p-2 rounded-lg border border-indigo-100">
+                  <span class="font-bold text-slate-700 block mb-0.5">Optional Fields:</span>
+                  <span class="text-slate-500">Level <em class="text-indigo-500">(defaults to 1st Year)</em>, Credits <em class="text-indigo-500">(defaults to 3)</em>, Semester, Section, Status, Start Date, End Date, Description</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div>
+              <label class="block text-[12px] font-bold text-slate-700 mb-2">Select CSV or PDF File</label>
+              <div
+                class="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2"
+                :class="importDragOver ? 'border-[#4338ca] bg-indigo-50/50' : 'border-slate-200 hover:border-[#4338ca] hover:bg-slate-50/50'"
+                @dragover.prevent="importDragOver = true"
+                @dragleave.prevent="importDragOver = false"
+                @drop.prevent="onFileDrop"
+                @click="modalFileInput?.click()"
+              >
+                <input
+                  type="file"
+                  ref="modalFileInput"
+                  class="hidden"
+                  accept=".csv,.pdf,application/pdf,text/csv"
+                  @change="onModalFileSelect"
+                />
+
+                <template v-if="selectedImportFile">
+                  <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-[13px] uppercase shadow-sm"
+                    :class="selectedImportFile.name.endsWith('.pdf') ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'">
+                    {{ selectedImportFile.name.split('.').pop() }}
+                  </div>
+                  <div>
+                    <p class="text-[13px] font-bold text-slate-800">{{ selectedImportFile.name }}</p>
+                    <p class="text-[11px] text-slate-500">{{ (selectedImportFile.size / 1024).toFixed(1) }} KB</p>
+                  </div>
+                  <button @click.stop="selectedImportFile = null" class="mt-1 text-[11px] font-bold text-rose-500 hover:underline">
+                    Choose different file
+                  </button>
+                </template>
+
+                <template v-else>
+                  <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                  </div>
+                  <p class="text-[13px] font-bold text-slate-700">
+                    Click to browse or drag and drop file here
+                  </p>
+                  <p class="text-[11px] text-slate-400">Supports CSV (.csv) or PDF (.pdf) files</p>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50">
+            <button
+              @click="showImportModal = false"
+              class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              @click="executeImport()"
+              :disabled="!selectedImportFile || isImporting"
+              class="flex items-center gap-2 px-6 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              <svg v-if="isImporting" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              {{ isImporting ? 'Importing Courses...' : 'Upload & Import' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ════════════════ FORMAT ISSUES / ERROR POPUP MODAL ════════════════ -->
+    <Teleport to="body">
+      <div v-if="showImportErrorModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col my-8 border border-rose-200">
+          <!-- Alert Header -->
+          <div class="bg-rose-50 px-6 py-5 border-b border-rose-100 flex items-start gap-4">
+            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-[16px] font-bold text-rose-900">Import Format Issues Detected</h3>
+              <p class="text-[12px] text-rose-700 mt-0.5">{{ importErrorMessage }}</p>
+            </div>
+            <button @click="showImportErrorModal = false" class="text-rose-400 hover:text-rose-600 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+            <!-- Specific Error List -->
+            <div>
+              <p class="text-[12px] font-bold text-slate-700 uppercase tracking-wide mb-2">Detected Issue(s):</p>
+              <div class="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <div v-for="(err, idx) in importErrorList" :key="idx" class="flex items-start gap-2.5 text-[12px] text-slate-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5"></span>
+                  <span class="leading-relaxed">{{ err }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Required Add Course Format Reference -->
+            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 space-y-2 text-[12px]">
+              <p class="font-bold text-[#4338ca]">How to fix this file:</p>
+              <ul class="list-disc list-inside text-slate-600 space-y-1 text-[11px]">
+                <li>File must include columns: <strong class="text-slate-800">Course Code, Course Title, Department</strong></li>
+                <li>Academic Year Level is <strong class="text-slate-800">optional</strong> — if blank, defaults to <strong class="text-slate-800">1st Year</strong></li>
+                <li>Credits is <strong class="text-slate-800">optional</strong> — if blank, defaults to <strong class="text-slate-800">3</strong></li>
+                <li>Department must match one of the system departments: <strong class="text-slate-800" v-for="d in allDepartments" :key="d.id">{{ d.name }}, </strong></li>
+                <li>If Academic Year Level is provided it must be: <strong class="text-slate-800">1st Year, 2nd Year, 3rd Year, 4th Year, or 5th Year</strong></li>
+                <li>Course Code must be unique and not already exist in the system</li>
+              </ul>
+              <div class="pt-2">
+                <button @click="downloadSampleCsv" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#4338ca] text-[#4338ca] hover:bg-indigo-50 font-bold text-[12px] rounded-lg transition-colors shadow-xs cursor-pointer">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Download Valid Template (.CSV)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <span class="text-[12px] text-slate-500">Fix the file and try importing again</span>
+            <button
+              @click="showImportErrorModal = false; showImportModal = true"
+              class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl transition-colors shadow-sm cursor-pointer"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ════════════════ SUCCESS CONFIRMATION POPUP MODAL ════════════════ -->
+    <Teleport to="body">
+      <div v-if="showImportSuccessModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col my-8 border border-emerald-200">
+          <div class="p-6 text-center space-y-4">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-[18px] font-bold text-slate-800">Courses Imported Successfully!</h3>
+              <p class="text-[13px] text-slate-500 mt-1">{{ importSuccessMessage }}</p>
+            </div>
+
+            <!-- List of imported courses -->
+            <div v-if="importedCoursesList.length > 0" class="max-h-48 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-100 text-left">
+              <div v-for="course in importedCoursesList" :key="course.id" class="p-3 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-[#4338ca]">{{ course.code }}</span>
+                    <p class="text-[13px] font-bold text-slate-800">{{ course.title }}</p>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">{{ course.level }} · {{ course.credits }} Credits</p>
+                </div>
+                <span class="px-2.5 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 text-slate-700">
+                  {{ course.department }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end bg-slate-50/50">
+            <button
+              @click="showImportSuccessModal = false"
+              class="w-full sm:w-auto px-6 py-2.5 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm cursor-pointer"
+            >
+              Done & View Courses
             </button>
           </div>
         </div>
