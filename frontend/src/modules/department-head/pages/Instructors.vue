@@ -137,11 +137,70 @@ const validateAddForm = (): boolean => {
   return Object.keys(addFormErrors.value).length === 0
 }
 
+const addPhotoPreview = ref<string | null>(null)
+const addFileInput = ref<HTMLInputElement | null>(null)
+const editPhotoPreview = ref<string | null>(null)
+const editFileInput = ref<HTMLInputElement | null>(null)
+
+const resolveAvatarUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null
+  if (url.startsWith('http://localhost/') && !url.startsWith('http://localhost:8000/')) {
+    return url.replace('http://localhost/', 'http://localhost:8000/')
+  }
+  return url
+}
+
+const triggerAddFileInput = () => {
+  addFileInput.value?.click()
+}
+
+const triggerEditFileInput = () => {
+  editFileInput.value?.click()
+}
+
+const handleFileUpload = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    if (file.size > 2 * 1024 * 1024) {
+      addFormErrors.value.profilePicture = 'Profile photo must be less than 2MB'
+      return
+    }
+    if (!['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif'].includes(file.type)) {
+      addFormErrors.value.profilePicture = 'Only PNG, JPG, WEBP, or GIF images are supported'
+      return
+    }
+    delete addFormErrors.value.profilePicture
+    addForm.value.profilePicture = file
+    addPhotoPreview.value = URL.createObjectURL(file)
+  }
+}
+
+const removeAddPhoto = (e?: Event) => {
+  if (e) e.stopPropagation()
+  addForm.value.profilePicture = null
+  if (addPhotoPreview.value) {
+    URL.revokeObjectURL(addPhotoPreview.value)
+    addPhotoPreview.value = null
+  }
+  if (addFileInput.value) {
+    addFileInput.value.value = ''
+  }
+  delete addFormErrors.value.profilePicture
+}
+
 const resetAddForm = () => {
   addForm.value = {
     fullName: '', email: '', phone: '', gender: '', profilePicture: null,
     employeeId: '', yearLevel: '',
     username: '', password: '', confirmPassword: ''
+  }
+  if (addPhotoPreview.value) {
+    URL.revokeObjectURL(addPhotoPreview.value)
+    addPhotoPreview.value = null
+  }
+  if (addFileInput.value) {
+    addFileInput.value.value = ''
   }
   addFormErrors.value = {}
   addFormTouched.value = {}
@@ -193,6 +252,7 @@ const openEditPage = (instructor: any) => {
     return
   }
   selectedInstructor.value = instructor
+  editPhotoPreview.value = resolveAvatarUrl(instructor.profile_picture_url) || null
   editForm.value = {
     fullName: instructor.name || '',
     email: instructor.email || '',
@@ -223,7 +283,22 @@ const openEditPage = (instructor: any) => {
 
 const handleEditFileUpload = (e: Event) => {
   const target = e.target as HTMLInputElement
-  if (target.files && target.files[0]) editForm.value.profilePicture = target.files[0]
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Profile photo must be less than 2MB')
+      return
+    }
+    editForm.value.profilePicture = file
+    editPhotoPreview.value = URL.createObjectURL(file)
+  }
+}
+
+const removeEditPhoto = (e?: Event) => {
+  if (e) e.stopPropagation()
+  editForm.value.profilePicture = null
+  editPhotoPreview.value = null
+  if (editFileInput.value) editFileInput.value.value = ''
 }
 
 const saveEditInstructor = async () => {
@@ -234,17 +309,22 @@ const saveEditInstructor = async () => {
   }
   isLoading.value = true
   try {
-    await apiClient.put(`/dept-head/instructors/${selectedInstructor.value.id}`, {
-      name: editForm.value.fullName,
-      email: editForm.value.email,
-      phone: editForm.value.phone,
-      gender: editForm.value.gender,
-      id_no: editForm.value.employeeId,
-      year_level: editForm.value.year,
-      semester: editForm.value.semester || null,
-      employment_type: editForm.value.employmentType === 'Part Time' ? 'part_time' : 'full_time',
-      ...(editForm.value.password ? { password: editForm.value.password } : {}),
-    })
+    const formData = new FormData()
+    formData.append('_method', 'PUT')
+    formData.append('name', editForm.value.fullName.trim())
+    formData.append('email', editForm.value.email.trim())
+    formData.append('phone', editForm.value.phone.trim())
+    formData.append('gender', editForm.value.gender)
+    formData.append('id_no', editForm.value.employeeId.trim())
+    if (editForm.value.year) formData.append('year_level', editForm.value.year)
+    if (editForm.value.semester) formData.append('semester', editForm.value.semester)
+    formData.append('employment_type', editForm.value.employmentType === 'Part Time' ? 'part_time' : 'full_time')
+    if (editForm.value.password) formData.append('password', editForm.value.password)
+    if (editForm.value.profilePicture) {
+      formData.append('profile_picture', editForm.value.profilePicture)
+    }
+
+    await apiClient.post(`/dept-head/instructors/${selectedInstructor.value.id}`, formData)
     await fetchInstructors()
     currentView.value = 'list'
   } catch (err: any) {
@@ -252,19 +332,6 @@ const saveEditInstructor = async () => {
     if (err.response?.data?.errors) msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
     alert(msg)
   } finally { isLoading.value = false }
-}
-
-const handleFileUpload = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  if (target.files && target.files[0]) {
-    const file = target.files[0]
-    if (file.size > 2 * 1024 * 1024) {
-      addFormErrors.value.profilePicture = 'File size must be under 2MB'
-      return
-    }
-    delete addFormErrors.value.profilePicture
-    addForm.value.profilePicture = file
-  }
 }
 
 // ── Fetch Department Info ──
@@ -285,6 +352,7 @@ const fetchInstructors = async () => {
     }
     allInstructors.value = (res.data.data || []).map((i: any) => ({
       ...i,
+      avatarUrl: resolveAvatarUrl(i.profile_picture_url),
       avatar: i.name ? i.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
       id_code: i.id_no || 'N/A',
       courses: i.assigned_courses?.length ? i.assigned_courses.map((c: any) => c.title).join(', ') : 'No Courses',
@@ -408,11 +476,14 @@ const saveInstructor = async () => {
       formData.append('profile_picture', addForm.value.profilePicture)
     }
 
-    await apiClient.post('/dept-head/instructors', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    await apiClient.post('/dept-head/instructors', formData)
+    if (addPhotoPreview.value) {
+      URL.revokeObjectURL(addPhotoPreview.value)
+      addPhotoPreview.value = null
+    }
+    if (addFileInput.value) {
+      addFileInput.value.value = ''
+    }
     await fetchInstructors()
     currentView.value = 'list'
   } catch (err: any) {
@@ -604,13 +675,71 @@ const uniqueSections = computed(() => {
 
             <!-- Row 3: Profile Picture -->
             <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
-              <label :class="addFormErrors.profilePicture ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 hover:border-[#5138ed] hover:bg-indigo-50/30'" class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed rounded-xl cursor-pointer transition-colors group">
-                <svg class="w-6 h-6 text-slate-300 group-hover:text-[#5138ed] mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ addForm.profilePicture ? addForm.profilePicture.name : 'Upload Photo (Optional)' }}</p>
-                <p class="text-[11px] text-slate-400">PNG, JPG up to 2MB</p>
-                <input type="file" accept="image/*" @change="handleFileUpload" class="hidden" />
-              </label>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-[12px] font-semibold text-slate-700">Profile Picture <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
+                <button
+                  v-if="addPhotoPreview"
+                  type="button"
+                  @click="removeAddPhoto"
+                  class="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  Remove Photo
+                </button>
+              </div>
+
+              <div
+                @click="triggerAddFileInput"
+                :class="[
+                  'relative flex items-center gap-4 p-4 border-2 border-dashed rounded-xl cursor-pointer transition-colors',
+                  addFormErrors.profilePicture
+                    ? 'border-rose-400 bg-rose-50/20'
+                    : addPhotoPreview
+                      ? 'border-indigo-300 bg-indigo-50/20 hover:border-[#5138ed]'
+                      : 'border-slate-200 hover:border-[#5138ed] hover:bg-indigo-50/30'
+                ]"
+              >
+                <input
+                  ref="addFileInput"
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
+                  @change="handleFileUpload"
+                  class="hidden"
+                />
+
+                <div class="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-xs shrink-0 flex items-center justify-center bg-slate-100">
+                  <img
+                    v-if="addPhotoPreview"
+                    :src="addPhotoPreview"
+                    alt="Photo Preview"
+                    class="w-full h-full object-cover"
+                  />
+                  <svg
+                    v-else
+                    class="w-7 h-7 text-slate-300"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                  <template v-if="addPhotoPreview">
+                    <p class="text-[13px] font-bold text-slate-800 truncate">{{ addForm.profilePicture?.name || 'Photo Selected' }}</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Click to choose a different photo</p>
+                  </template>
+                  <template v-else>
+                    <p class="text-[13px] font-bold text-slate-700">Upload Instructor Photo</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">PNG, JPG, WEBP up to 2MB (Optional)</p>
+                  </template>
+                </div>
+
+                <span class="px-3.5 py-1.5 rounded-lg border border-slate-200 text-[12px] font-bold text-slate-600 bg-white shadow-xs">
+                  {{ addPhotoPreview ? 'Change' : 'Browse' }}
+                </span>
+              </div>
               <p v-if="addFormErrors.profilePicture" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.profilePicture }}</p>
             </div>
           </div>
@@ -805,13 +934,60 @@ const uniqueSections = computed(() => {
                 </div>
               </div>
               <div class="col-span-2">
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture</label>
-                <label class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-[#5138ed] hover:bg-indigo-50/30 transition-colors group">
-                  <svg class="w-6 h-6 text-slate-300 group-hover:text-[#5138ed] mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                  <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ editForm.profilePicture ? editForm.profilePicture.name : 'Upload New Photo' }}</p>
-                  <p class="text-[11px] text-slate-400">PNG, JPG up to 2MB</p>
-                  <input type="file" accept="image/*" @change="handleEditFileUpload" class="hidden" />
-                </label>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-[12px] font-semibold text-slate-700">Profile Picture <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
+                  <button
+                    v-if="editPhotoPreview"
+                    type="button"
+                    @click="removeEditPhoto"
+                    class="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    Remove Photo
+                  </button>
+                </div>
+                <div
+                  @click="triggerEditFileInput"
+                  class="relative flex items-center gap-4 p-4 border-2 border-dashed border-slate-200 hover:border-[#5138ed] hover:bg-indigo-50/20 rounded-xl cursor-pointer transition-colors"
+                >
+                  <input
+                    ref="editFileInput"
+                    type="file"
+                    accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
+                    @change="handleEditFileUpload"
+                    class="hidden"
+                  />
+                  <div class="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-xs shrink-0 flex items-center justify-center bg-slate-100">
+                    <img
+                      v-if="editPhotoPreview"
+                      :src="editPhotoPreview"
+                      alt="Photo Preview"
+                      class="w-full h-full object-cover"
+                    />
+                    <svg
+                      v-else
+                      class="w-7 h-7 text-slate-300"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <template v-if="editPhotoPreview">
+                      <p class="text-[13px] font-bold text-slate-800 truncate">{{ editForm.profilePicture?.name || 'Current Profile Photo' }}</p>
+                      <p class="text-[11px] text-slate-400 mt-0.5">Click to choose a new photo</p>
+                    </template>
+                    <template v-else>
+                      <p class="text-[13px] font-bold text-slate-700">Upload New Photo</p>
+                      <p class="text-[11px] text-slate-400 mt-0.5">PNG, JPG, WEBP up to 2MB (Optional)</p>
+                    </template>
+                  </div>
+                  <span class="px-3.5 py-1.5 rounded-lg border border-slate-200 text-[12px] font-bold text-slate-600 bg-white shadow-xs">
+                    {{ editPhotoPreview ? 'Change' : 'Browse' }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1052,8 +1228,19 @@ const uniqueSections = computed(() => {
         <!-- Top Profile Card -->
         <div class="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm flex items-center justify-between">
           <div class="flex items-center gap-6">
-            <div class="w-24 h-24 rounded-full bg-indigo-50 border-4 border-white shadow-md overflow-hidden flex items-center justify-center shrink-0">
-               <div :class="[avatarColor(selectedInstructor.id), 'w-full h-full flex items-center justify-center text-[32px] font-bold text-white']">{{ selectedInstructor.avatar }}</div>
+            <div class="w-24 h-24 rounded-full bg-slate-100 border-4 border-white shadow-md overflow-hidden flex items-center justify-center shrink-0">
+              <img
+                v-if="selectedInstructor.profile_picture_url"
+                :src="resolveAvatarUrl(selectedInstructor.profile_picture_url) || ''"
+                :alt="selectedInstructor.name"
+                class="w-full h-full object-cover"
+                @error="(e: any) => { e.target.style.display = 'none'; (e.target.nextElementSibling as HTMLElement)?.classList.remove('hidden') }"
+              />
+              <div
+                :class="[avatarColor(selectedInstructor.id), 'w-full h-full flex items-center justify-center text-[32px] font-bold text-white', selectedInstructor.profile_picture_url ? 'hidden' : '']"
+              >
+                {{ selectedInstructor.avatar }}
+              </div>
             </div>
             <div>
               <h2 class="text-[20px] font-bold text-slate-800">{{ selectedInstructor.name }}</h2>
@@ -1357,7 +1544,20 @@ const uniqueSections = computed(() => {
             <tr v-for="inst in paginated" :key="inst.id" class="hover:bg-slate-50/40 transition-colors group">
               <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                  <div :class="[avatarColor(inst.id), 'w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0']">{{ inst.avatar }}</div>
+                  <div class="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-slate-200/80 shadow-xs flex items-center justify-center bg-slate-100">
+                    <img
+                      v-if="inst.avatarUrl"
+                      :src="inst.avatarUrl"
+                      :alt="inst.name"
+                      class="w-full h-full object-cover"
+                      @error="(e: any) => { e.target.style.display = 'none'; (e.target.nextElementSibling as HTMLElement)?.classList.remove('hidden') }"
+                    />
+                    <div
+                      :class="[avatarColor(inst.id), 'w-full h-full flex items-center justify-center text-[12px] font-bold text-white', inst.avatarUrl ? 'hidden' : '']"
+                    >
+                      {{ inst.avatar }}
+                    </div>
+                  </div>
                   <div>
                     <p class="text-[13px] font-bold text-slate-800">{{ inst.name }}</p>
                     <p class="text-[11px] font-medium text-slate-400 mt-0.5">{{ inst.email }}</p>

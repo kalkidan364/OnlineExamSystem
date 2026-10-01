@@ -128,8 +128,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('dashboard-stats', [\App\Http\Controllers\Api\V1\DeptHead\DashboardController::class, 'stats']);
         Route::apiResource('instructors', \App\Http\Controllers\Api\V1\DeptHead\InstructorController::class);
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\DeptHead\CourseController::class);
+        Route::get('students/export', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'export']);
         Route::get('students', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'index']);
-        Route::put('students/{id}', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'update']);
+        Route::match(['put', 'post'], 'students/{id}', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'update']);
+        Route::delete('students/{id}', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'destroy']);
         Route::get('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'index']);
         Route::post('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'store']);
         Route::delete('exams/{id}', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'destroy']);

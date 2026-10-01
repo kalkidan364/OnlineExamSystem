@@ -119,7 +119,7 @@ class InstructorController extends Controller
             'gender'          => 'required|string|max:255',
             'id_no'           => 'required|string|max:255',
             'year_level'      => 'nullable|string|max:255',
-            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'username'        => 'required|string|unique:users,username',
             'password'        => [
                 'required',
@@ -201,6 +201,7 @@ class InstructorController extends Controller
             'semester'        => 'nullable|string|max:255',
             'status'          => 'nullable|string|max:50',
             'employment_type' => 'nullable|string|max:50',
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'password'        => [
                 'nullable',
                 'string',
@@ -226,6 +227,10 @@ class InstructorController extends Controller
             'status',
             'employment_type',
         ]);
+
+        if ($request->hasFile('profile_picture')) {
+            $updateData['profile_picture'] = $request->file('profile_picture')->store('avatars', 'public');
+        }
 
         if ($request->filled('password')) {
             $updateData['password'] = Hash::make($request->password);

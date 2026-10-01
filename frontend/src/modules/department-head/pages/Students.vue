@@ -67,17 +67,25 @@ const confirmDelete = (stu: any) => {
   showDeleteModal.value = true
 }
 
-const deleteStudent = () => {
+const deleteStudent = async () => {
+  if (!selectedStudent.value?._rawId) return
   isLoading.value = true
-  setTimeout(() => {
-    allStudents.value = allStudents.value.filter(s => s.id !== selectedStudent.value.id)
+  try {
+    await apiClient.delete(`/dept-head/students/${selectedStudent.value._rawId}`)
     showDeleteModal.value = false
+    await fetchStudents()
+  } catch (err: any) {
+    console.error('Failed to delete student:', err)
+    alert(err?.response?.data?.message || 'Failed to remove student')
+  } finally {
     isLoading.value = false
-  }, 1000)
+  }
 }
 
 // ── Edit Student Modal ──
 const showEditModal = ref(false)
+const editPhotoPreview = ref<string | null>(null)
+const editFileInput = ref<HTMLInputElement | null>(null)
 const editForm = ref({
   fullName: '',
   email: '',
@@ -88,13 +96,39 @@ const editForm = ref({
   admissionNumber: '',
   yearLevel: '',
   section: '',
+  status: 'active',
   username: '',
   password: '',
   confirmPassword: '',
+  profilePicture: null as File | null,
 })
+
+const handleEditFileUpload = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    editForm.value.profilePicture = file
+    const reader = new FileReader()
+    reader.onload = (re) => {
+      editPhotoPreview.value = re.target?.result as string
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+const triggerEditFileInput = () => {
+  editFileInput.value?.click()
+}
+
+const removeEditPhoto = () => {
+  editForm.value.profilePicture = null
+  editPhotoPreview.value = null
+  if (editFileInput.value) editFileInput.value.value = ''
+}
 
 const openEditPage = (stu: any) => {
   selectedStudent.value = stu
+  editPhotoPreview.value = stu.avatarUrl || null
   editForm.value = {
     fullName: stu.name || '',
     email: stu.email || '',
@@ -105,9 +139,11 @@ const openEditPage = (stu: any) => {
     admissionNumber: stu.id_no || '',
     yearLevel: stu.year_level || stu.year || '',
     section: stu.section || '',
+    status: stu.status || 'active',
     username: stu.username || '',
     password: '',
     confirmPassword: '',
+    profilePicture: null,
   }
   showEditModal.value = true
 }
@@ -122,20 +158,22 @@ const saveEditStudent = async () => {
   }
   isLoading.value = true
   try {
-    const payload: any = {
-      name: editForm.value.fullName,
-      email: editForm.value.email,
-      phone: editForm.value.phone || null,
-      gender: editForm.value.gender || null,
-      id_no: editForm.value.studentId || null,
-      year_level: editForm.value.yearLevel || null,
-      section: editForm.value.section || null,
-      username: editForm.value.username || null,
-    }
-    if (editForm.value.password) {
-      payload.password = editForm.value.password
-    }
-    await apiClient.put(`/dept-head/students/${selectedStudent.value._rawId}`, payload)
+    const formData = new FormData()
+    formData.append('_method', 'PUT')
+    formData.append('name', editForm.value.fullName)
+    formData.append('email', editForm.value.email)
+    if (editForm.value.phone) formData.append('phone', editForm.value.phone)
+    if (editForm.value.dateOfBirth) formData.append('date_of_birth', editForm.value.dateOfBirth)
+    if (editForm.value.gender) formData.append('gender', editForm.value.gender)
+    if (editForm.value.studentId) formData.append('id_no', editForm.value.studentId)
+    if (editForm.value.yearLevel) formData.append('year_level', editForm.value.yearLevel)
+    if (editForm.value.section) formData.append('section', editForm.value.section)
+    if (editForm.value.status) formData.append('status', editForm.value.status)
+    if (editForm.value.username) formData.append('username', editForm.value.username)
+    if (editForm.value.password) formData.append('password', editForm.value.password)
+    if (editForm.value.profilePicture) formData.append('profile_picture', editForm.value.profilePicture)
+
+    await apiClient.post(`/dept-head/students/${selectedStudent.value._rawId}`, formData)
     showEditModal.value = false
     await fetchStudents()
   } catch (err: any) {
@@ -146,12 +184,83 @@ const saveEditStudent = async () => {
   }
 }
 
+// ── Avatar URL Resolver ──
+const resolveAvatarUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null
+  if (url.startsWith('http://localhost/') || url.startsWith('http://127.0.0.1/')) {
+    return url.replace('http://localhost/', 'http://localhost:8000/').replace('http://127.0.0.1/', 'http://localhost:8000/')
+  }
+  return url
+}
+
+// ── Export Handling ──
+const showExportDropdown = ref(false)
+const isExporting = ref(false)
+
+const handleExport = async (format: 'pdf' | 'excel' | 'csv') => {
+  showExportDropdown.value = false
+  isExporting.value = true
+  try {
+    const params: Record<string, string> = { format }
+    if (search.value) params.search = search.value
+    if (statusFilter.value !== 'all') params.status = statusFilter.value
+    if (yearFilter.value !== 'all') params.year = yearFilter.value
+    if (sectionFilter.value !== 'all') params.section = sectionFilter.value
+
+    const res = await apiClient.get('/dept-head/students/export', { params })
+    const { file, filename } = res.data
+
+    if (!file || !filename) {
+      throw new Error('Export payload missing file data')
+    }
+
+    const binary = atob(file)
+    const array = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      array[i] = binary.charCodeAt(i)
+    }
+
+    let mimeType = 'application/octet-stream'
+    if (format === 'pdf') {
+      mimeType = 'application/pdf'
+    } else if (format === 'excel') {
+      mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    } else if (format === 'csv') {
+      mimeType = 'text/csv;charset=utf-8;'
+    }
+
+    const blob = new Blob([array], { type: mimeType })
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err: any) {
+    console.error('Export error:', err)
+    alert(err?.response?.data?.message || 'Failed to export students. Please try again.')
+  } finally {
+    isExporting.value = false
+  }
+}
+
 const allStudents = ref<any[]>([])
+const serverStats = ref<{
+  total: number
+  active: number
+  inactive: number
+  new_this_semester: number
+} | null>(null)
 
 const fetchStudents = async () => {
   try {
     const res = await apiClient.get('/dept-head/students')
-    allStudents.value = (res.data.data || []).map((s: any) => ({
+    if (res.data?.stats) {
+      serverStats.value = res.data.stats
+    }
+    allStudents.value = (res.data?.data || []).map((s: any) => ({
       _rawId: s.id,
       id: s.id_no || `${s.id}`,
       name: s.name,
@@ -165,7 +274,11 @@ const fetchStudents = async () => {
       section: s.section || '—',
       year: s.year_level || '—',
       status: s.status || 'active',
-      admissionDate: new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      profile_picture: s.profile_picture,
+      profile_picture_url: s.profile_picture_url,
+      avatarUrl: resolveAvatarUrl(s.profile_picture_url),
+      created_at: s.created_at,
+      admissionDate: s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
       avatar: (s.name || '').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
     }))
   } catch (err) {
@@ -175,6 +288,13 @@ const fetchStudents = async () => {
 
 onMounted(() => {
   fetchStudents()
+  const handleOutsideClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('.export-dropdown-container')) {
+      showExportDropdown.value = false
+    }
+  }
+  window.addEventListener('click', handleOutsideClick)
 })
 
 const filtered = computed(() => {
@@ -192,12 +312,54 @@ const filtered = computed(() => {
 const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginated  = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
 
-const stats = computed(() => [
-  { label: 'Total Students',    value: 524, change: '↑ 28 this semester', bg: 'bg-indigo-50', ic: 'text-[#5138ed]', color: 'text-emerald-500', icon: 'M12 14l9-5-9-5-9 5 9 5z M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z' },
-  { label: 'Active Students',   value: 498, change: '↑ 25 this semester', bg: 'bg-emerald-50', ic: 'text-emerald-500', color: 'text-emerald-500', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-  { label: 'New Students',      value: 63,  change: '↑ 8 this semester',  bg: 'bg-amber-50', ic: 'text-amber-500', color: 'text-emerald-500', icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z' },
-  { label: 'Inactive Students', value: 26,  change: '↓ 3 this semester',  bg: 'bg-rose-50', ic: 'text-rose-500', color: 'text-rose-500', icon: 'M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6' },
-])
+// ── Top Stats Cards (Real Data Integration) ──
+const stats = computed(() => {
+  const total = serverStats.value?.total ?? allStudents.value.length
+  const active = serverStats.value?.active ?? allStudents.value.filter(s => (s.status || 'active') === 'active').length
+  const inactive = serverStats.value?.inactive ?? allStudents.value.filter(s => s.status === 'inactive').length
+  const newCount = serverStats.value?.new_this_semester ?? allStudents.value.filter(s => {
+    return s.created_at && (Date.now() - new Date(s.created_at).getTime()) < 180 * 24 * 60 * 60 * 1000
+  }).length
+
+  return [
+    {
+      label: 'Total Students',
+      value: total,
+      change: newCount > 0 ? `↑ ${newCount} this semester` : (total > 0 ? 'Enrolled students' : 'No students'),
+      bg: 'bg-indigo-50',
+      ic: 'text-[#5138ed]',
+      color: 'text-emerald-500',
+      icon: 'M12 14l9-5-9-5-9 5 9 5z M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z'
+    },
+    {
+      label: 'Active Students',
+      value: active,
+      change: total > 0 ? `${Math.round((active / total) * 100)}% active rate` : '0 active',
+      bg: 'bg-emerald-50',
+      ic: 'text-emerald-500',
+      color: 'text-emerald-500',
+      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+    },
+    {
+      label: 'New Students',
+      value: newCount,
+      change: newCount > 0 ? `↑ ${newCount} this semester` : '0 this semester',
+      bg: 'bg-amber-50',
+      ic: 'text-amber-500',
+      color: 'text-emerald-500',
+      icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z'
+    },
+    {
+      label: 'Inactive Students',
+      value: inactive,
+      change: inactive > 0 ? `↓ ${inactive} this semester` : '0 inactive',
+      bg: 'bg-rose-50',
+      ic: 'text-rose-500',
+      color: 'text-rose-500',
+      icon: 'M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6'
+    },
+  ]
+})
 
 const avatarColor = (name: string) => {
   const colors = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-violet-500','bg-amber-500','bg-rose-500','bg-teal-500','bg-orange-500','bg-cyan-500','bg-purple-500']
@@ -421,12 +583,23 @@ const displayPages = computed(() => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-6">
               <div class="relative">
-                <div :class="[avatarColor(selectedStudent.name), 'w-24 h-24 rounded-full flex items-center justify-center text-[28px] font-bold text-white shadow-md border-4 border-white']">
-                  {{ selectedStudent.avatar }}
+                <div class="w-24 h-24 rounded-full overflow-hidden bg-slate-100 border-4 border-white shadow-md flex items-center justify-center shrink-0">
+                  <img
+                    v-if="selectedStudent.avatarUrl || selectedStudent.profile_picture_url"
+                    :src="resolveAvatarUrl(selectedStudent.avatarUrl || selectedStudent.profile_picture_url) || ''"
+                    :alt="selectedStudent.name"
+                    class="w-full h-full object-cover"
+                    @error="(e: any) => { e.target.style.display = 'none'; (e.target.nextElementSibling as HTMLElement)?.classList.remove('hidden') }"
+                  />
+                  <div
+                    :class="[avatarColor(selectedStudent.name), 'w-full h-full flex items-center justify-center text-[28px] font-bold text-white', (selectedStudent.avatarUrl || selectedStudent.profile_picture_url) ? 'hidden' : '']"
+                  >
+                    {{ selectedStudent.avatar }}
+                  </div>
                 </div>
                 <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white border border-slate-100 shadow-sm px-2.5 py-0.5 rounded-full">
-                  <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                  <span class="text-[10px] font-bold text-emerald-600">Active</span>
+                  <div :class="[selectedStudent.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500', 'w-1.5 h-1.5 rounded-full']"></div>
+                  <span :class="[selectedStudent.status === 'active' ? 'text-emerald-600' : 'text-rose-500', 'text-[10px] font-bold capitalize']">{{ selectedStudent.status }}</span>
                 </div>
               </div>
               <div>
@@ -522,8 +695,19 @@ const displayPages = computed(() => {
               </div>
               <div class="grid grid-cols-2 gap-2 items-center">
                 <span class="text-[12px] text-slate-500">Profile Picture</span>
-                <div :class="[avatarColor(selectedStudent.name), 'w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-bold text-white shadow-sm border-2 border-white']">
-                  {{ selectedStudent.avatar }}
+                <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-xs shrink-0 flex items-center justify-center bg-slate-100">
+                  <img
+                    v-if="selectedStudent.avatarUrl || selectedStudent.profile_picture_url"
+                    :src="resolveAvatarUrl(selectedStudent.avatarUrl || selectedStudent.profile_picture_url) || ''"
+                    :alt="selectedStudent.name"
+                    class="w-full h-full object-cover"
+                    @error="(e: any) => { e.target.style.display = 'none'; (e.target.nextElementSibling as HTMLElement)?.classList.remove('hidden') }"
+                  />
+                  <div
+                    :class="[avatarColor(selectedStudent.name), 'w-full h-full flex items-center justify-center text-[12px] font-bold text-white', (selectedStudent.avatarUrl || selectedStudent.profile_picture_url) ? 'hidden' : '']"
+                  >
+                    {{ selectedStudent.avatar }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -597,10 +781,68 @@ const displayPages = computed(() => {
           <p class="text-[13px] text-slate-500 mt-1">Manage and monitor students in your department.</p>
         </div>
         <div class="flex items-center gap-3">
-          <button class="flex items-center gap-2 text-[13px] font-bold text-[#5138ed] border border-indigo-200 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors bg-white">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-            Export
-          </button>
+          <div class="relative export-dropdown-container">
+            <button
+              type="button"
+              @click="showExportDropdown = !showExportDropdown"
+              :disabled="isExporting"
+              class="flex items-center gap-2 text-[13px] font-bold text-[#5138ed] border border-indigo-200 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors bg-white shadow-xs cursor-pointer disabled:opacity-60"
+            >
+              <svg v-if="!isExporting" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+              <svg v-else class="animate-spin w-4 h-4 text-[#5138ed]" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <span>{{ isExporting ? 'Exporting...' : 'Export' }}</span>
+              <svg class="w-3.5 h-3.5 text-[#5138ed]/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+
+            <!-- Export Options Dropdown -->
+            <div
+              v-if="showExportDropdown"
+              class="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 overflow-hidden"
+            >
+              <div class="px-3 py-1.5 border-b border-slate-100 mb-1">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Export Format</p>
+              </div>
+              <button
+                type="button"
+                @click="handleExport('pdf')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-indigo-50/70 hover:text-[#5138ed] transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as PDF</p>
+                  <p class="text-[10px] text-slate-400">Printable document (.pdf)</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                @click="handleExport('excel')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-emerald-50/70 hover:text-emerald-600 transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as Excel</p>
+                  <p class="text-[10px] text-slate-400">Spreadsheet file (.xlsx)</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                @click="handleExport('csv')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-sky-50/70 hover:text-sky-600 transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as CSV</p>
+                  <p class="text-[10px] text-slate-400">Comma-separated (.csv)</p>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -669,7 +911,20 @@ const displayPages = computed(() => {
             <tr v-for="stu in paginated" :key="stu.id" class="hover:bg-slate-50/40 transition-colors group">
               <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                  <div :class="[avatarColor(stu.name), 'w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0']">{{ stu.avatar }}</div>
+                  <div class="w-9 h-9 rounded-full overflow-hidden shrink-0 border border-slate-200/80 shadow-xs flex items-center justify-center bg-slate-100">
+                    <img
+                      v-if="stu.avatarUrl"
+                      :src="stu.avatarUrl"
+                      :alt="stu.name"
+                      class="w-full h-full object-cover"
+                      @error="(e: any) => { e.target.style.display = 'none'; (e.target.nextElementSibling as HTMLElement)?.classList.remove('hidden') }"
+                    />
+                    <div
+                      :class="[avatarColor(stu.name), 'w-full h-full flex items-center justify-center text-[11px] font-bold text-white', stu.avatarUrl ? 'hidden' : '']"
+                    >
+                      {{ stu.avatar }}
+                    </div>
+                  </div>
                   <p class="text-[13px] font-bold text-slate-800">{{ stu.name }}</p>
                 </div>
               </td>
@@ -777,6 +1032,69 @@ const displayPages = computed(() => {
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
                   </select>
+                </div>
+                <div>
+                  <label class="block text-[12px] font-semibold text-slate-700 mb-1">Status</label>
+                  <select v-model="editForm.status" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] bg-white focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+                <div class="col-span-1 md:col-span-2">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[12px] font-semibold text-slate-700">Profile Picture <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
+                    <button
+                      v-if="editPhotoPreview"
+                      type="button"
+                      @click="removeEditPhoto"
+                      class="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      Remove Photo
+                    </button>
+                  </div>
+                  <div
+                    @click="triggerEditFileInput"
+                    class="relative flex items-center gap-4 p-3.5 border-2 border-dashed border-slate-200 hover:border-[#5138ed] hover:bg-indigo-50/20 rounded-xl cursor-pointer transition-colors"
+                  >
+                    <input
+                      ref="editFileInput"
+                      type="file"
+                      accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
+                      @change="handleEditFileUpload"
+                      class="hidden"
+                    />
+                    <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-xs shrink-0 flex items-center justify-center bg-slate-100">
+                      <img
+                        v-if="editPhotoPreview"
+                        :src="editPhotoPreview"
+                        alt="Photo Preview"
+                        class="w-full h-full object-cover"
+                      />
+                      <svg
+                        v-else
+                        class="w-6 h-6 text-slate-300"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <template v-if="editPhotoPreview">
+                        <p class="text-[12.5px] font-bold text-slate-800 truncate">{{ editForm.profilePicture?.name || 'Current Profile Photo' }}</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Click to choose a different photo</p>
+                      </template>
+                      <template v-else>
+                        <p class="text-[12.5px] font-bold text-slate-700">Upload Profile Photo</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">PNG, JPG, WEBP up to 2MB (Optional)</p>
+                      </template>
+                    </div>
+                    <span class="px-3 py-1.5 rounded-lg border border-slate-200 text-[11.5px] font-bold text-slate-600 bg-white shadow-xs">
+                      {{ editPhotoPreview ? 'Change' : 'Browse' }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
