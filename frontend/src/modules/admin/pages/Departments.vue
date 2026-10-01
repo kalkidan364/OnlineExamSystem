@@ -69,8 +69,102 @@ const allDepts = ref<any[]>([])
 const newDeptForm = ref({
   name: '',
   code: '',
-  college: 'College of Computing and Informatics',
+  college: '',
 })
+
+const deptFormErrors = ref<Record<string, string>>({})
+const deptFormTouched = ref<Record<string, boolean>>({})
+
+const collegeOptions = [
+  'College of Computing and Informatics',
+  'College of Medicine and Health Sciences',
+  'College of Natural Sciences',
+  'College of Engineering and Technology',
+  'College of Business and Economics',
+  'College of Social Sciences and Humanities',
+  'College of Agriculture',
+  'School of Law',
+  'School of Veterinary Medicine'
+]
+
+const touchDeptField = (field: string) => {
+  deptFormTouched.value[field] = true
+  validateDeptField(field)
+}
+
+const validateDeptField = (field: string): boolean => {
+  delete deptFormErrors.value[field]
+  delete deptFormErrors.value._server
+
+  if (field === 'name') {
+    const val = (newDeptForm.value.name || '').trim()
+    if (!val) {
+      deptFormErrors.value.name = 'Department Name is required.'
+    } else if (val.length < 2) {
+      deptFormErrors.value.name = 'Department Name must be at least 2 characters.'
+    } else {
+      const exists = allDepts.value.some(d => d.name && d.name.trim().toLowerCase() === val.toLowerCase())
+      if (exists) {
+        deptFormErrors.value.name = 'A department with this name already exists.'
+      }
+    }
+  }
+
+  if (field === 'code') {
+    const val = (newDeptForm.value.code || '').trim()
+    if (!val) {
+      deptFormErrors.value.code = 'Department Code is required.'
+    } else if (val.length < 2) {
+      deptFormErrors.value.code = 'Department Code must be at least 2 characters.'
+    } else if (val.length > 20) {
+      deptFormErrors.value.code = 'Department Code must not exceed 20 characters.'
+    } else {
+      const exists = allDepts.value.some(d => d.code && d.code.trim().toUpperCase() === val.toUpperCase())
+      if (exists) {
+        deptFormErrors.value.code = 'A department with this code already exists.'
+      }
+    }
+  }
+
+  if (field === 'college') {
+    const val = (newDeptForm.value.college || '').trim()
+    if (!val) {
+      deptFormErrors.value.college = 'College/School is required.'
+    }
+  }
+
+  return !deptFormErrors.value[field]
+}
+
+const validateAddDeptForm = (): boolean => {
+  deptFormTouched.value = {
+    name: true,
+    code: true,
+    college: true
+  }
+
+  const isNameValid = validateDeptField('name')
+  const isCodeValid = validateDeptField('code')
+  const isCollegeValid = validateDeptField('college')
+
+  return isNameValid && isCodeValid && isCollegeValid
+}
+
+const resetDeptValidation = () => {
+  deptFormErrors.value = {}
+  deptFormTouched.value = {}
+}
+
+const deptFieldCls = (field: string, extra = '') => {
+  const base = `w-full rounded-lg px-4 py-2.5 text-[13px] text-slate-700 transition-all focus:outline-none ${extra}`
+  if (deptFormErrors.value[field]) {
+    return `${base} border border-rose-400 bg-rose-50/20 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 placeholder:text-rose-300`
+  }
+  if (deptFormTouched.value[field] && !deptFormErrors.value[field]) {
+    return `${base} border border-emerald-400 bg-emerald-50/10 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500`
+  }
+  return `${base} border border-slate-200 focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400`
+}
 
 // Success toast state
 const successToast = ref<{ show: boolean; message: string }>({ show: false, message: '' })
@@ -86,8 +180,9 @@ const resetAddForm = () => {
   newDeptForm.value = {
     name: '',
     code: '',
-    college: 'College of Computing and Informatics',
+    college: '',
   }
+  resetDeptValidation()
 }
 
 // Removed mock data
@@ -154,13 +249,14 @@ const getAvatarUrl = (name: string) => {
 }
 
 const saveDepartment = async () => {
-  if (!newDeptForm.value.name || !newDeptForm.value.code) return
+  delete deptFormErrors.value._server
+  if (!validateAddDeptForm()) return
   isLoading.value = true
   try {
     await apiClient.post('/admin/departments', {
-      name: newDeptForm.value.name,
-      code: newDeptForm.value.code,
-      college: newDeptForm.value.college,
+      name: newDeptForm.value.name.trim(),
+      code: newDeptForm.value.code.trim().toUpperCase(),
+      college: newDeptForm.value.college.trim(),
     })
     await fetchDepartments()
     const createdName = newDeptForm.value.name
@@ -169,11 +265,15 @@ const saveDepartment = async () => {
     showSuccessToast(`Department "${createdName}" created successfully!`)
   } catch (err: any) {
     console.error('Error creating department:', err)
-    let errorMessage = err.response?.data?.message || 'Failed to create department.'
-    if (err.response?.data?.errors) {
-      errorMessage += '\n' + Object.values(err.response.data.errors).flat().join('\n')
+    if (err.response?.status === 422 && err.response?.data?.errors) {
+      const backendErrors = err.response.data.errors
+      Object.keys(backendErrors).forEach(key => {
+        deptFormTouched.value[key] = true
+        deptFormErrors.value[key] = Array.isArray(backendErrors[key]) ? backendErrors[key][0] : backendErrors[key]
+      })
+    } else {
+      deptFormErrors.value._server = err.response?.data?.message || 'Failed to create department.'
     }
-    alert(errorMessage)
   } finally {
     isLoading.value = false
   }
@@ -696,9 +796,18 @@ const deleteDept = async () => {
       </div>
 
       <!-- Header -->
-      <div>
-        <h1 class="text-[22px] font-bold text-slate-800">Add Department</h1>
-        <p class="text-[13px] text-slate-500 mt-1">Create a new academic department in the university.</p>
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-[22px] font-bold text-slate-800">Add Department</h1>
+          <p class="text-[13px] text-slate-500 mt-1">Create a new academic department in the university.</p>
+        </div>
+        <button
+          @click="showAddForm = false; resetAddForm()"
+          class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-[#4338ca] transition-colors shadow-xs"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          Back to Departments
+        </button>
       </div>
 
       <!-- Department Information Section -->
@@ -712,24 +821,81 @@ const deleteDept = async () => {
 
         <div class="space-y-6">
           <!-- Row 1: Name, Code, College -->
-          <div class="grid grid-cols-3 gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Name <span class="text-rose-500">*</span></label>
-              <input v-model="newDeptForm.name" type="text" placeholder="e.g., Computer Science" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
+              <input
+                v-model="newDeptForm.name"
+                type="text"
+                placeholder="e.g., Computer Science"
+                :class="deptFieldCls('name')"
+                @blur="touchDeptField('name')"
+                @input="deptFormTouched.name && validateDeptField('name')"
+              />
+              <p v-if="deptFormErrors.name" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                {{ deptFormErrors.name }}
+              </p>
+              <p v-else-if="deptFormTouched.name && !deptFormErrors.name" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Looks good!
+              </p>
             </div>
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Department Code <span class="text-rose-500">*</span></label>
-              <input v-model="newDeptForm.code" type="text" placeholder="e.g., CS" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 font-mono focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] placeholder:text-slate-400 transition-shadow" />
+              <input
+                v-model="newDeptForm.code"
+                type="text"
+                placeholder="e.g., CS"
+                :class="deptFieldCls('code', 'font-mono uppercase')"
+                @blur="touchDeptField('code')"
+                @input="deptFormTouched.code && validateDeptField('code')"
+              />
+              <p v-if="deptFormErrors.code" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                {{ deptFormErrors.code }}
+              </p>
+              <p v-else-if="deptFormTouched.code && !deptFormErrors.code" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Looks good!
+              </p>
             </div>
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">College/School <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <select v-model="newDeptForm.college" class="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] transition-shadow">
-                  <option value="College of Computing and Informatics">College of Computing and Informatics</option>
+                <select
+                  v-model="newDeptForm.college"
+                  :class="deptFieldCls('college', 'appearance-none bg-white pr-9')"
+                  @blur="touchDeptField('college')"
+                  @change="touchDeptField('college')"
+                >
+                  <option value="">Select College/School</option>
+                  <option v-for="col in collegeOptions" :key="col" :value="col">{{ col }}</option>
                 </select>
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
+              <p v-if="deptFormErrors.college" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                {{ deptFormErrors.college }}
+              </p>
+              <p v-else-if="deptFormTouched.college && !deptFormErrors.college" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1 font-medium">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Looks good!
+              </p>
             </div>
+          </div>
+
+          <!-- Server Error Banner -->
+          <div v-if="deptFormErrors._server" class="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+            <div class="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <div class="flex-1 text-[13px] text-rose-800 font-medium whitespace-pre-line leading-relaxed">
+              {{ deptFormErrors._server }}
+            </div>
+            <button @click="delete deptFormErrors._server" class="text-rose-400 hover:text-rose-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
           </div>
 
           <!-- Tip: Head is assigned after creation -->
@@ -1018,7 +1184,8 @@ const deleteDept = async () => {
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">Dept Code <span class="text-rose-500">*</span></label><input v-model="editData.code" type="text" placeholder="e.g. CS" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-mono focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]"></div>
               <div><label class="block text-[12px] font-bold text-slate-700 mb-1.5">College/School</label>
                 <select v-model="editData.college" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
-                  <option value="College of Computing and Informatics">College of Computing and Informatics</option>
+                  <option value="">Select College/School</option>
+                  <option v-for="col in collegeOptions" :key="'edit-'+col" :value="col">{{ col }}</option>
                 </select>
               </div>
             </div>

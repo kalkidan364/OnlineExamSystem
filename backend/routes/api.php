@@ -99,6 +99,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::put('calendar/events/{id}',     [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'updateEvent']);
         Route::delete('calendar/events/{id}',  [\App\Http\Controllers\Api\V1\AdminCalendarController::class, 'destroyEvent']);
 
+        // Reports
+        Route::get('reports/stats', [\App\Http\Controllers\Api\V1\AdminReportController::class, 'stats']);
+        Route::get('reports/export', [\App\Http\Controllers\Api\V1\AdminReportController::class, 'export']);
+
         // List all instructors (for assign-head modal), optionally filter by department_id
         Route::get('instructors', function (Request $request) {
             $query = \App\Models\User::whereIn('role', ['instructor', 'dept_head']);
@@ -106,7 +110,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
                 $query->where('department_id', $request->department_id);
             }
             return response()->json([
-                'data' => $query->select('id', 'name', 'email', 'role', 'department_id')
+                'data' => $query->select('id', 'name', 'email', 'role', 'department_id', 'course_code', 'section')
                     ->orderBy('name')
                     ->get(),
             ]);

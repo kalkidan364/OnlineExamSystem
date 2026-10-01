@@ -88,8 +88,13 @@ class DepartmentController extends Controller
         $request->validate([
             'name'        => 'required|string|max:255',
             'code'        => 'required|string|max:20|unique:departments,code',
-            'college'     => 'nullable|string|max:255',
+            'college'     => 'required|string|max:255',
             'established' => 'nullable|max:4',
+        ], [
+            'name.required'    => 'Department Name is required.',
+            'code.required'    => 'Department Code is required.',
+            'code.unique'      => 'A department with this code already exists.',
+            'college.required' => 'College/School is required.',
         ]);
 
         $department = Department::create([

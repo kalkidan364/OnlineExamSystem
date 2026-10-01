@@ -36,19 +36,7 @@ provide('toggleSidebar', toggleSidebar)
       <main class="flex-1 p-8">
         <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <Suspense>
-              <template #default>
-                <component :is="Component" :key="route.path" />
-              </template>
-              <template #fallback>
-                <div class="flex items-center justify-center min-h-[60vh]">
-                  <div class="flex flex-col items-center gap-4">
-                    <div class="w-10 h-10 rounded-full border-4 border-rose-500/20 border-t-rose-500 animate-spin"></div>
-                    <p class="text-[13px] font-semibold text-slate-400">Loading page...</p>
-                  </div>
-                </div>
-              </template>
-            </Suspense>
+            <component :is="Component" :key="route.path" />
           </transition>
         </router-view>
       </main>

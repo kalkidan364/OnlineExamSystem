@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import apiClient from '../../../core/api/apiClient'
 import { useSettingsStore } from '../../../store/settingsStore'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
@@ -27,23 +27,107 @@ const sectionOptions = ['Section A', 'Section B', 'Both Sections']
 
 const currentInstructorInfo = computed(() => {
   if (!courseToAssign.value?.instructor) return null
-  const name = courseToAssign.value.instructor?.name || courseToAssign.value.instructor
-  const section = courseToAssign.value.section || ''
-  const title = courseToAssign.value.name || courseToAssign.value.title || ''
+  const name = courseToAssign.value.instructor?.name || (typeof courseToAssign.value.instructor === 'string' ? courseToAssign.value.instructor : null)
   if (!name || name === 'Unassigned') return null
-  return `${name} is the current${section ? ' ' + section : ''} ${title} instructor`
+  return `${name} is currently assigned (Section A)`
 })
 
 const currentCoInstructorInfo = computed(() => {
-  if (!courseToAssign.value?.co_instructor_id) return null
-  const coInst = allInstructors.value.find(i => i.id === courseToAssign.value.co_instructor_id)
+  const coId = courseToAssign.value?.co_instructor_id || courseToAssign.value?.coInstructor?.id || courseToAssign.value?.co_instructor?.id
+  if (!coId) return null
+  const coInst = allInstructors.value.find(i => i.id === coId) || courseToAssign.value?.coInstructor || courseToAssign.value?.co_instructor
   if (!coInst) return null
   const name = coInst.name
-  const section = courseToAssign.value.section || ''
-  const title = courseToAssign.value.name || courseToAssign.value.title || ''
-  return `${name} is the${section ? ' ' + section : ''} ${title} co-instructor`
+  return `${name} is currently assigned (Section B)`
 })
 
+const formatDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const formatDateTime = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const getCourseInstructors = (course: any) => {
+  if (!course) return []
+  const map = new Map<number | string, any>()
+
+  const addInstructor = (user: any, fallbackSection?: string) => {
+    if (!user || !user.id) return
+    const id = user.id
+    const existing = map.get(id)
+    const section = user.section || fallbackSection || existing?.section || 'Section A'
+    map.set(id, {
+      id: user.id,
+      name: user.name || 'Unknown Instructor',
+      email: user.email || '',
+      role: user.role || 'instructor',
+      section: section,
+      avatar: user.avatar || null
+    })
+  }
+
+  // 1. Direct assigned_instructors relationship from backend
+  const fromRelation = course.assigned_instructors || course.assignedInstructors || []
+  if (Array.isArray(fromRelation)) {
+    fromRelation.forEach((u: any) => addInstructor(u, u.section || 'Section A'))
+  }
+
+  // 2. Primary instructor
+  if (course.instructor && typeof course.instructor === 'object' && course.instructor.id) {
+    const defaultSec = course.section === 'Section B' ? 'Section B' : 'Section A'
+    addInstructor(course.instructor, course.instructor.section || defaultSec)
+  } else if (course.instructor_id) {
+    const inst = allInstructors.value.find(i => i.id === course.instructor_id)
+    if (inst) addInstructor(inst, inst.section || 'Section A')
+  }
+
+  // 3. Co-instructor
+  const co = course.co_instructor || course.coInstructor
+  if (co && typeof co === 'object' && co.id) {
+    addInstructor(co, co.section || 'Section B')
+  } else if (course.co_instructor_id) {
+    const coInst = allInstructors.value.find(i => i.id === course.co_instructor_id)
+    if (coInst) addInstructor(coInst, coInst.section || 'Section B')
+  }
+
+  // 4. Any instructors in allInstructors whose course_code matches course.code
+  if (course.code && allInstructors.value?.length) {
+    const cCode = String(course.code).trim().toUpperCase()
+    allInstructors.value.forEach((inst: any) => {
+      if (inst.course_code && String(inst.course_code).trim().toUpperCase() === cCode) {
+        addInstructor(inst, inst.section || 'Section A')
+      }
+    })
+  }
+
+  const list = Array.from(map.values())
+  // Differentiate section if two instructors got the same fallback section
+  if (list.length === 2 && list[0].section === list[1].section) {
+    const coId = course.co_instructor_id || (course.co_instructor?.id || course.coInstructor?.id)
+    if (coId && list[1].id === coId) {
+      list[1].section = 'Section B'
+    } else if (list[0].id === coId) {
+      list[0].section = 'Section B'
+    } else {
+      list[1].section = 'Section B'
+    }
+  }
+
+  list.sort((a, b) => (a.section || '').localeCompare(b.section || '') || (a.name || '').localeCompare(b.name || ''))
+  return list
+}
+
+const selectedCourseInstructors = computed(() => {
+  return getCourseInstructors(selectedCourse.value)
+})
 
 const settingsStore = useSettingsStore()
 
@@ -78,22 +162,26 @@ const currentPage = ref(1)
 const fetchCourses = async () => {
   try {
     const res = await apiClient.get('/admin/courses')
-    allCourses.value = (res.data.data || []).map((c: any) => ({
-      ...c,
-      name: c.title,
-      dept: c.department?.name || '—',
-      departmentName: c.department?.name || '—',
-      instructor: c.instructor?.name || 'Unassigned',
-      instructorsCount: c.instructor ? 1 : 0, 
-      students: 0, 
-      exams: 0,
-      status: c.status || 'active',
-      semester: c.semester,
-      credits: c.credits || '—',
-      level: c.level,
-      created_by: c.creator?.role === 'dept_head' || c.creator?.role === 'department_head' ? 'Dept. Head' : (c.creator?.role === 'admin' ? 'Admin' : 'Unknown'),
-      created_on: new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    }))
+    allCourses.value = (res.data.data || []).map((c: any) => {
+      const instructors = getCourseInstructors(c)
+      const primaryInstructor = instructors.length > 0 ? instructors[0].name : (c.instructor?.name || 'Unassigned')
+      return {
+        ...c,
+        name: c.title,
+        dept: c.department?.name || '—',
+        departmentName: c.department?.name || '—',
+        instructor: primaryInstructor,
+        instructorsCount: instructors.length, 
+        students: 0, 
+        exams: 0,
+        status: c.status || 'active',
+        semester: c.semester,
+        credits: c.credits || '—',
+        level: c.level,
+        created_by: c.creator?.role === 'dept_head' || c.creator?.role === 'department_head' ? 'Dept. Head' : (c.creator?.role === 'admin' ? 'Admin' : 'Unknown'),
+        created_on: c.created_at ? formatDate(c.created_at) : '—'
+      }
+    })
   } catch (err) { console.error('Failed to fetch courses:', err) }
 }
 
@@ -112,7 +200,8 @@ const fetchInstructors = async () => {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchCourses(), fetchDepartments(), fetchInstructors()])
+  await Promise.all([fetchDepartments(), fetchInstructors()])
+  await fetchCourses()
 })
 
 const formAvailableInstructors = computed(() => {
@@ -147,12 +236,72 @@ const filtered = computed(() =>
   })
 )
 
+const perPage = 10
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginated = computed(() => {
-  const start = (currentPage.value - 1) * 10
-  return filtered.value.slice(start, start + 10)
+  const start = (currentPage.value - 1) * perPage
+  return filtered.value.slice(start, start + perPage)
 })
 
-const totalPages = computed(() => Math.ceil(filtered.value.length / 10))
+const visiblePages = computed(() => {
+  const pages: (number | string)[] = []
+  const total = totalPages.value
+  const current = currentPage.value
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    if (current <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i)
+      pages.push('...')
+      pages.push(total)
+    } else if (current >= total - 3) {
+      pages.push(1)
+      pages.push('...')
+      for (let i = total - 4; i <= total; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      pages.push('...')
+      pages.push(current - 1)
+      pages.push(current)
+      pages.push(current + 1)
+      pages.push('...')
+      pages.push(total)
+    }
+  }
+  return pages
+})
+
+// ── Pagination Controls ──
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const goToPage = (page: number | string) => {
+  if (typeof page === 'number' && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset to first page when any search or filter criteria changes
+watch([search, deptFilter, statusFilter, levelFilter], () => {
+  currentPage.value = 1
+})
+
+// Ensure currentPage stays within valid bounds if dataset changes
+watch(filtered, (newVal) => {
+  const max = Math.max(1, Math.ceil(newVal.length / perPage))
+  if (currentPage.value > max) {
+    currentPage.value = max
+  }
+})
 
 const stats = computed(() => {
   const total = allCourses.value.length || 0
@@ -171,82 +320,233 @@ const stats = computed(() => {
 })
 
 
+// ── Course Form Validation State ──
+const courseFormErrors = ref<Record<string, string>>({})
+const courseFormTouched = ref<Record<string, boolean>>({})
+
+const resetCourseValidation = () => {
+  courseFormErrors.value = {}
+  courseFormTouched.value = {}
+}
+
+const validateCourseField = (field: string) => {
+  const f = newCourseForm.value
+  const e = { ...courseFormErrors.value }
+  const clear = () => { delete e[field] }
+
+  switch (field) {
+    case 'code': {
+      const val = (f.code || '').trim()
+      if (!val) {
+        e.code = 'Course code is required.'
+      } else if (val.length < 2 || val.length > 30) {
+        e.code = 'Course code must be between 2 and 30 characters.'
+      } else if (!/^[a-zA-Z0-9_\-\s/]+$/.test(val)) {
+        e.code = 'Course code can only contain letters, numbers, hyphens, and slashes.'
+      } else {
+        clear()
+      }
+      break
+    }
+
+    case 'title': {
+      const val = (f.title || '').trim()
+      if (!val) {
+        e.title = 'Course title is required.'
+      } else if (val.length < 3) {
+        e.title = 'Course title must be at least 3 characters.'
+      } else if (val.length > 200) {
+        e.title = 'Course title cannot exceed 200 characters.'
+      } else {
+        clear()
+      }
+      break
+    }
+
+    case 'department_id':
+      if (!f.department_id) {
+        e.department_id = 'Department is required. Please select one.'
+      } else {
+        clear()
+      }
+      break
+
+    case 'level':
+      if (!f.level) {
+        e.level = 'Academic Year Level is required. Please select one.'
+      } else {
+        clear()
+      }
+      break
+
+    case 'credits': {
+      const raw = String(f.credits ?? '').trim()
+      const n = Number(raw)
+      if (!raw) {
+        e.credits = 'Credit hours are required.'
+      } else if (isNaN(n) || !Number.isInteger(n) || n < 1 || n > 30) {
+        e.credits = 'Credits must be a whole number between 1 and 30.'
+      } else {
+        clear()
+      }
+      break
+    }
+
+    case 'end_date':
+      if (f.start_date && f.end_date) {
+        if (new Date(f.end_date) < new Date(f.start_date)) {
+          e.end_date = 'End date must be on or after start date.'
+        } else {
+          clear()
+        }
+      } else {
+        clear()
+      }
+      break
+
+    case 'start_date':
+      if (f.start_date && f.end_date) {
+        if (new Date(f.end_date) < new Date(f.start_date)) {
+          e.end_date = 'End date must be on or after start date.'
+        } else {
+          delete e.end_date
+        }
+      }
+      clear()
+      break
+  }
+
+  courseFormErrors.value = e
+}
+
+const touchCourseField = (field: string) => {
+  courseFormTouched.value[field] = true
+  validateCourseField(field)
+}
+
+const validateAddCourseForm = (): boolean => {
+  const required = ['code', 'title', 'department_id', 'level', 'credits']
+  required.forEach(f => {
+    courseFormTouched.value[f] = true
+    validateCourseField(f)
+  })
+  if (newCourseForm.value.start_date || newCourseForm.value.end_date) {
+    validateCourseField('end_date')
+  }
+  const hasErrors = Object.keys(courseFormErrors.value).some(k => k !== '_server')
+  return !hasErrors
+}
+
+const courseFieldCls = (field: string, extra = '') => {
+  const base = `w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none transition-colors ${extra}`
+  if (courseFormTouched.value[field]) {
+    if (courseFormErrors.value[field]) return base + ' border-rose-400 bg-rose-50/30 focus:border-rose-500'
+    return base + ' border-emerald-400 bg-emerald-50/20 focus:border-emerald-500'
+  }
+  return base + ' border-slate-200 focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]'
+}
+
 const openAddPage = () => {
   isEditing.value = false
+  resetCourseValidation()
   newCourseForm.value = {
-    code: '', title: '', type: '', department_id: '', program: '', level: '', semester: settingsStore.semester,
-    credits: '', language: '', short_description: '', full_description: '',
-    instructor_id: '', co_instructors: '', capacity: '', enrollment_status: 'Open for Enrollment',
-    visibility: 'Visible to Students', start_date: '', end_date: '', status: 'active'
+    code: '', title: '', type: '', department_id: '', program: '', level: '',
+    semester: settingsStore.semester || 'Semester 1',
+    credits: '3', language: '', short_description: '', full_description: '',
+    instructor_id: '', co_instructors: '', capacity: '',
+    enrollment_status: 'Open for Enrollment', visibility: 'Visible to Students',
+    start_date: '', end_date: '', status: 'active'
   }
   showAddPage.value = true
 }
 
 const openEditPage = (c: any) => {
   isEditing.value = true
+  resetCourseValidation()
   selectedCourse.value = c
   newCourseForm.value = {
     ...newCourseForm.value,
-    code: c.code || '', title: c.name || '', department_id: c.department_id || '',
-    semester: c.semester || settingsStore.semester, level: c.level || '', credits: c.credits || '', instructor_id: c.instructor_id || '',
-    enrollment_status: c.enrollment_status || 'Open for Enrollment', visibility: c.visibility || 'Visible to Students',
-    start_date: c.start_date || '', end_date: c.end_date || '', status: c.status || 'active'
+    code: c.code || '',
+    title: c.name || c.title || '',
+    department_id: c.department_id || '',
+    semester: c.semester || settingsStore.semester || 'Semester 1',
+    level: c.level || '',
+    credits: String(c.credits !== '—' && c.credits ? c.credits : '3'),
+    instructor_id: c.instructor_id || '',
+    enrollment_status: c.enrollment_status || 'Open for Enrollment',
+    visibility: c.visibility || 'Visible to Students',
+    start_date: c.start_date ? c.start_date.substring(0, 10) : '',
+    end_date: c.end_date ? c.end_date.substring(0, 10) : '',
+    status: c.status || 'active'
   }
   showEditModal.value = true
 }
 
-const openDetailsPage = (c: any) => {
+const openDetailsPage = async (c: any) => {
   selectedCourse.value = c
   showDetailsPage.value = true
+  if (c?.id) {
+    try {
+      const res = await apiClient.get(`/admin/courses/${c.id}`)
+      if (res.data?.data) {
+        const item = res.data.data
+        const instructors = getCourseInstructors(item)
+        selectedCourse.value = {
+          ...c,
+          ...item,
+          name: item.title || c.name,
+          dept: item.department?.name || c.dept,
+          departmentName: item.department?.name || c.departmentName,
+          instructorsCount: instructors.length,
+          instructor: instructors.length > 0 ? instructors[0].name : (item.instructor?.name || 'Unassigned')
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load fresh course details:', e)
+    }
+  }
 }
 
 const saveCourse = async () => {
-  if (!newCourseForm.value.title || !newCourseForm.value.code || !newCourseForm.value.department_id) return
+  delete courseFormErrors.value._server
+  if (!validateAddCourseForm()) return
+
   isLoading.value = true
   try {
+    const payload = {
+      title: newCourseForm.value.title.trim(),
+      code: newCourseForm.value.code.trim().toUpperCase(),
+      credits: Number(newCourseForm.value.credits) || 3,
+      department_id: newCourseForm.value.department_id,
+      instructor_id: newCourseForm.value.instructor_id || null,
+      semester: newCourseForm.value.semester || settingsStore.semester || 'Semester 1',
+      level: newCourseForm.value.level,
+      start_date: newCourseForm.value.start_date || null,
+      end_date: newCourseForm.value.end_date || null,
+      visibility: newCourseForm.value.visibility || 'Visible to Students',
+      enrollment_status: newCourseForm.value.enrollment_status || 'Open for Enrollment',
+      status: newCourseForm.value.status || 'active'
+    }
+
     if (isEditing.value && selectedCourse.value) {
-      await apiClient.put(`/admin/courses/${selectedCourse.value.id}`, {
-        title: newCourseForm.value.title,
-        code: newCourseForm.value.code,
-        credits: newCourseForm.value.credits || 3,
-        department_id: newCourseForm.value.department_id,
-        instructor_id: newCourseForm.value.instructor_id || null,
-        semester: newCourseForm.value.semester,
-        level: newCourseForm.value.level,
-        start_date: newCourseForm.value.start_date,
-        end_date: newCourseForm.value.end_date,
-        visibility: newCourseForm.value.visibility,
-        enrollment_status: newCourseForm.value.enrollment_status,
-        status: newCourseForm.value.status
-      })
+      await apiClient.put(`/admin/courses/${selectedCourse.value.id}`, payload)
     } else {
-      await apiClient.post('/admin/courses', {
-        title: newCourseForm.value.title,
-        code: newCourseForm.value.code,
-        credits: newCourseForm.value.credits || 3,
-        department_id: newCourseForm.value.department_id,
-        instructor_id: newCourseForm.value.instructor_id || null,
-        semester: newCourseForm.value.semester,
-        level: newCourseForm.value.level,
-        start_date: newCourseForm.value.start_date,
-        end_date: newCourseForm.value.end_date,
-        visibility: newCourseForm.value.visibility,
-        enrollment_status: newCourseForm.value.enrollment_status,
-        status: newCourseForm.value.status || 'active'
-      })
+      await apiClient.post('/admin/courses', payload)
     }
     await fetchCourses()
     showAddPage.value = false
     showEditModal.value = false
+    resetCourseValidation()
   } catch (err: any) {
-    let msg = isEditing.value ? 'Failed to update course.' : 'Failed to create course.'
-    if (err.response?.data?.message) {
-      msg = err.response.data.message
-      if (err.response.data.errors) {
-        msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
-      }
+    if (err.response?.status === 422 && err.response?.data?.errors) {
+      const backendErrors = err.response.data.errors
+      Object.keys(backendErrors).forEach(key => {
+        courseFormTouched.value[key] = true
+        courseFormErrors.value[key] = Array.isArray(backendErrors[key]) ? backendErrors[key][0] : backendErrors[key]
+      })
+    } else {
+      courseFormErrors.value._server = err.response?.data?.message || (isEditing.value ? 'Failed to update course.' : 'Failed to create course.')
     }
-    alert(msg)
   } finally {
     isLoading.value = false
   }
@@ -270,9 +570,9 @@ const deleteCourse  = async () => {
 
 const openAssign = (course: any) => {
   courseToAssign.value = course
-  assignSection.value = course.section || ''
-  assignInstructorId.value = course.instructor_id || ''
-  assignCoInstructorId.value = course.co_instructor_id || ''
+  assignSection.value = course.section || 'Both Sections'
+  assignInstructorId.value = course.instructor_id || (course.instructor?.id || '')
+  assignCoInstructorId.value = course.co_instructor_id || (course.co_instructor?.id || course.coInstructor?.id || '')
   showAssignModal.value = true
 }
 
@@ -280,12 +580,28 @@ const assignInstructor = async () => {
   if (!courseToAssign.value) return
   isLoading.value = true
   try {
-    await apiClient.put(`/admin/courses/${courseToAssign.value.id}`, {
+    const res = await apiClient.put(`/admin/courses/${courseToAssign.value.id}`, {
       instructor_id: assignInstructorId.value || null,
       co_instructor_id: assignCoInstructorId.value || null,
       section: assignSection.value || null
     })
+    await fetchInstructors()
     await fetchCourses()
+    if (selectedCourse.value && selectedCourse.value.id === courseToAssign.value.id) {
+      const refreshed = allCourses.value.find(c => c.id === selectedCourse.value.id)
+      if (refreshed) {
+        selectedCourse.value = refreshed
+      } else if (res.data?.data) {
+        const item = res.data.data
+        selectedCourse.value = {
+          ...selectedCourse.value,
+          ...item,
+          name: item.title || selectedCourse.value.name,
+          dept: item.department?.name || selectedCourse.value.dept,
+          departmentName: item.department?.name || selectedCourse.value.departmentName
+        }
+      }
+    }
     showAssignModal.value = false
   } catch (err: any) {
     alert(err.response?.data?.message || 'Failed to assign instructor.')
@@ -294,15 +610,71 @@ const assignInstructor = async () => {
   }
 }
 
-const chartData = {
-  labels: ['Computer Science', 'Software Engineering', 'Information Systems', 'ICT', 'Others'],
-  datasets: [{
-    backgroundColor: ['#4338ca', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'],
-    data: [38, 28, 20, 18, 20],
-    borderWidth: 0,
-    hoverOffset: 4
-  }]
-}
+const chartPalette = ['#4338ca', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
+
+const topDepartments = computed(() => {
+  if (allDepartments.value && allDepartments.value.length > 0) {
+    const list = allDepartments.value.map(d => {
+      const count = allCourses.value.filter(c => c.department_id === d.id || c.departmentName === d.name || c.dept === d.name).length
+      return {
+        id: d.id,
+        name: d.name,
+        count
+      }
+    })
+    return list.sort((a, b) => b.count - a.count).slice(0, 5)
+  }
+  const deptCounts: Record<string, number> = {}
+  allCourses.value.forEach(c => {
+    const dName = c.departmentName && c.departmentName !== '—' ? c.departmentName : (c.dept && c.dept !== '—' ? c.dept : 'General')
+    deptCounts[dName] = (deptCounts[dName] || 0) + 1
+  })
+  return Object.entries(deptCounts)
+    .map(([name, count]) => ({ id: name, name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+})
+
+const recentCourses = computed(() => {
+  return [...allCourses.value]
+    .sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0)
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0)
+      return timeB - timeA
+    })
+    .slice(0, 5)
+    .map(c => ({
+      ...c,
+      id: c.id,
+      name: c.name || c.title,
+      code: c.code,
+      departmentName: c.departmentName && c.departmentName !== '—' ? c.departmentName : (c.dept && c.dept !== '—' ? c.dept : 'General'),
+      date: c.created_at ? new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : (c.created_on || 'Recently added')
+    }))
+})
+
+const chartData = computed(() => {
+  const deptsWithCourses = topDepartments.value.filter(d => d.count > 0)
+  if (deptsWithCourses.length === 0) {
+    return {
+      labels: ['No Courses'],
+      datasets: [{
+        backgroundColor: ['#e2e8f0'],
+        data: [1],
+        borderWidth: 0
+      }]
+    }
+  }
+  return {
+    labels: deptsWithCourses.map(d => d.name),
+    datasets: [{
+      backgroundColor: chartPalette.slice(0, deptsWithCourses.length),
+      data: deptsWithCourses.map(d => d.count),
+      borderWidth: 0,
+      hoverOffset: 4
+    }]
+  }
+})
 
 const chartOptions = {
   responsive: true,
@@ -310,7 +682,7 @@ const chartOptions = {
   cutout: '75%',
   plugins: {
     legend: {
-      display: false // Hide legend to prevent it from being cut off in narrow sidebar
+      display: false
     },
     tooltip: { enabled: true }
   }
@@ -577,7 +949,18 @@ const handleExport = async (format: string) => {
                   <p class="text-[12px] text-slate-600">{{ course.level || '—' }}</p>
                 </td>
                 <td class="px-5 py-4 text-center">
-                  <p class="text-[12px] font-semibold text-slate-700">{{ course.instructorsCount }}</p>
+                  <div class="inline-flex items-center justify-center">
+                    <span 
+                      v-if="getCourseInstructors(course).length > 0"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-[#4338ca] border border-indigo-100 hover:bg-indigo-100 transition-colors cursor-pointer"
+                      :title="getCourseInstructors(course).map(i => `${i.name} (${i.section || 'Instructor'})`).join(', ')"
+                      @click="openDetailsPage(course)"
+                    >
+                      <svg class="w-3 h-3 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                      {{ getCourseInstructors(course).length }}
+                    </span>
+                    <span v-else class="text-[12px] text-slate-400 font-medium">0</span>
+                  </div>
                 </td>
                 <td class="px-5 py-4 text-center">
                   <p class="text-[12px] font-semibold text-slate-700">{{ course.credits }}</p>
@@ -605,14 +988,46 @@ const handleExport = async (format: string) => {
         </div>
 
         <!-- Pagination -->
-        <div class="flex items-center justify-between px-6 py-4 border-t border-slate-100">
-          <p class="text-[12px] text-slate-500">Showing <span class="font-bold text-slate-700">{{ (currentPage-1)*10 + 1 }}</span> to <span class="font-bold text-slate-700">{{ Math.min(currentPage*10, filtered.length) }}</span> of <span class="font-bold text-slate-700">{{ filtered.length }}</span> courses</p>
+        <div class="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/30">
+          <p class="text-[12px] text-slate-500">
+            Showing <span class="font-bold text-slate-700">{{ filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }}</span> to <span class="font-bold text-slate-700">{{ Math.min(currentPage * perPage, filtered.length) }}</span> of <span class="font-bold text-slate-700">{{ filtered.length }}</span> courses
+          </p>
           <div class="flex items-center gap-1.5">
-            <button @click="currentPage--" :disabled="currentPage===1" class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            <!-- Previous Button -->
+            <button
+              @click="prevPage"
+              :disabled="currentPage <= 1"
+              title="Previous page"
+              class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:text-[#4338ca] hover:border-[#4338ca] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
-            <button v-for="p in totalPages" :key="p" @click="currentPage = p" :class="[currentPage===p ? 'bg-[#4338ca] text-white border-transparent' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50', 'w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] font-bold transition-colors']">{{ p }}</button>
-            <button @click="currentPage++" :disabled="currentPage===totalPages || totalPages===0" class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+
+            <!-- Page Number Buttons with Ellipsis -->
+            <template v-for="(page, idx) in visiblePages" :key="idx">
+              <span
+                v-if="page === '...'"
+                class="w-8 h-8 flex items-center justify-center text-[12px] text-slate-400 select-none"
+              >
+                …
+              </span>
+              <button
+                v-else
+                @click="goToPage(page)"
+                :class="currentPage === page ? 'bg-[#4338ca] text-white border-[#4338ca] shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'"
+                class="w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] font-bold transition-colors"
+              >
+                {{ page }}
+              </button>
+            </template>
+
+            <!-- Next Button -->
+            <button
+              @click="nextPage"
+              :disabled="currentPage >= totalPages"
+              title="Next page"
+              class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:text-[#4338ca] hover:border-[#4338ca] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
           </div>
@@ -627,7 +1042,7 @@ const handleExport = async (format: string) => {
           <div class="relative h-48 w-full flex items-center justify-center">
             <Doughnut :data="chartData" :options="chartOptions" />
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
-              <span class="text-[24px] font-black text-slate-800 leading-none">124</span>
+              <span class="text-[24px] font-black text-slate-800 leading-none">{{ stats.total }}</span>
               <span class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wide">Total Courses</span>
             </div>
           </div>
@@ -644,42 +1059,44 @@ const handleExport = async (format: string) => {
         <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
           <h3 class="text-[14px] font-bold text-slate-800 mb-4">Top Departments</h3>
           <div class="space-y-3">
-            <div v-for="(dept, i) in [
-              { name: 'Computer Science', count: 38 },
-              { name: 'Software Engineering', count: 28 },
-              { name: 'Information Systems', count: 20 },
-              { name: 'ICT', count: 18 },
-              { name: 'Database Systems', count: 12 },
-            ]" :key="i" class="flex items-center justify-between text-[12px]">
-              <div class="flex items-center gap-2 text-slate-600">
-                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                {{ dept.name }}
+            <div
+              v-for="dept in topDepartments"
+              :key="dept.id || dept.name"
+              class="flex items-center justify-between text-[12px] group cursor-pointer hover:bg-slate-50/80 p-1.5 -mx-1.5 rounded-lg transition-colors"
+              @click="deptFilter = dept.name"
+              :title="'Filter courses by ' + dept.name"
+            >
+              <div class="flex items-center gap-2 text-slate-600 group-hover:text-[#4338ca] transition-colors">
+                <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-[#4338ca]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                <span class="truncate max-w-[140px] font-medium">{{ dept.name }}</span>
               </div>
-              <span class="font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded">{{ dept.count }}</span>
+              <span class="font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded group-hover:bg-indigo-50 group-hover:text-[#4338ca] transition-colors">{{ dept.count }}</span>
             </div>
+            <div v-if="topDepartments.length === 0" class="text-[12px] text-slate-400 text-center py-4">No department data available.</div>
           </div>
-          <button class="w-full text-center text-[11px] font-bold text-[#4338ca] hover:text-indigo-800 mt-4 transition-colors">View All</button>
         </div>
 
         <!-- Recent Courses -->
         <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-6">
           <h3 class="text-[14px] font-bold text-slate-800 mb-4">Recent Courses</h3>
-          <div class="space-y-4">
-            <div v-for="(course, i) in [
-              { name: 'Machine Learning', date: 'May 27, 2025' },
-              { name: 'Mobile App Development', date: 'May 26, 2025' },
-              { name: 'Cyber Security', date: 'May 25, 2025' },
-            ]" :key="i" class="flex items-start gap-3">
-              <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-[#4338ca]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+          <div class="space-y-3">
+            <div
+              v-for="course in recentCourses"
+              :key="course.id"
+              class="flex items-start gap-3 p-1.5 -mx-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors group"
+              @click="openDetailsPage(course)"
+              :title="'View ' + course.name"
+            >
+              <div class="w-8 h-8 rounded-lg bg-indigo-50 text-[#4338ca] flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="text-[12px] font-bold text-slate-800 truncate">{{ course.name }}</p>
-                <p class="text-[10px] text-slate-400 mt-0.5">{{ course.date }}</p>
+                <p class="text-[12px] font-bold text-slate-800 truncate group-hover:text-[#4338ca] transition-colors">{{ course.name }}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5 truncate">{{ course.code }} · {{ course.date }}</p>
               </div>
             </div>
+            <div v-if="recentCourses.length === 0" class="text-[12px] text-slate-400 text-center py-4">No recent courses.</div>
           </div>
-          <button class="w-full text-center text-[11px] font-bold text-[#4338ca] hover:text-indigo-800 mt-4 transition-colors">View All</button>
         </div>
 
         <!-- Quick Actions -->
@@ -739,24 +1156,79 @@ const handleExport = async (format: string) => {
           <div class="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
             <h2 class="text-[15px] font-bold text-slate-800 mb-6">Course Information</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <!-- Course Code -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Code <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.code" type="text" placeholder="Enter course code (e.g., CS-301)" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <input
+                  v-model="newCourseForm.code"
+                  type="text"
+                  placeholder="Enter course code (e.g., CS-301)"
+                  :class="courseFieldCls('code')"
+                  @blur="touchCourseField('code')"
+                  @input="courseFormTouched.code && validateCourseField('code')"
+                >
+                <p v-if="courseFormErrors.code" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.code }}
+                </p>
+                <p v-else-if="courseFormTouched.code && !courseFormErrors.code" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Course Title -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Title <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.title" type="text" placeholder="Enter course title" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <input
+                  v-model="newCourseForm.title"
+                  type="text"
+                  placeholder="Enter course title"
+                  :class="courseFieldCls('title')"
+                  @blur="touchCourseField('title')"
+                  @input="courseFormTouched.title && validateCourseField('title')"
+                >
+                <p v-if="courseFormErrors.title" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.title }}
+                </p>
+                <p v-else-if="courseFormTouched.title && !courseFormErrors.title" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Department -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Department <span class="text-rose-500">*</span></label>
-                <select v-model="newCourseForm.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <select
+                  v-model="newCourseForm.department_id"
+                  :class="courseFieldCls('department_id', 'appearance-none bg-white')"
+                  @blur="touchCourseField('department_id')"
+                  @change="touchCourseField('department_id')"
+                >
                   <option value="">Select department</option>
                   <option v-for="d in allDepartments" :key="d.id" :value="d.id">{{ d.name }}</option>
                 </select>
+                <p v-if="courseFormErrors.department_id" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.department_id }}
+                </p>
+                <p v-else-if="courseFormTouched.department_id && !courseFormErrors.department_id" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Academic Year Level -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
-                <select v-model="newCourseForm.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <select
+                  v-model="newCourseForm.level"
+                  :class="courseFieldCls('level', 'appearance-none bg-white')"
+                  @blur="touchCourseField('level')"
+                  @change="touchCourseField('level')"
+                >
                   <option value="">Select Academic Year</option>
                   <option value="1st Year">1st Year</option>
                   <option value="2nd Year">2nd Year</option>
@@ -764,53 +1236,126 @@ const handleExport = async (format: string) => {
                   <option value="4th Year">4th Year</option>
                   <option value="5th Year">5th Year</option>
                 </select>
+                <p v-if="courseFormErrors.level" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.level }}
+                </p>
+                <p v-else-if="courseFormTouched.level && !courseFormErrors.level" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Semester -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Semester <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.semester" type="text" disabled class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed">
+                <input
+                  v-model="newCourseForm.semester"
+                  type="text"
+                  disabled
+                  class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed font-medium"
+                >
+                <p class="mt-1.5 text-[11px] text-slate-400">Current academic semester (auto-assigned)</p>
               </div>
+
+              <!-- Credits -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Credits</label>
-                <input v-model="newCourseForm.credits" type="number" placeholder="Enter credit hours" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
+                <input
+                  v-model="newCourseForm.credits"
+                  type="number"
+                  min="1"
+                  max="30"
+                  placeholder="Enter credit hours (e.g., 3)"
+                  :class="courseFieldCls('credits')"
+                  @blur="touchCourseField('credits')"
+                  @input="courseFormTouched.credits && validateCourseField('credits')"
+                >
+                <p v-if="courseFormErrors.credits" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.credits }}
+                </p>
+                <p v-else-if="courseFormTouched.credits && !courseFormErrors.credits" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
             </div>
           </div>
 
 
-          <!-- Course Settings -->
+          <!-- Course Settings (All Optional) -->
           <div class="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
-            <h2 class="text-[15px] font-bold text-slate-800 mb-6">Course Settings</h2>
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-[15px] font-bold text-slate-800">Course Settings</h2>
+                <p class="text-[12px] text-slate-400 mt-0.5">Configuration and scheduling options (all optional).</p>
+              </div>
+              <span class="px-2.5 py-1 bg-slate-100 text-slate-600 text-[11px] font-bold rounded-lg uppercase tracking-wider">Optional</span>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Enrollment Status</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Enrollment Status <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
                 <select v-model="newCourseForm.enrollment_status" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
                   <option value="Open for Enrollment">Open for Enrollment</option>
                   <option value="Closed">Closed</option>
                 </select>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Visibility</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Visibility <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
                 <select v-model="newCourseForm.visibility" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
                   <option value="Visible to Students">Visible to Students</option>
                   <option value="Hidden">Hidden</option>
                 </select>
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Date (Optional)</label>
-                <input v-model="newCourseForm.start_date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Date <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
+                <input
+                  v-model="newCourseForm.start_date"
+                  type="date"
+                  class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none"
+                  @change="touchCourseField('start_date')"
+                >
               </div>
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">End Date (Optional)</label>
-                <input v-model="newCourseForm.end_date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">End Date <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
+                <input
+                  v-model="newCourseForm.end_date"
+                  type="date"
+                  :class="courseFieldCls('end_date', 'appearance-none bg-white')"
+                  @change="touchCourseField('end_date')"
+                >
+                <p v-if="courseFormErrors.end_date" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.end_date }}
+                </p>
+                <p v-else-if="courseFormTouched.end_date && newCourseForm.end_date && !courseFormErrors.end_date" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Valid date
+                </p>
               </div>
+            </div>
+
+            <!-- Server Error Banner -->
+            <div v-if="courseFormErrors._server" class="mt-6 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+              <div class="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              </div>
+              <div class="flex-1 text-[13px] text-rose-800 font-medium whitespace-pre-line leading-relaxed">
+                {{ courseFormErrors._server }}
+              </div>
+              <button @click="delete courseFormErrors._server" class="text-rose-400 hover:text-rose-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
             </div>
             
             <div class="mt-8 flex items-center justify-between border-t border-slate-100 pt-6">
               <button @click="showAddPage = false" class="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-[13px] hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
-              <button @click="saveCourse" class="flex items-center gap-2 px-8 py-3 bg-[#4338ca] text-white font-bold rounded-xl text-[13px] hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                {{ isEditing ? 'Save Changes' : 'Create Course' }}
+              <button @click="saveCourse" :disabled="isLoading" class="flex items-center gap-2 px-8 py-3 bg-[#4338ca] text-white font-bold rounded-xl text-[13px] hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer">
+                <svg v-if="isLoading" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                {{ isLoading ? 'Saving Course...' : (isEditing ? 'Save Changes' : 'Create Course') }}
               </button>
             </div>
           </div>
@@ -909,60 +1454,114 @@ const handleExport = async (format: string) => {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-y-8 gap-x-6">
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Course Code</p>
-                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.code || 'CS-301' }}</p>
+                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.code || '—' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Course Title</p>
-                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.name || 'Data Structures and Algorithms' }}</p>
+                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.name || selectedCourse?.title || '—' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Department</p>
-                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.departmentName || 'Computer Science' }}</p>
+                <p class="text-[14px] font-bold text-[#4338ca]">{{ selectedCourse?.departmentName || selectedCourse?.department?.name || '—' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Semester</p>
-                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.semester || '1st Semester (2025/2026)' }}</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.semester || '—' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Credits</p>
-                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.credits || '4' }}</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.credits || '—' }}</p>
+              </div>
+              <div>
+                <p class="text-[12px] font-bold text-slate-500 mb-1">Level</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.level || '—' }}</p>
               </div>
             </div>
           </div>
 
-          <!-- Course Settings -->
+          <!-- Course Settings & Assigned Instructors -->
           <div class="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
-            <h2 class="text-[15px] font-bold text-slate-800 mb-6">Course Settings</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-y-8 gap-x-6">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                  <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Instructor" class="w-full h-full object-cover">
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+              <div>
+                <h2 class="text-[15px] font-bold text-slate-800">Course Settings & Assigned Instructors</h2>
+                <p class="text-[12px] text-slate-500 mt-0.5">Assigned instructors per section and enrollment configuration.</p>
+              </div>
+              <button @click="openAssign(selectedCourse)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-[#4338ca] text-[12px] font-bold rounded-xl transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                Manage Instructors
+              </button>
+            </div>
+
+            <!-- Assigned Instructors List -->
+            <div class="mb-8">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Course Instructors ({{ selectedCourseInstructors.length }})
+                </p>
+                <span v-if="selectedCourseInstructors.length > 0" class="text-[11px] font-medium text-slate-500">
+                  Assigned across {{ selectedCourseInstructors.length > 1 ? 'all sections (Section A & Section B)' : 'current section' }}
+                </span>
+              </div>
+
+              <div v-if="selectedCourseInstructors.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div 
+                  v-for="inst in selectedCourseInstructors" 
+                  :key="inst.id" 
+                  class="flex items-center gap-3.5 p-4 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-50 transition-colors"
+                >
+                  <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-[#4338ca] to-indigo-500 text-white font-bold text-[14px] flex items-center justify-center shrink-0 uppercase shadow-xs">
+                    {{ inst.name ? inst.name.charAt(0) : 'I' }}
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between gap-2">
+                      <p class="text-[13px] font-bold text-slate-800 truncate">{{ inst.name }}</p>
+                      <span 
+                        class="px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider shrink-0"
+                        :class="inst.section === 'Section B' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-blue-100 text-blue-700 border border-blue-200'"
+                      >
+                        {{ inst.section || 'Section A' }}
+                      </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 truncate mt-0.5">{{ inst.email || 'No email provided' }}</p>
+                    <p class="text-[10px] text-slate-400 capitalize mt-0.5">{{ inst.role ? inst.role.replace('_', ' ') : 'Instructor' }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="p-5 rounded-xl border border-dashed border-slate-200 text-center bg-slate-50/50">
+                <p class="text-[13px] text-slate-500">No instructors assigned to this course yet.</p>
+                <button @click="openAssign(selectedCourse)" class="mt-2 text-[12px] font-bold text-[#4338ca] hover:underline inline-flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                  Assign instructors for Section A and Section B
+                </button>
+              </div>
+            </div>
+
+            <!-- Configuration Grid -->
+            <div>
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Course Configuration</p>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-6 pt-1">
+                <div>
+                  <p class="text-[12px] font-bold text-slate-500 mb-1">Enrollment Status</p>
+                  <span 
+                    :class="selectedCourse?.enrollment_status === 'Closed' ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'"
+                    class="inline-flex text-[11px] font-bold px-2.5 py-1 rounded-lg"
+                  >
+                    {{ selectedCourse?.enrollment_status || 'Open for Enrollment' }}
+                  </span>
                 </div>
                 <div>
-                  <p class="text-[11px] font-bold text-slate-500">Course Instructor</p>
-                  <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.instructor || 'Dr. Abebe Kebede' }}</p>
-                  <p class="text-[11px] text-slate-500">abebe.kebede@wu.edu.et</p>
+                  <p class="text-[12px] font-bold text-slate-500 mb-1">Visibility</p>
+                  <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.visibility || 'Visible to Students' }}</p>
                 </div>
-              </div>
-              <div>
-                <p class="text-[12px] font-bold text-slate-500 mb-1">Co-Instructors</p>
-                <p class="text-[13px] font-bold text-[#4338ca]">2 Co-Instructor(s)</p>
-              </div>
-              <div>
-                <p class="text-[12px] font-bold text-slate-500 mb-1">Enrollment Status</p>
-                <span class="inline-flex text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">Open for Enrollment</span>
-              </div>
-              <div>
-                <p class="text-[12px] font-bold text-slate-500 mb-1">Visibility</p>
-                <p class="text-[13px] font-bold text-slate-800">Visible to Students</p>
-              </div>
-              <div>
-                <p class="text-[12px] font-bold text-slate-500 mb-1">Start Date</p>
-                <p class="text-[13px] font-bold text-slate-800">May 10, 2025</p>
-              </div>
-              <div>
-                <p class="text-[12px] font-bold text-slate-500 mb-1">End Date</p>
-                <p class="text-[13px] font-bold text-slate-800">Aug 20, 2025</p>
+                <div>
+                  <p class="text-[12px] font-bold text-slate-500 mb-1">Start Date</p>
+                  <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.start_date ? formatDate(selectedCourse.start_date) : 'Not scheduled' }}</p>
+                </div>
+                <div>
+                  <p class="text-[12px] font-bold text-slate-500 mb-1">End Date</p>
+                  <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.end_date ? formatDate(selectedCourse.end_date) : 'Not scheduled' }}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -970,8 +1569,8 @@ const handleExport = async (format: string) => {
           <!-- Course Description -->
           <div class="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
             <h2 class="text-[15px] font-bold text-slate-800 mb-4">Course Description</h2>
-            <p class="text-[13px] text-slate-600 leading-relaxed">
-              This course introduces fundamental data structures and algorithms used in computer science. Topics include arrays, linked lists, stacks, queues, trees, graphs, sorting, searching, and algorithm analysis.
+            <p class="text-[13px] text-slate-600 leading-relaxed whitespace-pre-line">
+              {{ selectedCourse?.description || selectedCourse?.short_description || selectedCourse?.full_description || 'No description provided for this course.' }}
             </p>
           </div>
 
@@ -981,19 +1580,19 @@ const handleExport = async (format: string) => {
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Created By</p>
-                <p class="text-[13px] font-bold text-slate-800">Super Admin</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.created_by || selectedCourse?.creator?.name || 'Super Admin' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Created Date</p>
-                <p class="text-[13px] font-bold text-slate-800">May 1, 2025 10:30 AM</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ formatDateTime(selectedCourse?.created_at) }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Last Updated By</p>
-                <p class="text-[13px] font-bold text-slate-800">Super Admin</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.created_by || selectedCourse?.creator?.name || 'Super Admin' }}</p>
               </div>
               <div>
                 <p class="text-[12px] font-bold text-slate-500 mb-1">Last Updated</p>
-                <p class="text-[13px] font-bold text-slate-800">May 5, 2025 09:15 AM</p>
+                <p class="text-[13px] font-bold text-slate-800">{{ formatDateTime(selectedCourse?.updated_at || selectedCourse?.created_at) }}</p>
               </div>
             </div>
           </div>
@@ -1009,16 +1608,16 @@ const handleExport = async (format: string) => {
                 <svg class="w-6 h-6 text-[#4338ca]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
               </div>
               <div>
-                <h4 class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.name || 'Data Structures and Algorithms' }}</h4>
-                <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">{{ selectedCourse?.code || 'CS-301' }}</p>
+                <h4 class="text-[13px] font-bold text-slate-800">{{ selectedCourse?.name || selectedCourse?.title || 'Course Details' }}</h4>
+                <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">{{ selectedCourse?.code }}</p>
               </div>
             </div>
             <div class="space-y-4">
-              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>Department</div><span class="font-bold text-slate-800">{{ selectedCourse?.departmentName || 'Computer Science' }}</span></div>
-              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>Credits</div><span class="font-bold text-slate-800">{{ selectedCourse?.credits || '4' }}</span></div>
-              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>Semester</div><span class="font-bold text-slate-800">{{ selectedCourse?.semester || '1st Semester (2025/2026)' }}</span></div>
-              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Status</div><span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Open for Enrollment</span></div>
-              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>Visibility</div><span class="font-bold text-slate-800">Visible to Students</span></div>
+              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>Department</div><span class="font-bold text-slate-800">{{ selectedCourse?.departmentName || selectedCourse?.department?.name || '—' }}</span></div>
+              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>Credits</div><span class="font-bold text-slate-800">{{ selectedCourse?.credits || '—' }}</span></div>
+              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>Semester</div><span class="font-bold text-slate-800">{{ selectedCourse?.semester || '—' }}</span></div>
+              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Status</div><span :class="selectedCourse?.status === 'active' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'" class="font-bold px-2 py-0.5 rounded capitalize">{{ selectedCourse?.status || 'active' }}</span></div>
+              <div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2 text-slate-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>Visibility</div><span class="font-bold text-slate-800">{{ selectedCourse?.visibility || 'Visible to Students' }}</span></div>
             </div>
           </div>
           
@@ -1140,24 +1739,79 @@ const handleExport = async (format: string) => {
           </div>
           <div class="p-6 overflow-y-auto max-h-[65vh] space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- Course Code -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Code <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.code" type="text" placeholder="e.g., CS-301" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <input
+                  v-model="newCourseForm.code"
+                  type="text"
+                  placeholder="e.g., CS-301"
+                  :class="courseFieldCls('code')"
+                  @blur="touchCourseField('code')"
+                  @input="courseFormTouched.code && validateCourseField('code')"
+                >
+                <p v-if="courseFormErrors.code" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.code }}
+                </p>
+                <p v-else-if="courseFormTouched.code && !courseFormErrors.code" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Course Title -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Course Title <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.title" type="text" placeholder="Enter course title" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <input
+                  v-model="newCourseForm.title"
+                  type="text"
+                  placeholder="Enter course title"
+                  :class="courseFieldCls('title')"
+                  @blur="touchCourseField('title')"
+                  @input="courseFormTouched.title && validateCourseField('title')"
+                >
+                <p v-if="courseFormErrors.title" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.title }}
+                </p>
+                <p v-else-if="courseFormTouched.title && !courseFormErrors.title" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Department -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Department <span class="text-rose-500">*</span></label>
-                <select v-model="newCourseForm.department_id" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <select
+                  v-model="newCourseForm.department_id"
+                  :class="courseFieldCls('department_id', 'appearance-none bg-white')"
+                  @blur="touchCourseField('department_id')"
+                  @change="touchCourseField('department_id')"
+                >
                   <option value="">Select department</option>
                   <option v-for="d in allDepartments" :key="d.id" :value="d.id">{{ d.name }}</option>
                 </select>
+                <p v-if="courseFormErrors.department_id" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.department_id }}
+                </p>
+                <p v-else-if="courseFormTouched.department_id && !courseFormErrors.department_id" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Academic Year Level -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
-                <select v-model="newCourseForm.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <select
+                  v-model="newCourseForm.level"
+                  :class="courseFieldCls('level', 'appearance-none bg-white')"
+                  @blur="touchCourseField('level')"
+                  @change="touchCourseField('level')"
+                >
                   <option value="">Select Academic Year</option>
                   <option value="1st Year">1st Year</option>
                   <option value="2nd Year">2nd Year</option>
@@ -1165,37 +1819,111 @@ const handleExport = async (format: string) => {
                   <option value="4th Year">4th Year</option>
                   <option value="5th Year">5th Year</option>
                 </select>
+                <p v-if="courseFormErrors.level" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.level }}
+                </p>
+                <p v-else-if="courseFormTouched.level && !courseFormErrors.level" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Semester -->
               <div>
                 <label class="block text-[12px] font-bold text-slate-700 mb-2">Semester <span class="text-rose-500">*</span></label>
-                <input v-model="newCourseForm.semester" type="text" disabled class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed font-bold">
+                <input
+                  v-model="newCourseForm.semester"
+                  type="text"
+                  disabled
+                  class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed font-medium"
+                >
+                <p class="mt-1.5 text-[11px] text-slate-400">Current academic semester (auto-assigned)</p>
               </div>
+
+              <!-- Credits -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Credits</label>
-                <input v-model="newCourseForm.credits" type="number" placeholder="Enter credit hours" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca]">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
+                <input
+                  v-model="newCourseForm.credits"
+                  type="number"
+                  min="1"
+                  max="30"
+                  placeholder="Enter credit hours"
+                  :class="courseFieldCls('credits')"
+                  @blur="touchCourseField('credits')"
+                  @input="courseFormTouched.credits && validateCourseField('credits')"
+                >
+                <p v-if="courseFormErrors.credits" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.credits }}
+                </p>
+                <p v-else-if="courseFormTouched.credits && !courseFormErrors.credits" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Looks good!
+                </p>
               </div>
+
+              <!-- Start Date (Optional) -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Date (Optional)</label>
-                <input v-model="newCourseForm.start_date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Start Date <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
+                <input
+                  v-model="newCourseForm.start_date"
+                  type="date"
+                  class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none"
+                  @change="touchCourseField('start_date')"
+                >
               </div>
+
+              <!-- End Date (Optional) -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">End Date (Optional)</label>
-                <input v-model="newCourseForm.end_date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">End Date <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
+                <input
+                  v-model="newCourseForm.end_date"
+                  type="date"
+                  :class="courseFieldCls('end_date', 'appearance-none bg-white')"
+                  @change="touchCourseField('end_date')"
+                >
+                <p v-if="courseFormErrors.end_date" class="mt-1.5 text-[11px] text-rose-500 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {{ courseFormErrors.end_date }}
+                </p>
+                <p v-else-if="courseFormTouched.end_date && newCourseForm.end_date && !courseFormErrors.end_date" class="mt-1.5 text-[11px] text-emerald-600 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Valid date
+                </p>
               </div>
+
+              <!-- Visibility (Optional) -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Visibility</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Visibility <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
                 <select v-model="newCourseForm.visibility" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
                   <option value="Visible to Students">Visible to Students</option>
                   <option value="Hidden">Hidden</option>
                 </select>
               </div>
+
+              <!-- Enrollment Status (Optional) -->
               <div>
-                <label class="block text-[12px] font-bold text-slate-700 mb-2">Enrollment Status</label>
+                <label class="block text-[12px] font-bold text-slate-700 mb-2">Enrollment Status <span class="text-[11px] text-slate-400 font-medium">(Optional)</span></label>
                 <select v-model="newCourseForm.enrollment_status" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 focus:outline-none focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] bg-white appearance-none">
                   <option value="Open for Enrollment">Open for Enrollment</option>
                   <option value="Closed">Closed</option>
                 </select>
               </div>
+            </div>
+
+            <!-- Server Error Banner -->
+            <div v-if="courseFormErrors._server" class="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 mt-4">
+              <div class="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              </div>
+              <div class="flex-1 text-[13px] text-rose-800 font-medium whitespace-pre-line leading-relaxed">
+                {{ courseFormErrors._server }}
+              </div>
+              <button @click="delete courseFormErrors._server" class="text-rose-400 hover:text-rose-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
             </div>
 
             <!-- Status Toggle -->
@@ -1225,7 +1953,8 @@ const handleExport = async (format: string) => {
           </div>
           <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
             <button @click="showEditModal = false" class="px-5 py-2.5 text-[13px] font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">Cancel</button>
-            <button @click="saveCourse" :disabled="isLoading" class="px-5 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+            <button @click="saveCourse" :disabled="isLoading" class="flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white bg-[#4338ca] hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer">
+              <svg v-if="isLoading" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
               {{ isLoading ? 'Saving...' : 'Save Changes' }}
             </button>
           </div>

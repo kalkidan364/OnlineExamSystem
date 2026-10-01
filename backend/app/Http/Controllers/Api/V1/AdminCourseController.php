@@ -21,7 +21,7 @@ class AdminCourseController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $courses = Course::with(['department', 'instructor', 'creator'])->get();
+        $courses = Course::with(['department', 'instructor', 'coInstructor', 'creator', 'assignedInstructors'])->get();
         return response()->json(['data' => $courses]);
     }
 
@@ -73,8 +73,17 @@ class AdminCourseController extends Controller
 
         return response()->json([
             'message' => 'Course created successfully',
-            'data' => $course->load(['department', 'instructor'])
+            'data' => $course->load(['department', 'instructor', 'coInstructor', 'assignedInstructors'])
         ], 201);
+    }
+
+    /**
+     * Display the specified course.
+     */
+    public function show(string $id): JsonResponse
+    {
+        $course = Course::with(['department', 'instructor', 'coInstructor', 'creator', 'assignedInstructors'])->findOrFail($id);
+        return response()->json(['data' => $course]);
     }
 
     /**
@@ -113,16 +122,18 @@ class AdminCourseController extends Controller
 
         // Sync instructor's section and year_level when assigning
         if ($request->has('instructor_id') && $request->instructor_id) {
+            $instSection = $request->section === 'Both Sections' ? 'Section A' : ($request->section ?: ($course->section ?: 'Section A'));
             User::where('id', $request->instructor_id)->update([
-                'section'    => $course->section ?? $request->section,
+                'section'    => $instSection,
                 'year_level' => $course->level,
                 'course_code' => $course->code,
                 'course_name' => $course->title,
             ]);
         }
         if ($request->has('co_instructor_id') && $request->co_instructor_id) {
+            $coSection = ($request->section === 'Both Sections' || $request->section === 'Section A') ? 'Section B' : ($request->co_instructor_section ?? 'Section B');
             User::where('id', $request->co_instructor_id)->update([
-                'section'    => $course->section ?? $request->section,
+                'section'    => $coSection,
                 'year_level' => $course->level,
                 'course_code' => $course->code,
                 'course_name' => $course->title,
@@ -137,7 +148,7 @@ class AdminCourseController extends Controller
 
         return response()->json([
             'message' => 'Course updated successfully',
-            'data' => $course->load(['department', 'instructor'])
+            'data' => $course->load(['department', 'instructor', 'coInstructor', 'creator', 'assignedInstructors'])
         ]);
     }
 

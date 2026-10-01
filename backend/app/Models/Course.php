@@ -49,4 +49,9 @@ class Course extends Model
     {
         return $this->hasMany(Exam::class, 'course_code', 'code');
     }
+
+    public function assignedInstructors()
+    {
+        return $this->hasMany(User::class, 'course_code', 'code')->whereIn('role', ['instructor', 'dept_head']);
+    }
 }
