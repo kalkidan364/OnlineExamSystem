@@ -86,6 +86,8 @@ class AdminUserController extends Controller
             'gender'        => $request->gender,
             'password'      => Hash::make($request->password),
             'profile_picture' => $profilePicturePath,
+            'created_by'    => $request->user()->id,
+            'employment_type' => $request->employment_type ?? 'full_time',
         ]);
 
         $roleName = ucfirst(str_replace('_', ' ', $user->role));

@@ -33,12 +33,118 @@ const addForm = ref({
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
+const addFormErrors = ref<Record<string, string>>({})
+const addFormTouched = ref<Record<string, boolean>>({})
+
+// Professional password requirement rules
+const addPasswordRules = computed(() => {
+  const pwd = addForm.value.password || ''
+  return {
+    minLength: pwd.length >= 8,
+    uppercase: /[A-Z]/.test(pwd),
+    lowercase: /[a-z]/.test(pwd),
+    number: /[0-9]/.test(pwd),
+    special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(pwd),
+  }
+})
+
+const isAddPasswordValid = computed(() => {
+  const r = addPasswordRules.value
+  return r.minLength && r.uppercase && r.lowercase && r.number && r.special
+})
+
+const addPasswordStrength = computed(() => {
+  const r = addPasswordRules.value
+  const metCount = [r.minLength, r.uppercase, r.lowercase, r.number, r.special].filter(Boolean).length
+  if (metCount <= 1) return { score: 1, label: 'Weak', barClass: 'bg-rose-500', textClass: 'text-rose-500', width: '25%' }
+  if (metCount <= 3) return { score: 2, label: 'Medium', barClass: 'bg-amber-500', textClass: 'text-amber-500', width: '50%' }
+  if (metCount === 4) return { score: 3, label: 'Good', barClass: 'bg-blue-500', textClass: 'text-blue-500', width: '75%' }
+  return { score: 4, label: 'Strong', barClass: 'bg-emerald-500', textClass: 'text-emerald-500', width: '100%' }
+})
+
+const validateAddFormField = (field: string) => {
+  addFormTouched.value[field] = true
+
+  if (field === 'fullName') {
+    if (!addForm.value.fullName || !addForm.value.fullName.trim()) {
+      addFormErrors.value.fullName = 'Full name is required'
+    } else {
+      delete addFormErrors.value.fullName
+    }
+  } else if (field === 'email') {
+    if (!addForm.value.email || !addForm.value.email.trim()) {
+      addFormErrors.value.email = 'Email address is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addForm.value.email.trim())) {
+      addFormErrors.value.email = 'Please enter a valid email address'
+    } else {
+      delete addFormErrors.value.email
+    }
+  } else if (field === 'phone') {
+    if (!addForm.value.phone || !addForm.value.phone.trim()) {
+      addFormErrors.value.phone = 'Phone number is required'
+    } else {
+      delete addFormErrors.value.phone
+    }
+  } else if (field === 'gender') {
+    if (!addForm.value.gender) {
+      addFormErrors.value.gender = 'Please select a gender'
+    } else {
+      delete addFormErrors.value.gender
+    }
+  } else if (field === 'employeeId') {
+    if (!addForm.value.employeeId || !addForm.value.employeeId.trim()) {
+      addFormErrors.value.employeeId = 'Employee ID is required'
+    } else {
+      delete addFormErrors.value.employeeId
+    }
+  } else if (field === 'username') {
+    if (!addForm.value.username || !addForm.value.username.trim()) {
+      addFormErrors.value.username = 'Username is required'
+    } else {
+      delete addFormErrors.value.username
+    }
+  } else if (field === 'password') {
+    if (!addForm.value.password) {
+      addFormErrors.value.password = 'Password is required'
+    } else if (!addPasswordRules.value.minLength) {
+      addFormErrors.value.password = 'Password must be at least 8 characters'
+    } else if (!addPasswordRules.value.uppercase || !addPasswordRules.value.lowercase) {
+      addFormErrors.value.password = 'Password must include uppercase and lowercase letters'
+    } else if (!addPasswordRules.value.number) {
+      addFormErrors.value.password = 'Password must include at least one number (0-9)'
+    } else if (!addPasswordRules.value.special) {
+      addFormErrors.value.password = 'Password must include at least one special character (!@#$%^&*)'
+    } else {
+      delete addFormErrors.value.password
+    }
+    if (addFormTouched.value.confirmPassword) {
+      validateAddFormField('confirmPassword')
+    }
+  } else if (field === 'confirmPassword') {
+    if (!addForm.value.confirmPassword) {
+      addFormErrors.value.confirmPassword = 'Confirm password is required'
+    } else if (addForm.value.confirmPassword !== addForm.value.password) {
+      addFormErrors.value.confirmPassword = 'Passwords do not match'
+    } else {
+      delete addFormErrors.value.confirmPassword
+    }
+  }
+}
+
+const validateAddForm = (): boolean => {
+  const fields = ['fullName', 'email', 'phone', 'gender', 'employeeId', 'username', 'password', 'confirmPassword']
+  fields.forEach(f => validateAddFormField(f))
+  return Object.keys(addFormErrors.value).length === 0
+}
+
 const resetAddForm = () => {
   addForm.value = {
     fullName: '', email: '', phone: '', gender: '', profilePicture: null,
     employeeId: '', yearLevel: '',
     username: '', password: '', confirmPassword: ''
   }
+  addFormErrors.value = {}
+  addFormTouched.value = {}
 }
 
 const openAddPage = () => { resetAddForm(); currentView.value = 'add' }
@@ -73,24 +179,36 @@ const editForm = ref({
 const showEditPassword = ref(false)
 const showEditConfirmPassword = ref(false)
 
+const serverStats = ref<{
+  total: number
+  full_time: number
+  part_time: number
+  on_leave: number
+  new_this_semester: number
+} | null>(null)
+
 const openEditPage = (instructor: any) => {
+  if (!instructor.can_edit) {
+    alert('This instructor was created by Super Admin and cannot be edited by Department Head.')
+    return
+  }
   selectedInstructor.value = instructor
   editForm.value = {
     fullName: instructor.name || '',
     email: instructor.email || '',
-    phone: '+251 9XX XXX XXX',
-    gender: 'Male',
+    phone: instructor.phone || '+251 9XX XXX XXX',
+    gender: instructor.gender || 'Male',
     profilePicture: null,
-    course: 'CS-301',
-    section: 'Section A',
+    course: instructor.course_code || 'CS-301',
+    section: instructor.section || 'Section A',
     employeeId: instructor.id_code || '',
-    semester: 'Semester 1',
+    semester: instructor.semester || 'Semester 1',
     year: instructor.year || '',
-    username: instructor.name ? instructor.name.toLowerCase().replace(' ', '.') : '',
+    username: instructor.username || (instructor.name ? instructor.name.toLowerCase().replace(' ', '.') : ''),
     password: '',
     confirmPassword: '',
-    employmentType: instructor.status === 'active' ? 'Full Time' : 'Part Time',
-    qualification: 'PhD in Computer Science',
+    employmentType: (instructor.employment_type === 'part_time' || instructor.status === 'part time') ? 'Part Time' : 'Full Time',
+    qualification: 'Faculty Instructor',
     permissions: {
       createExams: true,
       viewResults: true,
@@ -110,13 +228,22 @@ const handleEditFileUpload = (e: Event) => {
 
 const saveEditInstructor = async () => {
   if (!editForm.value.fullName || !editForm.value.email) return
+  if (!selectedInstructor.value?.can_edit) {
+    alert('This instructor was created by Super Admin and cannot be edited by Department Head.')
+    return
+  }
   isLoading.value = true
   try {
     await apiClient.put(`/dept-head/instructors/${selectedInstructor.value.id}`, {
       name: editForm.value.fullName,
       email: editForm.value.email,
-      ...(editForm.value.password ? { password: editForm.value.password } : {}),
+      phone: editForm.value.phone,
+      gender: editForm.value.gender,
+      id_no: editForm.value.employeeId,
+      year_level: editForm.value.year,
       semester: editForm.value.semester || null,
+      employment_type: editForm.value.employmentType === 'Part Time' ? 'part_time' : 'full_time',
+      ...(editForm.value.password ? { password: editForm.value.password } : {}),
     })
     await fetchInstructors()
     currentView.value = 'list'
@@ -129,7 +256,15 @@ const saveEditInstructor = async () => {
 
 const handleFileUpload = (e: Event) => {
   const target = e.target as HTMLInputElement
-  if (target.files && target.files[0]) addForm.value.profilePicture = target.files[0]
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    if (file.size > 2 * 1024 * 1024) {
+      addFormErrors.value.profilePicture = 'File size must be under 2MB'
+      return
+    }
+    delete addFormErrors.value.profilePicture
+    addForm.value.profilePicture = file
+  }
 }
 
 // ── Fetch Department Info ──
@@ -145,6 +280,9 @@ const years = ['2018', '2019', '2020', '2021', '2022', '2023', '2024']
 const fetchInstructors = async () => {
   try {
     const res = await apiClient.get('/dept-head/instructors')
+    if (res.data?.stats) {
+      serverStats.value = res.data.stats
+    }
     allInstructors.value = (res.data.data || []).map((i: any) => ({
       ...i,
       avatar: i.name ? i.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '??',
@@ -155,7 +293,12 @@ const fetchInstructors = async () => {
       year: i.year_level || 'N/A',
       section: i.section || 'N/A',
       status: i.status || 'active',
-      joined: new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      employment_type: i.employment_type || 'full_time',
+      can_edit: Boolean(i.can_edit),
+      can_delete: Boolean(i.can_delete),
+      is_admin_created: Boolean(i.is_admin_created),
+      creator_name: i.creator_name || (i.is_admin_created ? 'Super Admin' : 'Department Head'),
+      joined: i.created_at ? new Date(i.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
     }))
   } catch (err) { console.error('Failed to fetch instructors:', err) }
 }
@@ -177,12 +320,64 @@ const filtered = computed(() => {
 const totalPages  = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginated   = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
 
-const stats = computed(() => [
-  { label: 'Total Instructors', value: allInstructors.value.length || 18, change: '↑ 2 this semester', bg: 'bg-indigo-50', ic: 'text-[#5138ed]', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z', color: 'text-emerald-500' },
-  { label: 'Full Time', value: allInstructors.value.filter(i => i.status === 'active').length || 12, change: '↑ 1 this semester', bg: 'bg-emerald-50', ic: 'text-emerald-500', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', color: 'text-emerald-500' },
-  { label: 'Part Time', value: allInstructors.value.filter(i => i.status === 'part time').length || 6, change: '↑ 1 this semester', bg: 'bg-sky-50', ic: 'text-sky-500', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-emerald-500' },
-  { label: 'On Leave', value: 0, change: 'No change', bg: 'bg-amber-50', ic: 'text-amber-500', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', color: 'text-slate-400' }
-])
+const stats = computed(() => {
+  const total = serverStats.value?.total ?? allInstructors.value.length
+  const fullTime = serverStats.value?.full_time ?? allInstructors.value.filter(i => {
+    const et = (i.employment_type || '').toLowerCase()
+    const st = (i.status || '').toLowerCase()
+    return (et === 'full_time' || et === 'full time' || (!et && st === 'active')) && st !== 'on_leave'
+  }).length
+  const partTime = serverStats.value?.part_time ?? allInstructors.value.filter(i => {
+    const et = (i.employment_type || '').toLowerCase()
+    const st = (i.status || '').toLowerCase()
+    return et === 'part_time' || et === 'part time' || st === 'part time'
+  }).length
+  const onLeave = serverStats.value?.on_leave ?? allInstructors.value.filter(i => {
+    const st = (i.status || '').toLowerCase()
+    return st === 'on_leave' || st === 'on leave' || st === 'leave'
+  }).length
+
+  const newCount = serverStats.value?.new_this_semester ?? 0
+
+  return [
+    {
+      label: 'Total Instructors',
+      value: total,
+      change: newCount > 0 ? `↑ ${newCount} this semester` : (total > 0 ? 'Active department staff' : 'No instructors'),
+      bg: 'bg-indigo-50',
+      ic: 'text-[#5138ed]',
+      icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
+      color: 'text-emerald-500'
+    },
+    {
+      label: 'Full Time',
+      value: fullTime,
+      change: fullTime > 0 ? 'Full-time faculty' : 'No full-time staff',
+      bg: 'bg-emerald-50',
+      ic: 'text-emerald-500',
+      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+      color: 'text-emerald-500'
+    },
+    {
+      label: 'Part Time',
+      value: partTime,
+      change: partTime > 0 ? 'Part-time faculty' : 'No part-time staff',
+      bg: 'bg-sky-50',
+      ic: 'text-sky-500',
+      icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+      color: 'text-emerald-500'
+    },
+    {
+      label: 'On Leave',
+      value: onLeave,
+      change: onLeave > 0 ? 'Currently on leave' : 'No change',
+      bg: 'bg-amber-50',
+      ic: 'text-amber-500',
+      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+      color: 'text-slate-400'
+    }
+  ]
+})
 
 // ── Helpers ──
 const avatarColor = (id: number) => {
@@ -193,33 +388,74 @@ const statusBadge = (s: string) => s === 'active' ? 'bg-emerald-50 text-emerald-
 
 // ── Save Instructor ──
 const saveInstructor = async () => {
-  if (!addForm.value.fullName || !addForm.value.email || !addForm.value.password) return
+  if (!validateAddForm()) return
   isLoading.value = true
   try {
-    await apiClient.post('/dept-head/instructors', {
-      name: addForm.value.fullName,
-      email: addForm.value.email,
-      phone: addForm.value.phone,
-      gender: addForm.value.gender,
-      id_no: addForm.value.employeeId,
-      year_level: addForm.value.yearLevel,
-      username: addForm.value.username,
-      password: addForm.value.password,
+    const formData = new FormData()
+    formData.append('name', addForm.value.fullName.trim())
+    formData.append('email', addForm.value.email.trim())
+    formData.append('phone', addForm.value.phone.trim())
+    formData.append('gender', addForm.value.gender)
+    formData.append('id_no', addForm.value.employeeId.trim())
+    if (addForm.value.yearLevel) {
+      formData.append('year_level', addForm.value.yearLevel)
+    }
+    formData.append('username', addForm.value.username.trim())
+    formData.append('password', addForm.value.password)
+    formData.append('employment_type', 'full_time')
+    formData.append('status', 'active')
+    if (addForm.value.profilePicture) {
+      formData.append('profile_picture', addForm.value.profilePicture)
+    }
+
+    await apiClient.post('/dept-head/instructors', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     })
     await fetchInstructors()
     currentView.value = 'list'
   } catch (err: any) {
-    let msg = err.response?.data?.message || 'Failed to create instructor.'
-    if (err.response?.data?.errors) msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
-    alert(msg)
-  } finally { isLoading.value = false }
+    if (err.response?.data?.errors) {
+      const serverErrors = err.response.data.errors
+      if (serverErrors.name) addFormErrors.value.fullName = serverErrors.name[0]
+      if (serverErrors.email) addFormErrors.value.email = serverErrors.email[0]
+      if (serverErrors.phone) addFormErrors.value.phone = serverErrors.phone[0]
+      if (serverErrors.gender) addFormErrors.value.gender = serverErrors.gender[0]
+      if (serverErrors.id_no) addFormErrors.value.employeeId = serverErrors.id_no[0]
+      if (serverErrors.year_level) addFormErrors.value.yearLevel = serverErrors.year_level[0]
+      if (serverErrors.username) addFormErrors.value.username = serverErrors.username[0]
+      if (serverErrors.password) addFormErrors.value.password = serverErrors.password[0]
+      if (serverErrors.profile_picture) addFormErrors.value.profilePicture = serverErrors.profile_picture[0]
+
+      const msg = Object.values(serverErrors).flat().join('\n')
+      alert(msg)
+    } else {
+      const msg = err.response?.data?.message || 'Failed to create instructor.'
+      alert(msg)
+    }
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // ── Actions ──
 const openView = (instructor: any) => { selectedInstructor.value = instructor; currentView.value = 'detail' }
-const confirmDelete = (instructor: any) => { selectedInstructor.value = instructor; showDeleteModal.value = true }
+const confirmDelete = (instructor: any) => {
+  if (!instructor.can_delete) {
+    alert('This instructor was created by Super Admin and cannot be deleted by Department Head.')
+    return
+  }
+  selectedInstructor.value = instructor
+  showDeleteModal.value = true
+}
 const deleteInstructor = async () => {
   if (!selectedInstructor.value) return
+  if (!selectedInstructor.value.can_delete) {
+    alert('This instructor was created by Super Admin and cannot be deleted by Department Head.')
+    showDeleteModal.value = false
+    return
+  }
   isLoading.value = true
   try {
     await apiClient.delete(`/dept-head/instructors/${selectedInstructor.value.id}`)
@@ -277,24 +513,57 @@ const uniqueSections = computed(() => {
             <div class="grid grid-cols-3 gap-5">
               <div>
                 <label class="block text-[12px] font-semibold text-slate-700 mb-2">Full Name <span class="text-rose-500">*</span></label>
-                <input v-model="addForm.fullName" type="text" placeholder="Enter full name" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input
+                  v-model="addForm.fullName"
+                  type="text"
+                  placeholder="Enter full name"
+                  @input="validateAddFormField('fullName')"
+                  @blur="validateAddFormField('fullName')"
+                  :class="addFormErrors.fullName ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+                />
+                <p v-if="addFormErrors.fullName" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.fullName }}</p>
               </div>
               <div>
                 <label class="block text-[12px] font-semibold text-slate-700 mb-2">Email Address <span class="text-rose-500">*</span></label>
-                <input v-model="addForm.email" type="email" placeholder="Enter email address" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input
+                  v-model="addForm.email"
+                  type="email"
+                  placeholder="Enter email address"
+                  @input="validateAddFormField('email')"
+                  @blur="validateAddFormField('email')"
+                  :class="addFormErrors.email ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+                />
+                <p v-if="addFormErrors.email" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.email }}</p>
               </div>
               <div>
                 <label class="block text-[12px] font-semibold text-slate-700 mb-2">Phone Number <span class="text-rose-500">*</span></label>
-                <input v-model="addForm.phone" type="text" placeholder="Enter phone number" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input
+                  v-model="addForm.phone"
+                  type="text"
+                  placeholder="Enter phone number"
+                  @input="validateAddFormField('phone')"
+                  @blur="validateAddFormField('phone')"
+                  :class="addFormErrors.phone ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+                />
+                <p v-if="addFormErrors.phone" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.phone }}</p>
               </div>
             </div>
 
             <!-- Row 2: Gender | Employee ID | Academic Year Level -->
             <div class="grid grid-cols-3 gap-5">
               <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Gender</label>
+                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Gender <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <select v-model="addForm.gender" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
+                  <select
+                    v-model="addForm.gender"
+                    @change="validateAddFormField('gender')"
+                    @blur="validateAddFormField('gender')"
+                    :class="addFormErrors.gender ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                    class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:ring-1 transition-shadow"
+                  >
                     <option value="">Select gender</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -302,16 +571,26 @@ const uniqueSections = computed(() => {
                   </select>
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
+                <p v-if="addFormErrors.gender" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.gender }}</p>
               </div>
               <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Employee ID</label>
-                <input v-model="addForm.employeeId" type="text" placeholder="Enter employee ID" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Employee ID <span class="text-rose-500">*</span></label>
+                <input
+                  v-model="addForm.employeeId"
+                  type="text"
+                  placeholder="Enter employee ID"
+                  @input="validateAddFormField('employeeId')"
+                  @blur="validateAddFormField('employeeId')"
+                  :class="addFormErrors.employeeId ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+                />
+                <p v-if="addFormErrors.employeeId" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.employeeId }}</p>
               </div>
               <div>
-                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Academic Year Level</label>
+                <label class="block text-[12px] font-semibold text-slate-700 mb-2">Academic Year Level <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
                 <div class="relative">
                   <select v-model="addForm.yearLevel" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
-                    <option value="">Select year level</option>
+                    <option value="">Select year level (Optional)</option>
                     <option value="1st Year">1st Year</option>
                     <option value="2nd Year">2nd Year</option>
                     <option value="3rd Year">3rd Year</option>
@@ -325,13 +604,14 @@ const uniqueSections = computed(() => {
 
             <!-- Row 3: Profile Picture -->
             <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture</label>
-              <label class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-[#5138ed] hover:bg-indigo-50/30 transition-colors group">
+              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Profile Picture <span class="text-[11px] font-normal text-slate-400">(Optional)</span></label>
+              <label :class="addFormErrors.profilePicture ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 hover:border-[#5138ed] hover:bg-indigo-50/30'" class="flex flex-col items-center justify-center w-full h-[80px] border-2 border-dashed rounded-xl cursor-pointer transition-colors group">
                 <svg class="w-6 h-6 text-slate-300 group-hover:text-[#5138ed] mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ addForm.profilePicture ? addForm.profilePicture.name : 'Upload Photo' }}</p>
+                <p class="text-[12px] font-bold text-slate-600 group-hover:text-[#5138ed]">{{ addForm.profilePicture ? addForm.profilePicture.name : 'Upload Photo (Optional)' }}</p>
                 <p class="text-[11px] text-slate-400">PNG, JPG up to 2MB</p>
                 <input type="file" accept="image/*" @change="handleFileUpload" class="hidden" />
               </label>
+              <p v-if="addFormErrors.profilePicture" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.profilePicture }}</p>
             </div>
           </div>
         </div>
@@ -349,26 +629,106 @@ const uniqueSections = computed(() => {
           <div class="grid grid-cols-3 gap-5">
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Username <span class="text-rose-500">*</span></label>
-              <input v-model="addForm.username" type="text" placeholder="Enter username" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+              <input
+                v-model="addForm.username"
+                type="text"
+                placeholder="Enter username"
+                @input="validateAddFormField('username')"
+                @blur="validateAddFormField('username')"
+                :class="addFormErrors.username ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+              />
+              <p v-if="addFormErrors.username" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.username }}</p>
             </div>
             <div>
-              <label class="block text-[12px] font-semibold text-slate-700 mb-2">Password <span class="text-rose-500">*</span></label>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-[12px] font-semibold text-slate-700">Password <span class="text-rose-500">*</span></label>
+                <span v-if="addForm.password" class="text-[11px] font-bold" :class="addPasswordStrength.textClass">
+                  Strength: {{ addPasswordStrength.label }}
+                </span>
+              </div>
               <div class="relative">
-                <input v-model="addForm.password" :type="showPassword ? 'text' : 'password'" placeholder="Enter password" class="w-full border border-slate-200 rounded-xl px-4 py-3 pr-11 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input
+                  v-model="addForm.password"
+                  :type="showPassword ? 'text' : 'password'"
+                  placeholder="Min 8 chars with Aa, 1, #"
+                  @input="validateAddFormField('password')"
+                  @blur="validateAddFormField('password')"
+                  :class="[
+                    'w-full border rounded-xl px-4 py-3 pr-11 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow',
+                    addFormErrors.password
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
+                      : isAddPasswordValid
+                        ? 'border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500'
+                        : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'
+                  ]"
+                />
                 <button type="button" @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   <svg v-if="!showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                   <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
                 </button>
               </div>
+              <!-- Password Strength Bar -->
+              <div v-if="addForm.password" class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div class="h-full transition-all duration-300 rounded-full" :class="addPasswordStrength.barClass" :style="{ width: addPasswordStrength.width }"></div>
+              </div>
+              <p v-if="addFormErrors.password" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.password }}</p>
             </div>
             <div>
               <label class="block text-[12px] font-semibold text-slate-700 mb-2">Confirm Password <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <input v-model="addForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="Confirm password" class="w-full border border-slate-200 rounded-xl px-4 py-3 pr-11 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input
+                  v-model="addForm.confirmPassword"
+                  :type="showConfirmPassword ? 'text' : 'password'"
+                  placeholder="Confirm password"
+                  @input="validateAddFormField('confirmPassword')"
+                  @blur="validateAddFormField('confirmPassword')"
+                  :class="addFormErrors.confirmPassword ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 pr-11 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow"
+                />
                 <button type="button" @click="showConfirmPassword = !showConfirmPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   <svg v-if="!showConfirmPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                   <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
                 </button>
+              </div>
+              <p v-if="addFormErrors.confirmPassword" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.confirmPassword }}</p>
+            </div>
+          </div>
+
+          <!-- Real-time Password Requirements Checklist -->
+          <div class="mt-4 p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+            <p class="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              Password Requirements:
+            </p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="addPasswordRules.minLength ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path v-if="addPasswordRules.minLength" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                </svg>
+                <span>At least 8 characters</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="addPasswordRules.uppercase && addPasswordRules.lowercase ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path v-if="addPasswordRules.uppercase && addPasswordRules.lowercase" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                </svg>
+                <span>Uppercase & lowercase</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="addPasswordRules.number ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path v-if="addPasswordRules.number" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                </svg>
+                <span>At least one number (0-9)</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="addPasswordRules.special ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path v-if="addPasswordRules.special" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                </svg>
+                <span>Special char (!@#$%^&*)</span>
               </div>
             </div>
           </div>
@@ -676,10 +1036,16 @@ const uniqueSections = computed(() => {
               <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
               May 27, 2026 <span class="text-slate-400 font-normal">Tuesday</span>
             </div>
-            <button @click="backToList" class="flex items-center gap-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-xl transition-colors shadow-sm">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-              Back to Instructors
-            </button>
+            <div class="flex items-center gap-2">
+              <button v-if="selectedInstructor.can_edit" @click="openEditPage(selectedInstructor)" class="flex items-center gap-2 text-[12px] font-bold text-sky-600 bg-sky-50 border border-sky-200 hover:bg-sky-100 px-4 py-2 rounded-xl transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                Edit Instructor
+              </button>
+              <button @click="backToList" class="flex items-center gap-2 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-4 py-2 rounded-xl transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Back to Instructors
+              </button>
+            </div>
           </div>
         </div>
 
@@ -694,11 +1060,16 @@ const uniqueSections = computed(() => {
               <p class="text-[13px] font-semibold text-slate-500 mt-1 mb-3">{{ selectedInstructor.id_code }}</p>
               <div class="flex items-center gap-4 text-[13px] text-slate-500 font-medium">
                 <div class="flex items-center gap-1.5"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> {{ selectedInstructor.email }}</div>
-                <div class="flex items-center gap-1.5"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg> +251 9XX XXX XXX</div>
+                <div class="flex items-center gap-1.5"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg> {{ selectedInstructor.phone }}</div>
               </div>
-              <div class="mt-4 inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold capitalize bg-emerald-50 text-emerald-600 gap-1.5 border border-emerald-100">
-                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                {{ selectedInstructor.status }}
+              <div class="mt-4 flex items-center gap-2">
+                <div class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold capitalize bg-emerald-50 text-emerald-600 gap-1.5 border border-emerald-100">
+                  <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  {{ selectedInstructor.status }}
+                </div>
+                <div :class="[selectedInstructor.is_admin_created ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-indigo-50 text-[#5138ed] border-indigo-200', 'inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border']">
+                  {{ selectedInstructor.is_admin_created ? 'Created by Super Admin (View only)' : 'Created by Department Head' }}
+                </div>
               </div>
             </div>
           </div>
@@ -1004,9 +1375,27 @@ const uniqueSections = computed(() => {
               <td class="px-4 py-4"><span class="text-[12px] text-slate-600">{{ inst.section }}</span></td>
               <td class="px-6 py-4">
                 <div class="flex items-center justify-center gap-2">
-                  <button @click="openView(inst)" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
-                  <button @click="openEditPage(inst)" class="w-7 h-7 rounded-lg flex items-center justify-center text-sky-500 bg-sky-50 hover:bg-sky-100 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
-                  <button @click="confirmDelete(inst)" class="w-7 h-7 rounded-lg flex items-center justify-center text-rose-500 bg-rose-50 hover:bg-rose-100 transition-colors"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                  <!-- View Details: ALWAYS available -->
+                  <button @click="openView(inst)" title="View Details" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                  </button>
+
+                  <!-- Edit & Delete: ONLY available if instructor was created by Department Head -->
+                  <template v-if="inst.can_edit">
+                    <button @click="openEditPage(inst)" title="Edit Instructor" class="w-7 h-7 rounded-lg flex items-center justify-center text-sky-500 bg-sky-50 hover:bg-sky-100 transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                    <button @click="confirmDelete(inst)" title="Delete Instructor" class="w-7 h-7 rounded-lg flex items-center justify-center text-rose-500 bg-rose-50 hover:bg-rose-100 transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                  </template>
+
+                  <!-- If created by Super Admin: Cannot be edited or deleted by Department Head -->
+                  <template v-else>
+                    <span class="text-[10.5px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 select-none" title="Created by Super Admin. Only Super Admin can edit or delete this instructor.">
+                      Super Admin
+                    </span>
+                  </template>
                 </div>
               </td>
             </tr>
