@@ -69,6 +69,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('dashboard-stats', [\App\Http\Controllers\Api\V1\AdminDashboardController::class, 'index']);
         Route::apiResource('departments', \App\Http\Controllers\Api\V1\DepartmentController::class);
+        Route::post('departments/{department}/assign-head', [\App\Http\Controllers\Api\V1\DepartmentController::class, 'assignHead']);
         Route::apiResource('users', \App\Http\Controllers\Api\V1\AdminUserController::class);
         Route::post('users/{user}', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'update']);
         Route::get('users-export', [\App\Http\Controllers\Api\V1\AdminUserController::class, 'export']);
@@ -106,8 +107,11 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         // List all instructors (for assign-head modal), optionally filter by department_id
         Route::get('instructors', function (Request $request) {
             $query = \App\Models\User::whereIn('role', ['instructor', 'dept_head']);
-            if ($request->has('department_id')) {
-                $query->where('department_id', $request->department_id);
+            if ($request->has('department_id') && $request->department_id) {
+                $deptQuery = (clone $query)->where('department_id', $request->department_id);
+                if ($deptQuery->exists()) {
+                    $query = $deptQuery;
+                }
             }
             return response()->json([
                 'data' => $query->select('id', 'name', 'email', 'role', 'department_id', 'course_code', 'section')
@@ -121,6 +125,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // Department Head Routes
     // ------------------------------------------------------------------
     Route::prefix('dept-head')->group(function () {
+        Route::get('dashboard-stats', [\App\Http\Controllers\Api\V1\DeptHead\DashboardController::class, 'stats']);
         Route::apiResource('instructors', \App\Http\Controllers\Api\V1\DeptHead\InstructorController::class);
         Route::apiResource('courses', \App\Http\Controllers\Api\V1\DeptHead\CourseController::class);
         Route::get('students', [\App\Http\Controllers\Api\V1\DeptHead\StudentController::class, 'index']);

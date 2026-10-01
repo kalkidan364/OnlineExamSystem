@@ -199,7 +199,20 @@ class AuthController extends Controller
     {
         $request->validate([
             'current_password' => 'required|string',
-            'new_password'     => 'required|string|min:8|confirmed',
+            'new_password'     => [
+                'required',
+                'string',
+                'min:8',
+                'regex:/[a-z]/',
+                'regex:/[A-Z]/',
+                'regex:/[0-9]/',
+                'regex:/[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?`~]/',
+                'confirmed',
+            ],
+        ], [
+            'new_password.min' => 'New password must be at least 8 characters long.',
+            'new_password.regex' => 'New password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+            'new_password.confirmed' => 'New password confirmation does not match.',
         ]);
 
         $user = $request->user();

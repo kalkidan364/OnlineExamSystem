@@ -34,11 +34,7 @@ provide('toggleSidebar', toggleSidebar)
 
       <!-- Page Content -->
       <main class="flex-1 p-8">
-        <router-view v-slot="{ Component, route }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" :key="route.path" />
-          </transition>
-        </router-view>
+        <router-view :key="$route.fullPath" />
       </main>
 
     </div>
@@ -46,14 +42,6 @@ provide('toggleSidebar', toggleSidebar)
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

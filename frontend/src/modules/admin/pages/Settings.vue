@@ -157,20 +157,84 @@ const security = ref({
   confirmPassword: ''
 })
 
+const showCurrentPassword = ref(false)
+const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
+const currentPasswordTouched = ref(false)
+const newPasswordTouched = ref(false)
+const confirmPasswordTouched = ref(false)
+
 const passwordStatus = ref<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' })
 const isChangingPassword = ref(false)
 
+// Real-time password requirement rules
+const passwordRules = computed(() => {
+  const pwd = security.value.newPassword || ''
+  return {
+    minLength: pwd.length >= 8,
+    uppercase: /[A-Z]/.test(pwd),
+    lowercase: /[a-z]/.test(pwd),
+    number: /[0-9]/.test(pwd),
+    special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(pwd),
+  }
+})
+
+const isNewPasswordValid = computed(() => {
+  const r = passwordRules.value
+  return r.minLength && r.uppercase && r.lowercase && r.number && r.special
+})
+
+const passwordStrength = computed(() => {
+  const r = passwordRules.value
+  const metCount = [r.minLength, r.uppercase, r.lowercase, r.number, r.special].filter(Boolean).length
+  if (metCount <= 1) return { score: 1, label: 'Weak', barClass: 'bg-rose-500', textClass: 'text-rose-500', width: '25%' }
+  if (metCount <= 3) return { score: 2, label: 'Medium', barClass: 'bg-amber-500', textClass: 'text-amber-500', width: '50%' }
+  if (metCount === 4) return { score: 3, label: 'Good', barClass: 'bg-blue-500', textClass: 'text-blue-500', width: '75%' }
+  return { score: 4, label: 'Strong', barClass: 'bg-emerald-500', textClass: 'text-emerald-500', width: '100%' }
+})
+
+const passwordsMatch = computed(() => {
+  return (
+    security.value.confirmPassword.length > 0 &&
+    security.value.newPassword === security.value.confirmPassword
+  )
+})
+
+const isPasswordFormValid = computed(() => {
+  return (
+    security.value.currentPassword.trim().length > 0 &&
+    isNewPasswordValid.value &&
+    passwordsMatch.value
+  )
+})
+
 const changePassword = async () => {
+  currentPasswordTouched.value = true
+  newPasswordTouched.value = true
+  confirmPasswordTouched.value = true
+
   if (!security.value.currentPassword) {
     passwordStatus.value = { type: 'error', message: 'Please enter your current password.' }
     return
   }
-  if (security.value.newPassword.length < 8) {
+  if (!passwordRules.value.minLength) {
     passwordStatus.value = { type: 'error', message: 'New password must be at least 8 characters long.' }
     return
   }
+  if (!passwordRules.value.uppercase || !passwordRules.value.lowercase) {
+    passwordStatus.value = { type: 'error', message: 'New password must contain both uppercase and lowercase letters.' }
+    return
+  }
+  if (!passwordRules.value.number) {
+    passwordStatus.value = { type: 'error', message: 'New password must contain at least one number (0-9).' }
+    return
+  }
+  if (!passwordRules.value.special) {
+    passwordStatus.value = { type: 'error', message: 'New password must contain at least one special character (!@#$%^&*).' }
+    return
+  }
   if (security.value.newPassword !== security.value.confirmPassword) {
-    passwordStatus.value = { type: 'error', message: 'New passwords do not match.' }
+    passwordStatus.value = { type: 'error', message: 'Confirm password does not match new password.' }
     return
   }
 
@@ -188,6 +252,9 @@ const changePassword = async () => {
     security.value.currentPassword = ''
     security.value.newPassword = ''
     security.value.confirmPassword = ''
+    currentPasswordTouched.value = false
+    newPasswordTouched.value = false
+    confirmPasswordTouched.value = false
     setTimeout(() => { passwordStatus.value.type = null }, 4000)
 
   } catch (error: any) {
@@ -375,22 +442,186 @@ const saveSettings = async () => {
           </div>
 
           <div>
-            <label class="block text-[12px] font-bold text-slate-600 mb-1.5">Current Password</label>
-            <input v-model="security.currentPassword" type="password" placeholder="Enter your current password" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+            <label class="block text-[12px] font-bold text-slate-600 mb-1.5">
+              Current Password <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <input 
+                v-model="security.currentPassword" 
+                :type="showCurrentPassword ? 'text' : 'password'" 
+                @blur="currentPasswordTouched = true"
+                placeholder="Enter your current password" 
+                :class="[
+                  'w-full border rounded-xl px-4 py-2.5 pr-10 text-[13px] focus:outline-none transition-colors',
+                  currentPasswordTouched && !security.currentPassword
+                    ? 'border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]'
+                ]"
+              >
+              <button 
+                type="button" 
+                @click="showCurrentPassword = !showCurrentPassword" 
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                tabindex="-1"
+                title="Toggle password visibility"
+              >
+                <svg v-if="!showCurrentPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+              </button>
+            </div>
+            <p v-if="currentPasswordTouched && !security.currentPassword" class="text-[11px] font-bold text-rose-500 mt-1">
+              Current password is required
+            </p>
           </div>
+
           <div>
-            <label class="block text-[12px] font-bold text-slate-600 mb-1.5">New Password</label>
-            <input v-model="security.newPassword" type="password" placeholder="Minimum 8 characters" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-[12px] font-bold text-slate-600">
+                New Password <span class="text-rose-500">*</span>
+              </label>
+              <!-- Strength badge if user has typed something -->
+              <span v-if="security.newPassword" class="text-[11px] font-bold" :class="passwordStrength.textClass">
+                Strength: {{ passwordStrength.label }}
+              </span>
+            </div>
+            
+            <div class="relative">
+              <input 
+                v-model="security.newPassword" 
+                :type="showNewPassword ? 'text' : 'password'" 
+                @focus="newPasswordTouched = true"
+                @blur="newPasswordTouched = true"
+                placeholder="Minimum 8 characters with Aa, 1, #" 
+                :class="[
+                  'w-full border rounded-xl px-4 py-2.5 pr-10 text-[13px] focus:outline-none transition-colors',
+                  newPasswordTouched && !isNewPasswordValid && security.newPassword.length > 0
+                    ? 'border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'
+                    : isNewPasswordValid
+                      ? 'border-emerald-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                      : 'border-slate-200 focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]'
+                ]"
+              >
+              <button 
+                type="button" 
+                @click="showNewPassword = !showNewPassword" 
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                tabindex="-1"
+                title="Toggle password visibility"
+              >
+                <svg v-if="!showNewPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+              </button>
+            </div>
+
+            <!-- Password Strength Bar (when user types) -->
+            <div v-if="security.newPassword" class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+              <div class="h-full transition-all duration-300 rounded-full" :class="passwordStrength.barClass" :style="{ width: passwordStrength.width }"></div>
+            </div>
+
+            <!-- Real-time Password Requirements Checklist -->
+            <div class="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+              <p class="text-[11px] font-bold text-slate-600 mb-1 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Password Requirements:
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <!-- Minimum 8 chars -->
+                <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="passwordRules.minLength ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path v-if="passwordRules.minLength" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                  </svg>
+                  <span>At least 8 characters</span>
+                </div>
+
+                <!-- Uppercase -->
+                <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="passwordRules.uppercase ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path v-if="passwordRules.uppercase" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                  </svg>
+                  <span>One uppercase letter (A-Z)</span>
+                </div>
+
+                <!-- Lowercase -->
+                <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="passwordRules.lowercase ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path v-if="passwordRules.lowercase" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                  </svg>
+                  <span>One lowercase letter (a-z)</span>
+                </div>
+
+                <!-- Number -->
+                <div class="flex items-center gap-1.5 text-[11px] transition-colors" :class="passwordRules.number ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path v-if="passwordRules.number" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                  </svg>
+                  <span>One number (0-9)</span>
+                </div>
+
+                <!-- Special Character -->
+                <div class="flex items-center gap-1.5 text-[11px] transition-colors sm:col-span-2" :class="passwordRules.special ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path v-if="passwordRules.special" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    <circle v-else cx="12" cy="12" r="8" stroke-width="1.5"/>
+                  </svg>
+                  <span>One special symbol (!@#$%^&amp;* etc.)</span>
+                </div>
+              </div>
+            </div>
           </div>
+
           <div>
-            <label class="block text-[12px] font-bold text-slate-600 mb-1.5">Confirm New Password</label>
-            <input v-model="security.confirmPassword" type="password" placeholder="Re-enter new password" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+            <label class="block text-[12px] font-bold text-slate-600 mb-1.5">
+              Confirm New Password <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <input 
+                v-model="security.confirmPassword" 
+                :type="showConfirmPassword ? 'text' : 'password'" 
+                @blur="confirmPasswordTouched = true"
+                placeholder="Re-enter new password" 
+                :class="[
+                  'w-full border rounded-xl px-4 py-2.5 pr-10 text-[13px] focus:outline-none transition-colors',
+                  confirmPasswordTouched && !passwordsMatch && security.confirmPassword.length > 0
+                    ? 'border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
+                    : passwordsMatch && isNewPasswordValid
+                      ? 'border-emerald-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                      : 'border-slate-200 focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]'
+                ]"
+              >
+              <button 
+                type="button" 
+                @click="showConfirmPassword = !showConfirmPassword" 
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                tabindex="-1"
+                title="Toggle password visibility"
+              >
+                <svg v-if="!showConfirmPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+              </button>
+            </div>
+
+            <!-- Matching indicator -->
+            <div v-if="security.confirmPassword.length > 0" class="mt-1.5 flex items-center gap-1.5 text-[11px] font-bold">
+              <span v-if="passwordsMatch" class="text-emerald-600 flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                Passwords match
+              </span>
+              <span v-else class="text-rose-500 flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                Passwords do not match
+              </span>
+            </div>
           </div>
 
           <div class="pt-2">
-            <button @click="changePassword" :disabled="isChangingPassword || !security.currentPassword || !security.newPassword" 
-              class="w-full flex justify-center items-center gap-2 px-5 py-2.5 text-[13px] font-bold rounded-xl transition-all shadow-sm bg-slate-900 hover:bg-slate-800 text-white shadow-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button @click="changePassword" :disabled="isChangingPassword || !isPasswordFormValid" 
+              class="w-full flex justify-center items-center gap-2 px-5 py-2.5 text-[13px] font-bold rounded-xl transition-all shadow-sm bg-[#5138ed] hover:bg-indigo-700 text-white shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-98">
               <svg v-if="isChangingPassword" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               {{ isChangingPassword ? 'Updating Password...' : 'Update Password' }}
             </button>
           </div>

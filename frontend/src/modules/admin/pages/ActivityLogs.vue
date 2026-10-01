@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import apiClient from '../../../core/api/apiClient'
 
 interface LogEntry {
@@ -154,11 +154,69 @@ const filteredLogs = computed(() => {
   return logs.value
 })
 
-const totalPages = computed(() => Math.ceil(filteredLogs.value.length / perPage))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredLogs.value.length / perPage)))
+
 const paginatedLogs = computed(() => {
   const start = (currentPage.value - 1) * perPage
   const end = start + perPage
   return filteredLogs.value.slice(start, end)
+})
+
+const visiblePages = computed(() => {
+  const pages: (number | string)[] = []
+  const total = totalPages.value
+  const current = currentPage.value
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    if (current <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i)
+      pages.push('...')
+      pages.push(total)
+    } else if (current >= total - 3) {
+      pages.push(1)
+      pages.push('...')
+      for (let i = total - 4; i <= total; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      pages.push('...')
+      for (let i = current - 1; i <= current + 1; i++) pages.push(i)
+      pages.push('...')
+      pages.push(total)
+    }
+  }
+  return pages
+})
+
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const goToPage = (page: number | string) => {
+  if (typeof page === 'number' && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset to first page when filter changes
+watch(filterType, () => {
+  currentPage.value = 1
+})
+
+// Keep currentPage within bounds if filtered length changes
+watch(filteredLogs, (newVal) => {
+  const max = Math.max(1, Math.ceil(newVal.length / perPage))
+  if (currentPage.value > max) {
+    currentPage.value = max
+  }
 })
 
 const getRoleBadge = (role: string) => {
@@ -254,7 +312,12 @@ const getAvatarInitials = (name: string) => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
-              <tr v-for="log in paginatedLogs" :key="log.id" class="transition-colors hover:bg-slate-50/80" :class="!log.is_read ? 'bg-rose-50/20' : ''">
+              <tr v-if="filteredLogs.length === 0">
+                <td colspan="9" class="px-5 py-12 text-center text-slate-400 text-[13px] font-medium">
+                  No activity logs found for the selected filter.
+                </td>
+              </tr>
+              <tr v-else v-for="log in paginatedLogs" :key="log.id" class="transition-colors hover:bg-slate-50/80" :class="!log.is_read ? 'bg-rose-50/20' : ''">
                 <!-- Time -->
                 <td class="px-5 py-3 whitespace-nowrap relative">
                   <div v-if="!log.is_read" class="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
@@ -326,20 +389,41 @@ const getAvatarInitials = (name: string) => {
         </div>
 
         <!-- Pagination -->
-        <div class="px-5 py-4 border-t border-slate-100 flex items-center justify-between mt-auto">
-          <span class="text-[12px] font-bold text-slate-400">
-            Showing 1 to 10 of 245 activities
+        <div class="px-5 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 mt-auto bg-slate-50/30">
+          <span class="text-[12px] font-bold text-slate-500">
+            Showing <span class="font-bold text-slate-700">{{ filteredLogs.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }}</span> to <span class="font-bold text-slate-700">{{ Math.min(currentPage * perPage, filteredLogs.length) }}</span> of <span class="font-bold text-slate-700">{{ filteredLogs.length }}</span> activities
           </span>
           <div class="flex items-center gap-1.5">
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
+            <!-- Previous Button -->
+            <button 
+              @click="prevPage"
+              :disabled="currentPage <= 1"
+              title="Previous page"
+              class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:text-[#5138ed] hover:border-[#5138ed] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
             </button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-[#5138ed] text-white font-bold text-[12px]">1</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 font-bold text-[12px]">2</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 font-bold text-[12px]">3</button>
-            <span class="w-8 h-8 flex items-center justify-center text-slate-400 text-[12px]">...</span>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 font-bold text-[12px]">25</button>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
+
+            <!-- Page Number Buttons -->
+            <template v-for="(page, idx) in visiblePages" :key="idx">
+              <span v-if="page === '...'" class="w-8 h-8 flex items-center justify-center text-slate-400 text-[12px] font-bold select-none">...</span>
+              <button
+                v-else
+                @click="goToPage(page)"
+                :class="currentPage === page ? 'bg-[#5138ed] text-white border-[#5138ed] shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'"
+                class="w-8 h-8 flex items-center justify-center rounded-lg border text-[12px] font-bold transition-colors cursor-pointer"
+              >
+                {{ page }}
+              </button>
+            </template>
+
+            <!-- Next Button -->
+            <button 
+              @click="nextPage"
+              :disabled="currentPage >= totalPages"
+              title="Next page"
+              class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-white hover:text-[#5138ed] hover:border-[#5138ed] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </button>
           </div>
