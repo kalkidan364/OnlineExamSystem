@@ -2,14 +2,19 @@
 
 namespace App\Http\Controllers\Api\V1\DeptHead;
 
+use App\Exports\DepartmentInstructorExport;
+use App\Helpers\LogActivity;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\User;
-use App\Helpers\LogActivity;
-use Illuminate\Http\Request;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
 
 class InstructorController extends Controller
 {
@@ -278,5 +283,249 @@ class InstructorController extends Controller
         );
 
         return response()->json(['message' => 'Instructor deleted successfully']);
+    }
+
+    /**
+     * Export department instructors as PDF, Excel (.xlsx), or CSV.
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $deptId = $this->resolveDeptId($request);
+        $format = strtolower($request->query('format', 'excel'));
+
+        $dept = Department::find($deptId);
+        $deptName = $dept ? $dept->name : 'Department';
+
+        $query = User::where('department_id', $deptId)
+            ->whereIn('role', ['instructor', 'dept_head'])
+            ->with(['assignedCourses', 'coInstructorCourses', 'creator', 'department']);
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $status = strtolower($request->status);
+            if ($status === 'active') {
+                $query->where(function ($q) {
+                    $q->where('status', 'active')->orWhereNull('status');
+                });
+            } else {
+                $query->where('status', $status);
+            }
+        }
+
+        if ($request->filled('year') && $request->year !== 'all') {
+            $query->where('year_level', $request->year);
+        }
+
+        if ($request->filled('section') && $request->section !== 'all') {
+            $query->where('section', $request->section);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('id_no', 'like', "%{$search}%");
+            });
+        }
+
+        $instructors = $query->orderBy('name')->get();
+        $dateStr = now()->format('Y-m-d');
+        $sanitizedDept = preg_replace('/[^A-Za-z0-9_\-]/', '_', $deptName);
+        $baseFileName = "{$sanitizedDept}_Instructors_{$dateStr}";
+
+        if ($format === 'pdf') {
+            return $this->exportInstructorsPdf($instructors, $deptName, $baseFileName);
+        }
+
+        if ($format === 'csv') {
+            return $this->exportInstructorsCsv($instructors, $deptName, $baseFileName);
+        }
+
+        return $this->exportInstructorsExcel($instructors, $deptName, $baseFileName);
+    }
+
+    /**
+     * Export instructors as PDF using Dompdf.
+     */
+    private function exportInstructorsPdf($instructors, string $deptName, string $baseFileName): JsonResponse
+    {
+        $generatedAt = now()->format('F j, Y  H:i');
+        $totalRecords = $instructors->count();
+
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8">';
+        $html .= '<title>' . htmlspecialchars($deptName) . ' — Department Instructors</title>';
+        $html .= '<style>
+            @page { margin: 25px 25px 35px 25px; }
+            body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 8px; color: #1e293b; }
+            .header-table { width: 100%; border-bottom: 2px solid #5138ed; padding-bottom: 10px; margin-bottom: 12px; }
+            .university-title { font-size: 15px; font-weight: bold; color: #1e1b4b; text-transform: uppercase; letter-spacing: 0.5px; }
+            .dept-title { font-size: 11px; font-weight: bold; color: #5138ed; margin-top: 2px; }
+            .meta { font-size: 8px; color: #64748b; text-align: right; line-height: 1.4; }
+            table.data-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            table.data-table th { background: #5138ed; color: #ffffff; padding: 6px 4px; text-align: left; font-size: 7.5px; font-weight: bold; text-transform: uppercase; }
+            table.data-table td { padding: 5px 4px; border-bottom: 1px solid #e2e8f0; font-size: 7px; color: #334155; }
+            table.data-table tr:nth-child(even) td { background: #f8fafc; }
+            .badge-active { display: inline-block; padding: 2px 5px; border-radius: 4px; font-weight: bold; color: #15803d; background: #dcfce7; font-size: 6.5px; }
+            .badge-leave { display: inline-block; padding: 2px 5px; border-radius: 4px; font-weight: bold; color: #b45309; background: #fef3c7; font-size: 6.5px; }
+            .badge-inactive { display: inline-block; padding: 2px 5px; border-radius: 4px; font-weight: bold; color: #be123c; background: #ffe4e6; font-size: 6.5px; }
+            .badge-full { display: inline-block; padding: 2px 5px; border-radius: 4px; font-weight: bold; color: #4338ca; background: #e0e7ff; font-size: 6.5px; }
+            .badge-part { display: inline-block; padding: 2px 5px; border-radius: 4px; font-weight: bold; color: #0284c7; background: #e0f2fe; font-size: 6.5px; }
+            .footer { position: fixed; bottom: 10px; left: 25px; right: 25px; font-size: 7.5px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 4px; }
+        </style></head><body>';
+
+        $html .= '<table class="header-table"><tr>';
+        $html .= '<td><div class="university-title">Wollo University</div>';
+        $html .= '<div class="dept-title">Department of ' . htmlspecialchars($deptName) . ' — Instructors & Academic Staff</div></td>';
+        $html .= '<td class="meta"><strong>Date Generated:</strong> ' . $generatedAt . '<br><strong>Total Instructors:</strong> ' . $totalRecords . '</td>';
+        $html .= '</tr></table>';
+
+        $html .= '<table class="data-table"><thead><tr>';
+        $html .= '<th style="width: 25px;">#</th>';
+        $html .= '<th>Instructor Name</th>';
+        $html .= '<th>Employee ID</th>';
+        $html .= '<th>Email Address</th>';
+        $html .= '<th>Phone</th>';
+        $html .= '<th>Assigned Courses</th>';
+        $html .= '<th>Credits</th>';
+        $html .= '<th>Type</th>';
+        $html .= '<th>Status</th>';
+        $html .= '<th>Joined Date</th>';
+        $html .= '</tr></thead><tbody>';
+
+        if ($instructors->isEmpty()) {
+            $html .= '<tr><td colspan="10" style="text-align: center; padding: 15px; color: #94a3b8;">No instructor records found in this department.</td></tr>';
+        } else {
+            foreach ($instructors as $i => $inst) {
+                $status = strtolower($inst->status ?? 'active');
+                if ($status === 'on_leave' || $status === 'on leave') {
+                    $statusBadge = '<span class="badge-leave">On Leave</span>';
+                } elseif ($status === 'inactive') {
+                    $statusBadge = '<span class="badge-inactive">Inactive</span>';
+                } else {
+                    $statusBadge = '<span class="badge-active">Active</span>';
+                }
+
+                $et = strtolower($inst->employment_type ?? 'full_time');
+                $typeBadge = ($et === 'part_time' || $et === 'part time')
+                    ? '<span class="badge-part">Part-Time</span>'
+                    : '<span class="badge-full">Full-Time</span>';
+
+                $courses = $inst->assignedCourses?->pluck('title')->filter()->join(', ');
+                if (empty($courses)) {
+                    $courses = 'No Courses';
+                }
+                $credits = $inst->assignedCourses?->sum('credits') ?? 0;
+                $joinedDate = $inst->created_at ? $inst->created_at->format('M d, Y') : '—';
+
+                $html .= '<tr>';
+                $html .= '<td>' . ($i + 1) . '</td>';
+                $html .= '<td><strong>' . htmlspecialchars($inst->name ?? '') . '</strong></td>';
+                $html .= '<td>' . htmlspecialchars($inst->id_no ?? (string)$inst->id) . '</td>';
+                $html .= '<td>' . htmlspecialchars($inst->email ?? '') . '</td>';
+                $html .= '<td>' . htmlspecialchars($inst->phone ?? '—') . '</td>';
+                $html .= '<td>' . htmlspecialchars($courses) . '</td>';
+                $html .= '<td>' . $credits . '</td>';
+                $html .= '<td>' . $typeBadge . '</td>';
+                $html .= '<td>' . $statusBadge . '</td>';
+                $html .= '<td>' . $joinedDate . '</td>';
+                $html .= '</tr>';
+            }
+        }
+
+        $html .= '</tbody></table>';
+        $html .= '<div class="footer">Wollo University Online Examination System &bull; Confidential Department Document &bull; Generated by Department Head</div>';
+        $html .= '</body></html>';
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isPhpEnabled', false);
+        $options->set('defaultFont', 'DejaVu Sans');
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        $pdfOutput = $dompdf->output();
+
+        LogActivity::record('Exported', 'Instructors', "Exported {$totalRecords} instructors list as PDF ({$deptName})");
+
+        return response()->json([
+            'file'     => base64_encode($pdfOutput),
+            'filename' => $baseFileName . '.pdf',
+            'format'   => 'pdf',
+        ]);
+    }
+
+    /**
+     * Export instructors as Excel (.xlsx).
+     */
+    private function exportInstructorsExcel($instructors, string $deptName, string $baseFileName): JsonResponse
+    {
+        $export = new DepartmentInstructorExport($instructors);
+        $xlsxBytes = Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX);
+
+        LogActivity::record('Exported', 'Instructors', "Exported {$instructors->count()} instructors list as Excel ({$deptName})");
+
+        return response()->json([
+            'file'     => base64_encode($xlsxBytes),
+            'filename' => $baseFileName . '.xlsx',
+            'format'   => 'xlsx',
+        ]);
+    }
+
+    /**
+     * Export instructors as CSV (Excel-compatible UTF-8 BOM).
+     */
+    private function exportInstructorsCsv($instructors, string $deptName, string $baseFileName): JsonResponse
+    {
+        ob_start();
+        $handle = fopen('php://output', 'w');
+        // UTF-8 BOM for Microsoft Excel auto-detect
+        fputs($handle, "\xEF\xBB\xBF");
+
+        fputcsv($handle, [
+            '#', 'Full Name', 'Employee ID', 'Email Address', 'Phone', 'Gender',
+            'Department', 'Assigned Courses', 'Total Credits', 'Employment Type',
+            'Status', 'Academic Year', 'Section', 'Created By', 'Joined Date'
+        ]);
+
+        foreach ($instructors as $i => $inst) {
+            $courses = $inst->assignedCourses?->pluck('title')->filter()->join(', ');
+            if (empty($courses)) {
+                $courses = 'No Courses';
+            }
+            $credits = $inst->assignedCourses?->sum('credits') ?? 0;
+            $employment = ucfirst(str_replace('_', ' ', $inst->employment_type ?? 'full_time'));
+            $creatorName = $inst->creator ? $inst->creator->name : 'Super Admin';
+
+            fputcsv($handle, [
+                $i + 1,
+                $inst->name ?? '',
+                $inst->id_no ?? (string)$inst->id,
+                $inst->email ?? '',
+                $inst->phone ?? '—',
+                $inst->gender ?? '—',
+                $inst->department ? $inst->department->name : $deptName,
+                $courses,
+                $credits,
+                $employment,
+                ucfirst($inst->status ?? 'active'),
+                $inst->year_level ?? '—',
+                $inst->section ?? '—',
+                $creatorName,
+                $inst->created_at ? $inst->created_at->format('M d, Y') : '',
+            ]);
+        }
+        fclose($handle);
+        $csvContent = ob_get_clean();
+
+        LogActivity::record('Exported', 'Instructors', "Exported {$instructors->count()} instructors list as CSV ({$deptName})");
+
+        return response()->json([
+            'file'     => base64_encode($csvContent),
+            'filename' => $baseFileName . '.csv',
+            'format'   => 'csv',
+        ]);
     }
 }
