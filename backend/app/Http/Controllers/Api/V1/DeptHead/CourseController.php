@@ -30,13 +30,30 @@ class CourseController extends Controller
     public function index(Request $request): JsonResponse
     {
         $deptId = $this->resolveDeptId($request);
+        $currentUserId = $request->user()->id;
         
-        $courses = Course::with('instructor', 'creator', 'coInstructor')
+        $courses = Course::with(['instructor', 'creator', 'coInstructor'])
             ->where('department_id', $deptId)
             ->withCount('exams')
             ->get();
 
-        return response()->json(['data' => $courses]);
+        $data = $courses->map(function ($course) use ($currentUserId) {
+            $creatorRole = $course->creator ? $course->creator->role : null;
+            $isAdminCreated = in_array($creatorRole, ['super_admin', 'admin']) || ($course->created_by !== $currentUserId);
+            $isCreatedByDeptHead = !$isAdminCreated && ($course->created_by === $currentUserId);
+
+            $courseArray = $course->toArray();
+            $courseArray['can_edit'] = $isCreatedByDeptHead;
+            $courseArray['can_delete'] = $isCreatedByDeptHead;
+            $courseArray['can_assign'] = true;
+            $courseArray['is_admin_created'] = $isAdminCreated;
+            $courseArray['creator_name'] = $course->creator?->name ?? ($isCreatedByDeptHead ? 'Department Head' : 'Super Admin');
+            $courseArray['created_by_role'] = $isCreatedByDeptHead ? 'dept_head' : 'admin';
+
+            return $courseArray;
+        });
+
+        return response()->json(['data' => $data]);
     }
 
     /**
@@ -48,10 +65,10 @@ class CourseController extends Controller
 
         $request->validate([
             'title' => 'required|string|max:255',
-            'code' => 'required|string|unique:courses,code',
-            'credits' => 'required|integer',
-            'semester' => 'nullable|string',
-            'level' => 'nullable|string',
+            'code' => 'required|string|max:50|unique:courses,code',
+            'credits' => 'required|integer|min:1|max:30',
+            'semester' => 'required|string|max:100',
+            'level' => 'required|string|max:100',
             'instructor_id' => [
                 'nullable',
                 'exists:users,id',
@@ -96,17 +113,28 @@ class CourseController extends Controller
         $deptId = $this->resolveDeptId($request);
         $course = Course::where('department_id', $deptId)->findOrFail($id);
 
-        if ($course->created_by !== $request->user()->id) {
-            return response()->json(['message' => 'Unauthorized. You can only edit courses you created.'], 403);
+        $currentUserId = $request->user()->id;
+        $creatorRole = $course->creator ? $course->creator->role : null;
+        $isAdminCreated = in_array($creatorRole, ['super_admin', 'admin']) || ($course->created_by !== $currentUserId);
+
+        // Security / Permission Check:
+        // Courses created by Super Admin cannot be edited by Department Head.
+        // Department Head CAN, however, assign instructors and section.
+        if ($isAdminCreated) {
+            if ($request->hasAny(['title', 'code', 'credits', 'semester', 'level', 'status'])) {
+                return response()->json([
+                    'message' => 'Unauthorized. Courses created by Super Admin cannot be edited by Department Head. You can only assign instructors.'
+                ], 403);
+            }
         }
 
         $request->validate([
             'title' => 'sometimes|string|max:255',
             'code' => 'sometimes|string|unique:courses,code,' . $course->id,
-            'credits' => 'sometimes|integer',
-            'semester' => 'nullable|string',
-            'level' => 'nullable|string',
-            'section' => 'nullable|string',
+            'credits' => 'sometimes|integer|min:1|max:30',
+            'semester' => 'nullable|string|max:100',
+            'level' => 'nullable|string|max:100',
+            'section' => 'nullable|string|max:100',
             'status' => 'sometimes|in:active,inactive',
             'instructor_id' => [
                 'nullable',
@@ -130,7 +158,13 @@ class CourseController extends Controller
             ],
         ]);
 
-        $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'section', 'status', 'instructor_id', 'co_instructor_id']));
+        if ($isAdminCreated) {
+            // Only update assignment fields for courses created by Super Admin
+            $course->update($request->only(['instructor_id', 'co_instructor_id', 'section']));
+        } else {
+            // Update all permitted fields for courses created by Department Head
+            $course->update($request->only(['title', 'code', 'credits', 'semester', 'level', 'section', 'status', 'instructor_id', 'co_instructor_id']));
+        }
 
         // Sync instructor's section and year_level when assigning
         if ($request->has('instructor_id') && $request->instructor_id) {
@@ -170,8 +204,14 @@ class CourseController extends Controller
         $deptId = $this->resolveDeptId($request);
         $course = Course::where('department_id', $deptId)->findOrFail($id);
         
-        if ($course->created_by !== $request->user()->id) {
-            return response()->json(['message' => 'Unauthorized. You can only delete courses you created.'], 403);
+        $currentUserId = $request->user()->id;
+        $creatorRole = $course->creator ? $course->creator->role : null;
+        $isAdminCreated = in_array($creatorRole, ['super_admin', 'admin']) || ($course->created_by !== $currentUserId);
+
+        if ($isAdminCreated) {
+            return response()->json([
+                'message' => 'Unauthorized. Courses created by Super Admin cannot be deleted by Department Head.'
+            ], 403);
         }
         
         $courseTitle = $course->title;

@@ -22,6 +22,11 @@ const isLoading = ref(false)
 // ── Unauthorized Modal ──
 const showUnauthorizedModal = ref(false)
 
+// ── Success Popup Modal State ──
+const showSuccessModal = ref(false)
+const successModalTitle = ref('Course Created Successfully!')
+const successModalMessage = ref('')
+
 const allCourses = ref<any[]>([])
 const deptInstructors = ref<any[]>([])
 const currentUser = ref<any>(null)
@@ -90,19 +95,149 @@ const fetchDeptInfo = async () => {
   } catch { deptName.value = 'My Department' }
 }
 
+// ── Form Validation State (Add Course) ──
+const addFormErrors = ref<Record<string, string>>({})
+const addFormTouched = ref<Record<string, boolean>>({})
+
+const validateAddFormField = (field: string) => {
+  addFormTouched.value[field] = true
+
+  if (field === 'code') {
+    const val = (newCourse.value.code || '').trim()
+    if (!val) {
+      addFormErrors.value.code = 'Course code is required'
+    } else if (val.length < 2) {
+      addFormErrors.value.code = 'Course code must be at least 2 characters'
+    } else if (val.length > 50) {
+      addFormErrors.value.code = 'Course code cannot exceed 50 characters'
+    } else {
+      delete addFormErrors.value.code
+    }
+  } else if (field === 'title') {
+    const val = (newCourse.value.title || '').trim()
+    if (!val) {
+      addFormErrors.value.title = 'Course title is required'
+    } else if (val.length < 2) {
+      addFormErrors.value.title = 'Course title must be at least 2 characters'
+    } else if (val.length > 255) {
+      addFormErrors.value.title = 'Course title cannot exceed 255 characters'
+    } else {
+      delete addFormErrors.value.title
+    }
+  } else if (field === 'level') {
+    if (!newCourse.value.level) {
+      addFormErrors.value.level = 'Academic year level is required'
+    } else {
+      delete addFormErrors.value.level
+    }
+  } else if (field === 'credits') {
+    const rawVal = String(newCourse.value.credits ?? '').trim()
+    const num = Number(rawVal)
+    if (!rawVal) {
+      addFormErrors.value.credits = 'Credit hours are required'
+    } else if (isNaN(num) || !Number.isInteger(num) || num <= 0) {
+      addFormErrors.value.credits = 'Credits must be a positive whole number (e.g. 1 to 10)'
+    } else if (num > 30) {
+      addFormErrors.value.credits = 'Credits cannot exceed 30'
+    } else {
+      delete addFormErrors.value.credits
+    }
+  } else if (field === 'semester') {
+    const sem = (newCourse.value.semester || settingsStore.formattedAcademicTerm || '').trim()
+    if (!sem) {
+      addFormErrors.value.semester = 'Semester is required'
+    } else {
+      delete addFormErrors.value.semester
+    }
+  }
+}
+
+const validateAddForm = (): boolean => {
+  validateAddFormField('code')
+  validateAddFormField('title')
+  validateAddFormField('level')
+  validateAddFormField('credits')
+  validateAddFormField('semester')
+  return Object.keys(addFormErrors.value).length === 0
+}
+
+// ── Edit Form Validation State ──
+const editFormErrors = ref<Record<string, string>>({})
+const editFormTouched = ref<Record<string, boolean>>({})
+
+const validateEditFormField = (field: string) => {
+  editFormTouched.value[field] = true
+
+  if (field === 'code') {
+    const val = (newCourse.value.code || '').trim()
+    if (!val) {
+      editFormErrors.value.code = 'Course code is required'
+    } else if (val.length < 2) {
+      editFormErrors.value.code = 'Course code must be at least 2 characters'
+    } else {
+      delete editFormErrors.value.code
+    }
+  } else if (field === 'title') {
+    const val = (newCourse.value.title || '').trim()
+    if (!val) {
+      editFormErrors.value.title = 'Course title is required'
+    } else if (val.length < 2) {
+      editFormErrors.value.title = 'Course title must be at least 2 characters'
+    } else {
+      delete editFormErrors.value.title
+    }
+  } else if (field === 'level') {
+    if (!newCourse.value.level) {
+      editFormErrors.value.level = 'Academic year level is required'
+    } else {
+      delete editFormErrors.value.level
+    }
+  } else if (field === 'credits') {
+    const rawVal = String(newCourse.value.credits ?? '').trim()
+    const num = Number(rawVal)
+    if (!rawVal) {
+      editFormErrors.value.credits = 'Credit hours are required'
+    } else if (isNaN(num) || !Number.isInteger(num) || num <= 0) {
+      editFormErrors.value.credits = 'Credits must be a positive whole number'
+    } else {
+      delete editFormErrors.value.credits
+    }
+  }
+}
+
+const validateEditForm = (): boolean => {
+  validateEditFormField('code')
+  validateEditFormField('title')
+  validateEditFormField('level')
+  validateEditFormField('credits')
+  return Object.keys(editFormErrors.value).length === 0
+}
+
 // ── Fetch Courses ──
 const fetchCourses = async () => {
   try {
     const res = await apiClient.get('/dept-head/courses')
     const apiCourses = res.data.data || []
-    allCourses.value = apiCourses.map((c: any) => ({
-      ...c,
-      studentsEnrolled: c.students_count || 0,
-      exams: c.exams_count || 0,
-      createdByRole: c.creator?.role || 'admin',
-      createdByName: c.creator?.role === 'dept_head' || c.creator?.role === 'department_head' ? 'Dept. Head' : 'Admin',
-      co_instructor: c.co_instructor || null,
-    }))
+    allCourses.value = apiCourses.map((c: any) => {
+      const isCreator = c.created_by === currentUser.value?.id
+      const creatorIsAdmin = c.creator?.role === 'super_admin' || c.creator?.role === 'admin'
+      const canEdit = c.can_edit !== undefined ? Boolean(c.can_edit) : (isCreator && !creatorIsAdmin)
+      const canDelete = c.can_delete !== undefined ? Boolean(c.can_delete) : canEdit
+      const isAdminCreated = c.is_admin_created !== undefined ? Boolean(c.is_admin_created) : !canEdit
+
+      return {
+        ...c,
+        studentsEnrolled: c.students_count || 0,
+        exams: c.exams_count || 0,
+        can_edit: canEdit,
+        can_delete: canDelete,
+        can_assign: true,
+        is_admin_created: isAdminCreated,
+        createdByRole: canEdit ? 'dept_head' : 'admin',
+        createdByName: canEdit ? 'Dept. Head' : (c.creator_name || 'Super Admin'),
+        co_instructor: c.co_instructor || null,
+      }
+    })
   } catch (err) {
     console.error('Failed to fetch courses:', err)
     allCourses.value = []
@@ -130,9 +265,9 @@ const filtered = computed(() => {
     const s = search.value.toLowerCase()
     const matchSearch = t.includes(s) || cd.includes(s)
     const matchStatus = statusFilter.value === 'all' || c.status === statusFilter.value
-    const matchCreatedBy = createdByFilter.value === 'all' || c.createdByRole === createdByFilter.value || 
-      (createdByFilter.value === 'dept_head' && (c.createdByRole === 'dept_head' || c.createdByRole === 'department_head')) ||
-      (createdByFilter.value === 'admin' && c.createdByRole === 'admin')
+    const matchCreatedBy = createdByFilter.value === 'all' || 
+      (createdByFilter.value === 'dept_head' && c.can_edit) ||
+      (createdByFilter.value === 'admin' && (c.is_admin_created || !c.can_edit))
     const matchYearLevel = yearLevelFilter.value === 'all' || (c.level && c.level === yearLevelFilter.value)
     return matchSearch && matchStatus && matchCreatedBy && matchYearLevel
   })
@@ -168,9 +303,13 @@ const stats = computed(() => ({
 // ── Actions ──
 const openAddPage = () => {
   newCourse.value = {
-    code: '', title: '', department: '', level: '', semester: '', credits: '',
-    instructor_id: '', coInstructors: '', enrollmentStatus: '', visibility: '', startDate: '', endDate: '', status: 'active'
+    code: '', title: '', department: deptName.value, level: '', 
+    semester: settingsStore.formattedAcademicTerm || 'Spring 2026', 
+    credits: '' as any,
+    instructor_id: '', coInstructors: '', enrollmentStatus: 'Active', visibility: 'Visible', startDate: '', endDate: '', status: 'active'
   }
+  addFormErrors.value = {}
+  addFormTouched.value = {}
   currentView.value = 'add'
 }
 const openDetail = (course: any) => {
@@ -178,8 +317,8 @@ const openDetail = (course: any) => {
   currentView.value = 'detail'
 }
 const openEdit = (course: any) => {
-  // Block edit if created by admin
-  if (course.createdByRole === 'admin') {
+  // Block edit if created by Super Admin
+  if (!course.can_edit) {
     showUnauthorizedModal.value = true
     return
   }
@@ -187,9 +326,9 @@ const openEdit = (course: any) => {
   newCourse.value = {
     code: course.code || '',
     title: course.title || '',
-    department: course.department || '',
+    department: course.department || deptName.value,
     level: course.level || course.program || '',
-    semester: course.semester || '',
+    semester: course.semester || settingsStore.formattedAcademicTerm || '',
     credits: course.credits || '',
     instructor_id: course.instructor_id || course.instructor?.id || '',
     coInstructors: course.coInstructors || '',
@@ -199,46 +338,86 @@ const openEdit = (course: any) => {
     endDate: course.endDate || '',
     status: course.status || 'active'
   }
+  editFormErrors.value = {}
+  editFormTouched.value = {}
   showEditModal.value = true
 }
 const backToList = () => { currentView.value = 'list' }
 
 const addCourse = async () => {
-  if (!newCourse.value.title || !newCourse.value.code) return
+  if (!validateAddForm()) {
+    return
+  }
   isLoading.value = true
   try {
+    const sem = (newCourse.value.semester || settingsStore.formattedAcademicTerm || 'Spring 2026').trim()
+    const savedTitle = newCourse.value.title.trim()
+    const savedCode = newCourse.value.code.trim().toUpperCase()
+
     await apiClient.post('/dept-head/courses', {
-      title: newCourse.value.title,
-      code: newCourse.value.code,
-      credits: newCourse.value.credits || 3,
-      level: newCourse.value.level || null,
-      semester: settingsStore.formattedAcademicTerm || null,
+      title: savedTitle,
+      code: savedCode,
+      credits: parseInt(String(newCourse.value.credits)),
+      level: newCourse.value.level,
+      semester: sem,
       instructor_id: newCourse.value.instructor_id || null,
     })
     await fetchCourses()
     currentView.value = 'list'
+    successModalTitle.value = 'Course Created Successfully!'
+    successModalMessage.value = `The course "${savedTitle}" (${savedCode}) has been successfully saved and added to your department.`
+    showSuccessModal.value = true
+    setTimeout(() => {
+      showSuccessModal.value = false
+    }, 4000)
   } catch (err: any) {
+    if (err.response?.data?.errors) {
+      const beErrors = err.response.data.errors
+      if (beErrors.code) addFormErrors.value.code = beErrors.code[0]
+      if (beErrors.title) addFormErrors.value.title = beErrors.title[0]
+      if (beErrors.level) addFormErrors.value.level = beErrors.level[0]
+      if (beErrors.credits) addFormErrors.value.credits = beErrors.credits[0]
+      if (beErrors.semester) addFormErrors.value.semester = beErrors.semester[0]
+    }
     let msg = err.response?.data?.message || 'Failed to create course.'
-    if (err.response?.data?.errors) msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
+    if (err.response?.data?.errors) {
+      msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
+    }
     alert(msg)
   } finally { isLoading.value = false }
 }
 
 const updateCourse = async () => {
-  if (!newCourse.value.title || !newCourse.value.code) return
+  if (!selectedCourse.value?.can_edit) {
+    alert('This course was created by Super Admin and cannot be edited by Department Head.')
+    showEditModal.value = false
+    return
+  }
+  if (!validateEditForm()) {
+    return
+  }
   isLoading.value = true
   try {
+    const updatedTitle = newCourse.value.title.trim()
+    const updatedCode = newCourse.value.code.trim().toUpperCase()
+
     await apiClient.put(`/dept-head/courses/${selectedCourse.value.id}`, {
-      title: newCourse.value.title,
-      code: newCourse.value.code,
-      credits: newCourse.value.credits || 3,
-      level: newCourse.value.level || null,
-      semester: settingsStore.formattedAcademicTerm || null,
+      title: updatedTitle,
+      code: updatedCode,
+      credits: parseInt(String(newCourse.value.credits)),
+      level: newCourse.value.level,
+      semester: newCourse.value.semester || settingsStore.formattedAcademicTerm || null,
       instructor_id: newCourse.value.instructor_id || null,
       status: newCourse.value.status || 'active',
     })
     await fetchCourses()
     showEditModal.value = false
+    successModalTitle.value = 'Course Updated Successfully!'
+    successModalMessage.value = `The course "${updatedTitle}" (${updatedCode}) has been successfully updated.`
+    showSuccessModal.value = true
+    setTimeout(() => {
+      showSuccessModal.value = false
+    }, 4000)
   } catch (err: any) {
     let msg = err.response?.data?.message || 'Failed to update course.'
     if (err.response?.data?.errors) msg += '\n' + Object.values(err.response.data.errors).flat().join('\n')
@@ -246,14 +425,34 @@ const updateCourse = async () => {
   } finally { isLoading.value = false }
 }
 
-const confirmDelete = (course: any) => { selectedCourse.value = course; showDeleteModal.value = true }
+const confirmDelete = (course: any) => { 
+  if (!course.can_delete) {
+    alert('This course was created by Super Admin and cannot be deleted by Department Head.')
+    return
+  }
+  selectedCourse.value = course
+  showDeleteModal.value = true 
+}
+
 const deleteCourse = async () => {
   if (!selectedCourse.value) return
+  if (!selectedCourse.value.can_delete) {
+    alert('This course was created by Super Admin and cannot be deleted by Department Head.')
+    showDeleteModal.value = false
+    return
+  }
   isLoading.value = true
   try {
+    const deletedTitle = selectedCourse.value?.title || 'Course'
     await apiClient.delete(`/dept-head/courses/${selectedCourse.value.id}`)
     await fetchCourses()
     showDeleteModal.value = false
+    successModalTitle.value = 'Course Deleted Successfully!'
+    successModalMessage.value = `"${deletedTitle}" has been removed from the system.`
+    showSuccessModal.value = true
+    setTimeout(() => {
+      showSuccessModal.value = false
+    }, 4000)
   } catch (err: any) {
     alert(err.response?.data?.message || 'Failed to delete course.')
   } finally { isLoading.value = false }
@@ -277,7 +476,14 @@ const assignInstructor = async () => {
       section: assignSection.value || null
     })
     await fetchCourses()
+    const assignedCourseTitle = courseToAssign.value?.title || 'Course'
     showAssignModal.value = false
+    successModalTitle.value = 'Instructor Assigned Successfully!'
+    successModalMessage.value = `Instructor assignment for "${assignedCourseTitle}" has been successfully updated.`
+    showSuccessModal.value = true
+    setTimeout(() => {
+      showSuccessModal.value = false
+    }, 4000)
   } catch (err: any) {
     alert(err.response?.data?.message || 'Failed to assign instructor.')
   } finally { isLoading.value = false }
@@ -347,30 +553,57 @@ const getAvatarColor = (id: number) => {
             <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
               <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
             </div>
-            <h2 class="text-[16px] font-bold text-slate-800">Course Information</h2>
+            <div>
+              <h2 class="text-[16px] font-bold text-slate-800">Course Information</h2>
+              <p class="text-[12px] text-slate-400">All fields marked with an asterisk are required to create a new course.</p>
+            </div>
           </div>
           <div class="space-y-6">
             <!-- Row 1: Course Code, Course Title, Department -->
             <div class="grid grid-cols-3 gap-5">
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Code <span class="text-rose-500">*</span></label>
-                <input v-model="newCourse.code" type="text" placeholder="Enter course code" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input 
+                  v-model="newCourse.code" 
+                  type="text" 
+                  placeholder="Enter course code (e.g. CS-101)" 
+                  @input="validateAddFormField('code')"
+                  @blur="validateAddFormField('code')"
+                  :class="addFormErrors.code ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow" 
+                />
+                <p v-if="addFormErrors.code" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.code }}</p>
               </div>
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Title <span class="text-rose-500">*</span></label>
-                <input v-model="newCourse.title" type="text" placeholder="Enter course title" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input 
+                  v-model="newCourse.title" 
+                  type="text" 
+                  placeholder="Enter course title" 
+                  @input="validateAddFormField('title')"
+                  @blur="validateAddFormField('title')"
+                  :class="addFormErrors.title ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow" 
+                />
+                <p v-if="addFormErrors.title" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.title }}</p>
               </div>
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Department</label>
-                <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+                <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed select-none" />
               </div>
             </div>
-            <!-- Row 2: Program, Semester, Credits -->
+            <!-- Row 2: Academic Year Level, Semester, Credits -->
             <div class="grid grid-cols-3 gap-5">
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <select v-model="newCourse.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] transition-shadow">
+                  <select 
+                    v-model="newCourse.level" 
+                    @change="validateAddFormField('level')"
+                    @blur="validateAddFormField('level')"
+                    :class="addFormErrors.level ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                    class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:ring-1 transition-shadow"
+                  >
                     <option value="">Select year level</option>
                     <option value="1st Year">1st Year</option>
                     <option value="2nd Year">2nd Year</option>
@@ -379,20 +612,37 @@ const getAvatarColor = (id: number) => {
                   </select>
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
+                <p v-if="addFormErrors.level" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.level }}</p>
               </div>
               <div>
-                <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester</label>
-                <input type="text" :value="settingsStore.formattedAcademicTerm" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+                <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester <span class="text-rose-500">*</span></label>
+                <input 
+                  type="text" 
+                  :value="newCourse.semester || settingsStore.formattedAcademicTerm" 
+                  readonly 
+                  :class="addFormErrors.semester ? 'border-rose-400' : 'border-slate-200'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed select-none" 
+                />
+                <p v-if="addFormErrors.semester" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.semester }}</p>
               </div>
               <div>
                 <label class="block text-[13px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
-                <input v-model="newCourse.credits" type="text" placeholder="Enter credits" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400 transition-shadow" />
+                <input 
+                  v-model="newCourse.credits" 
+                  type="number" 
+                  min="1"
+                  max="30"
+                  placeholder="Enter credits (e.g. 3 or 4)" 
+                  @input="validateAddFormField('credits')"
+                  @blur="validateAddFormField('credits')"
+                  :class="addFormErrors.credits ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1 placeholder:text-slate-400 transition-shadow" 
+                />
+                <p v-if="addFormErrors.credits" class="text-rose-500 text-[11px] mt-1 font-medium">{{ addFormErrors.credits }}</p>
               </div>
             </div>
           </div>
         </div>
-
-
 
         <!-- Action Buttons -->
         <div class="flex items-center justify-end gap-4 pb-4">
@@ -422,7 +672,17 @@ const getAvatarColor = (id: number) => {
             <span class="text-slate-600 font-medium">Course Details</span>
           </div>
         </div>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <!-- Assign Instructor button in Detail view -->
+          <button @click="openAssign(selectedCourse)" class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+            Assign Instructor
+          </button>
+          <!-- Edit button: ONLY if can_edit -->
+          <button v-if="selectedCourse?.can_edit" @click="openEdit(selectedCourse)" class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-bold text-sky-600 bg-sky-50 border border-sky-200 hover:bg-sky-100 rounded-xl transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            Edit Course
+          </button>
           <!-- Back to Courses button -->
           <button @click="backToList" class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -435,11 +695,16 @@ const getAvatarColor = (id: number) => {
       <div class="space-y-6">
         <!-- Course Information -->
         <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-8">
-          <div class="flex items-center gap-3 mb-8">
-            <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
-              <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+          <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+              </div>
+              <h2 class="text-[16px] font-bold text-slate-800">Course Information</h2>
             </div>
-            <h2 class="text-[16px] font-bold text-slate-800">Course Information</h2>
+            <div :class="[selectedCourse?.is_admin_created ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-indigo-50 text-[#5138ed] border-indigo-200', 'inline-flex items-center px-3 py-1 rounded-lg text-[12px] font-semibold border']">
+              {{ selectedCourse?.is_admin_created ? 'Created by Super Admin (View only & Assign)' : 'Created by Department Head' }}
+            </div>
           </div>
           <div class="grid grid-cols-3 gap-y-8 gap-x-6">
             <div>
@@ -681,23 +946,24 @@ const getAvatarColor = (id: number) => {
                 </td>
                 <!-- Actions -->
                 <td class="px-4 py-4">
-                  <div class="flex items-center justify-center gap-1">
-                    <!-- Assign Instructor -->
+                  <div class="flex items-center justify-center gap-1.5">
+                    <!-- Assign Instructor: Always available for all courses (Super Admin & Dept Head) -->
                     <button @click="openAssign(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 transition-all" title="Assign Instructor">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
                     </button>
-                    <!-- View -->
+                    <!-- View Details: Always available for all courses -->
                     <button @click="openDetail(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-all" title="View Details">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     </button>
-                    <!-- Edit -->
-                    <button @click="openEdit(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-all" title="Edit Course">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                    </button>
-                    <!-- Delete -->
-                    <button @click="confirmDelete(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Delete Course">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
+                    <!-- Edit & Delete: ONLY available if course was created by Department Head -->
+                    <template v-if="course.can_edit">
+                      <button @click="openEdit(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-all" title="Edit Course">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                      </button>
+                      <button @click="confirmDelete(course)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Delete Course">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </template>
                   </div>
                 </td>
               </tr>
@@ -844,20 +1110,42 @@ const getAvatarColor = (id: number) => {
           <div class="grid grid-cols-2 gap-5 mb-6">
             <div>
               <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Code <span class="text-rose-500">*</span></label>
-              <input v-model="newCourse.code" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+              <input 
+                v-model="newCourse.code" 
+                type="text" 
+                @input="validateEditFormField('code')"
+                @blur="validateEditFormField('code')"
+                :class="editFormErrors.code ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1" 
+              />
+              <p v-if="editFormErrors.code" class="text-rose-500 text-[11px] mt-1 font-medium">{{ editFormErrors.code }}</p>
             </div>
             <div>
               <label class="block text-[13px] font-bold text-slate-700 mb-2">Course Title <span class="text-rose-500">*</span></label>
-              <input v-model="newCourse.title" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+              <input 
+                v-model="newCourse.title" 
+                type="text" 
+                @input="validateEditFormField('title')"
+                @blur="validateEditFormField('title')"
+                :class="editFormErrors.title ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1" 
+              />
+              <p v-if="editFormErrors.title" class="text-rose-500 text-[11px] mt-1 font-medium">{{ editFormErrors.title }}</p>
             </div>
             <div>
               <label class="block text-[13px] font-bold text-slate-700 mb-2">Department</label>
-              <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+              <input type="text" :value="deptName" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed select-none" />
             </div>
             <div>
               <label class="block text-[13px] font-bold text-slate-700 mb-2">Academic Year Level <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <select v-model="newCourse.level" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]">
+                <select 
+                  v-model="newCourse.level" 
+                  @change="validateEditFormField('level')"
+                  @blur="validateEditFormField('level')"
+                  :class="editFormErrors.level ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                  class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-600 bg-white appearance-none focus:outline-none focus:ring-1"
+                >
                   <option value="">Select year level</option>
                   <option value="1st Year">1st Year</option>
                   <option value="2nd Year">2nd Year</option>
@@ -866,14 +1154,25 @@ const getAvatarColor = (id: number) => {
                 </select>
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
+              <p v-if="editFormErrors.level" class="text-rose-500 text-[11px] mt-1 font-medium">{{ editFormErrors.level }}</p>
             </div>
             <div>
-              <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester</label>
-              <input type="text" :value="settingsStore.formattedAcademicTerm" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed" />
+              <label class="block text-[13px] font-bold text-slate-700 mb-2">Semester <span class="text-rose-500">*</span></label>
+              <input type="text" :value="newCourse.semester || settingsStore.formattedAcademicTerm" readonly class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-500 bg-slate-50 cursor-not-allowed select-none" />
             </div>
             <div>
               <label class="block text-[13px] font-bold text-slate-700 mb-2">Credits <span class="text-rose-500">*</span></label>
-              <input v-model="newCourse.credits" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed]" />
+              <input 
+                v-model="newCourse.credits" 
+                type="number" 
+                min="1"
+                max="30"
+                @input="validateEditFormField('credits')"
+                @blur="validateEditFormField('credits')"
+                :class="editFormErrors.credits ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:border-[#5138ed] focus:ring-[#5138ed]'"
+                class="w-full border rounded-xl px-4 py-3 text-[13px] text-slate-700 focus:outline-none focus:ring-1" 
+              />
+              <p v-if="editFormErrors.credits" class="text-rose-500 text-[11px] mt-1 font-medium">{{ editFormErrors.credits }}</p>
             </div>
             
             <div class="col-span-2">
@@ -901,6 +1200,26 @@ const getAvatarColor = (id: number) => {
               {{ isLoading ? 'Saving...' : 'Save Changes' }}
             </button>
           </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Success Popup Modal ── -->
+    <Teleport to="body">
+      <div v-if="showSuccessModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center transform transition-all animate-in zoom-in-95 duration-200">
+          <div class="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mb-5 ring-8 ring-emerald-50/50">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+          <h2 class="text-[20px] font-bold text-slate-800 mb-2">{{ successModalTitle }}</h2>
+          <p class="text-[13px] text-slate-500 font-medium leading-relaxed mb-6">
+            {{ successModalMessage }}
+          </p>
+          <button @click="showSuccessModal = false" class="w-full py-3 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm shadow-emerald-200 cursor-pointer">
+            Done
+          </button>
         </div>
       </div>
     </Teleport>

@@ -371,7 +371,70 @@ const fetchInstructors = async () => {
   } catch (err) { console.error('Failed to fetch instructors:', err) }
 }
 
-onMounted(async () => { await fetchDeptInfo(); await fetchInstructors() })
+// ── Export Handling ──
+const showExportDropdown = ref(false)
+const isExporting = ref(false)
+
+const handleExport = async (format: 'pdf' | 'excel' | 'csv') => {
+  showExportDropdown.value = false
+  isExporting.value = true
+  try {
+    const params: Record<string, string> = { format }
+    if (search.value) params.search = search.value
+    if (statusFilter.value !== 'all') params.status = statusFilter.value
+    if (yearFilter.value !== 'all') params.year = yearFilter.value
+    if (sectionFilter.value !== 'all') params.section = sectionFilter.value
+
+    const res = await apiClient.get('/dept-head/instructors/export', { params })
+    const { file, filename } = res.data
+
+    if (!file || !filename) {
+      throw new Error('Export payload missing file data')
+    }
+
+    const binary = atob(file)
+    const array = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      array[i] = binary.charCodeAt(i)
+    }
+
+    let mimeType = 'application/octet-stream'
+    if (format === 'pdf') {
+      mimeType = 'application/pdf'
+    } else if (format === 'excel') {
+      mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    } else if (format === 'csv') {
+      mimeType = 'text/csv;charset=utf-8;'
+    }
+
+    const blob = new Blob([array], { type: mimeType })
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err: any) {
+    console.error('Export error:', err)
+    alert(err?.response?.data?.message || 'Failed to export instructors. Please try again.')
+  } finally {
+    isExporting.value = false
+  }
+}
+
+onMounted(async () => {
+  await fetchDeptInfo()
+  await fetchInstructors()
+  const handleOutsideClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('.export-dropdown-container')) {
+      showExportDropdown.value = false
+    }
+  }
+  window.addEventListener('click', handleOutsideClick)
+})
 
 // ── Computed ──
 const filtered = computed(() => {
@@ -1465,10 +1528,68 @@ const uniqueSections = computed(() => {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
             Add Instructor
           </button>
-          <button class="flex items-center gap-2 bg-white border border-slate-200 hover:border-[#5138ed] hover:text-[#5138ed] text-slate-600 text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            Export
-          </button>
+          <div class="relative export-dropdown-container">
+            <button
+              type="button"
+              @click="showExportDropdown = !showExportDropdown"
+              :disabled="isExporting"
+              class="flex items-center gap-2 bg-white border border-slate-200 hover:border-[#5138ed] hover:text-[#5138ed] text-slate-600 text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            >
+              <svg v-if="!isExporting" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+              <svg v-else class="animate-spin w-4 h-4 text-[#5138ed]" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <span>{{ isExporting ? 'Exporting...' : 'Export' }}</span>
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+
+            <!-- Export Options Dropdown -->
+            <div
+              v-if="showExportDropdown"
+              class="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 overflow-hidden"
+            >
+              <div class="px-3 py-1.5 border-b border-slate-100 mb-1">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Export Format</p>
+              </div>
+              <button
+                type="button"
+                @click="handleExport('pdf')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-indigo-50/70 hover:text-[#5138ed] transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as PDF</p>
+                  <p class="text-[10px] text-slate-400">Printable document (.pdf)</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                @click="handleExport('excel')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-emerald-50/70 hover:text-emerald-600 transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as Excel</p>
+                  <p class="text-[10px] text-slate-400">Spreadsheet file (.xlsx)</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                @click="handleExport('csv')"
+                class="w-full text-left px-3.5 py-2 text-[12.5px] font-medium text-slate-700 hover:bg-sky-50/70 hover:text-sky-600 transition-colors flex items-center gap-2.5 cursor-pointer"
+              >
+                <div class="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                </div>
+                <div>
+                  <p class="font-bold leading-tight">Export as CSV</p>
+                  <p class="text-[10px] text-slate-400">Comma-separated (.csv)</p>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
