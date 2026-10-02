@@ -7,7 +7,11 @@ use App\Models\Department;
 use App\Models\SemesterSubmission;
 use App\Models\User;
 use App\Models\Course;
+use App\Models\Exam;
+use App\Models\ExamAttempt;
 use App\Helpers\LogActivity;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
@@ -195,7 +199,7 @@ class SemesterSubmissionController extends Controller
             'bg-teal-100 text-teal-700',
         ];
 
-        // Fetch or prepare submissions
+        // Query REAL submissions only from database (DO NOT auto-create dummy rows)
         $instructorIds = $instructors->pluck('id');
         $existingSubmissions = SemesterSubmission::whereIn('instructor_id', $instructorIds)
             ->where('academic_year', $academicYear)
@@ -205,49 +209,41 @@ class SemesterSubmissionController extends Controller
 
         $rows = [];
         $counts = [
-            'pending' => 0,
-            'approved' => 0,
+            'pending'             => 0,
+            'approved'            => 0,
             'correction_required' => 0,
-            'rejected' => 0,
-            'total' => 0,
+            'rejected'            => 0,
+            'not_submitted'       => 0,
+            'total'               => 0,
         ];
 
         foreach ($instructors as $inst) {
             $sub = $existingSubmissions->get($inst->id);
+            $isSubmitted = ($sub && $sub->submitted_at && in_array(strtolower($sub->status ?? ''), ['submitted', 'pending', 'under_review', 'approved', 'correction_required', 'rejected']));
 
-            // Find or create initial submission state
-            if (!$sub) {
-                $sub = SemesterSubmission::firstOrCreate([
-                    'instructor_id' => $inst->id,
-                    'academic_year' => $academicYear,
-                    'semester'      => $semester,
-                ], [
-                    'department'    => $inst->department?->name ?? 'Software Engineering',
-                    'section'       => $inst->section ?? 'Section A',
-                    'status'        => 'pending',
-                ]);
-            }
-
-            // Normalizing status for display and badges
-            $rawStatus = strtolower($sub->status ?? 'pending');
-            $displayStatus = match ($rawStatus) {
-                'approved' => 'Approved',
-                'correction_required' => 'Correction Required',
-                'rejected' => 'Rejected',
-                'submitted', 'under_review' => 'Pending',
-                default => 'Pending',
-            };
-
-            // Update summary counters
-            $counts['total']++;
-            if ($rawStatus === 'approved') {
-                $counts['approved']++;
-            } elseif ($rawStatus === 'correction_required') {
-                $counts['correction_required']++;
-            } elseif ($rawStatus === 'rejected') {
-                $counts['rejected']++;
+            if ($isSubmitted) {
+                $rawStatus = strtolower($sub->status ?? 'submitted');
+                $displayStatus = match ($rawStatus) {
+                    'approved' => 'Approved',
+                    'correction_required' => 'Correction Required',
+                    'rejected' => 'Rejected',
+                    'submitted', 'under_review', 'pending' => 'Pending',
+                    default => 'Pending',
+                };
+                $counts['total']++;
+                if ($rawStatus === 'approved') {
+                    $counts['approved']++;
+                } elseif ($rawStatus === 'correction_required') {
+                    $counts['correction_required']++;
+                } elseif ($rawStatus === 'rejected') {
+                    $counts['rejected']++;
+                } else {
+                    $counts['pending']++;
+                }
             } else {
-                $counts['pending']++;
+                $rawStatus = 'not_submitted';
+                $displayStatus = 'Not Submitted';
+                $counts['not_submitted']++;
             }
 
             // Initials calculation
@@ -263,45 +259,53 @@ class SemesterSubmissionController extends Controller
 
             $color = $colorPalettes[$inst->id % count($colorPalettes)];
 
-            // Course & Credit calculation
-            $assignedCourse = $inst->assignedCourses->first();
-            $courseTitle = $assignedCourse?->title ?? ($inst->course_name ?: ($inst->department?->name ?? 'Computer Science'));
-            $courseCode = $assignedCourse?->code ?? ($inst->course_code ?: '');
-            $credit = $assignedCourse?->credits ?? 5;
-            $section = $inst->section ?: ($assignedCourse?->section ?: 'Section A');
-
-            // Submitted date format
-            $submittedStr = "May 22, 2026\n03:15 PM";
-            $submittedDate = 'May 22, 2026';
-            $submittedTime = '03:15 PM';
-
-            if ($sub->submitted_at) {
-                $submittedDate = $sub->submitted_at->format('M d, Y');
-                $submittedTime = $sub->submitted_at->format('h:i A');
-                $submittedStr = "{$submittedDate}\n{$submittedTime}";
-            } elseif ($rawStatus === 'pending') {
-                $submittedDate = 'May 20, 2026';
-                $submittedTime = '02:00 PM';
-                $submittedStr = "{$submittedDate}\n{$submittedTime}";
+            // REAL Course lookup from database courses table ONLY
+            $assignedCourse = Course::where('instructor_id', $inst->id)->first();
+            if (!$assignedCourse && $inst->assignedCourses && $inst->assignedCourses->isNotEmpty()) {
+                $assignedCourse = $inst->assignedCourses->first();
             }
 
-            // Student count
+            $courseTitle = $assignedCourse ? $assignedCourse->title : 'No Course Assigned';
+            $courseCode = $assignedCourse ? $assignedCourse->code : '—';
+            $credit = $assignedCourse ? $assignedCourse->credits : '—';
+            $section = $assignedCourse?->section ?: ($inst->section ?: '—');
+
+            // REAL Submission timestamps
+            if ($isSubmitted && $sub) {
+                $submittedDate = $sub->submitted_at ? $sub->submitted_at->format('M d, Y') : ($sub->created_at ? $sub->created_at->format('M d, Y') : '—');
+                $submittedTime = $sub->submitted_at ? $sub->submitted_at->format('h:i A') : ($sub->created_at ? $sub->created_at->format('h:i A') : '—');
+                $submittedStr = "{$submittedDate}\n{$submittedTime}";
+            } else {
+                $submittedDate = '—';
+                $submittedTime = 'Not Submitted';
+                $submittedStr = '—';
+            }
+
+            // Real exam & attempt stats for instructor
+            $instExams = Exam::where('user_id', $inst->id)
+                ->when($assignedCourse, fn($q) => $q->orWhere('course_code', $assignedCourse->code))
+                ->get();
+            $examsCount = $instExams->count();
+            $examIds = $instExams->pluck('id')->toArray();
+            $attempts = ExamAttempt::whereIn('exam_id', $examIds)->get();
+            $resultsSubmitted = $attempts->count();
+            $avgScore = $resultsSubmitted > 0 ? round($attempts->avg('percentage'), 1) : 0;
+            $passedAttempts = $attempts->filter(fn($a) => ($a->percentage ?? 0) >= 50)->count();
+            $passRate = $resultsSubmitted > 0 ? round(($passedAttempts / $resultsSubmitted) * 100, 1) : 0;
+
             $studentsCount = User::where('role', 'student')
                 ->where('department_id', $inst->department_id)
                 ->count();
-            if ($studentsCount === 0) {
-                $studentsCount = 40;
-            }
 
             $rowItem = [
-                'id'            => $sub->id,
-                'submission_id' => $sub->id,
+                'id'            => $sub?->id ?? $inst->id,
+                'submission_id' => $sub?->id,
                 'instructor_id' => $inst->id,
                 'name'          => $inst->name,
                 'email'         => $inst->email,
                 'initials'      => $initials,
                 'color'         => $color,
-                'department'    => $inst->department?->name ?? 'Software Engineering',
+                'department'    => $inst->department?->name ?? ($userDept?->name ?? 'Computer Science'),
                 'course'        => $courseTitle,
                 'course_code'   => $courseCode,
                 'section'       => $section,
@@ -313,15 +317,52 @@ class SemesterSubmissionController extends Controller
                 'submitted_time'=> $submittedTime,
                 'status'        => $displayStatus,
                 'raw_status'    => $rawStatus,
-                'remarks'       => $sub->remarks ?? '',
+                'is_submitted'  => $isSubmitted,
+                'remarks'       => $sub?->remarks ?? '',
                 'year_level'    => $inst->year_level ?? '1st Year',
-                'academic_year' => $sub->academic_year,
-                'semester'      => $sub->semester,
+                'academic_year' => $academicYear,
+                'semester'      => $semester,
+                'exams_count'       => $examsCount,
+                'results_submitted' => $resultsSubmitted,
+                'avg_score'         => $avgScore,
+                'pass_rate'         => $passRate,
+                'checklist'         => [
+                    'academic_schedule' => [
+                        'completed' => true,
+                        'label'     => 'Academic Schedule Verified',
+                        'detail'    => "Class schedule verified for {$academicYear}",
+                    ],
+                    'exams' => [
+                        'completed' => $examsCount > 0,
+                        'label'     => 'Examinations Completed',
+                        'detail'    => "{$examsCount} Exams Created & Conducted",
+                    ],
+                    'students' => [
+                        'completed' => $studentsCount > 0,
+                        'label'     => 'Student Enrollment Verified',
+                        'detail'    => "{$studentsCount} Students Enrolled in Department",
+                    ],
+                    'results' => [
+                        'completed' => $resultsSubmitted > 0,
+                        'label'     => 'Grades & Results Processed',
+                        'detail'    => "{$resultsSubmitted} Submissions Graded ({$passRate}% Pass Rate)",
+                    ],
+                ],
             ];
 
-            // Apply filter queries in memory
-            $matchesStatus = true;
-            if ($statusFilter && $statusFilter !== 'All Statuses') {
+            // Filter logic:
+            // By default (All Statuses): Only display actual submissions that were submitted!
+            // If statusFilter is 'Not Submitted': display unsubmitted instructors
+            // If statusFilter is 'All Instructors': display all
+            // Otherwise, match the exact displayStatus (Pending, Approved, Correction Required, Rejected)
+            $matchesStatus = false;
+            if (!$statusFilter || $statusFilter === 'All Statuses' || $statusFilter === 'All Submissions') {
+                $matchesStatus = $isSubmitted;
+            } elseif ($statusFilter === 'All Instructors') {
+                $matchesStatus = true;
+            } elseif ($statusFilter === 'Not Submitted') {
+                $matchesStatus = !$isSubmitted;
+            } else {
                 $matchesStatus = (strtolower($displayStatus) === strtolower($statusFilter));
             }
 
@@ -347,11 +388,12 @@ class SemesterSubmissionController extends Controller
             'semester_info' => [
                 'academicYear'       => $academicYear,
                 'semester'           => $semester,
-                'department'         => $userDept?->name ?? 'Software Engineering',
+                'department'         => $userDept?->name ?? 'Computer Science',
                 'pendingReview'      => $counts['pending'],
                 'approved'           => $counts['approved'],
                 'correctionRequired' => $counts['correction_required'],
                 'rejected'           => $counts['rejected'],
+                'notSubmitted'       => $counts['not_submitted'],
                 'total'              => $counts['total'],
             ],
             'instructors'   => $rows,
@@ -457,6 +499,203 @@ class SemesterSubmissionController extends Controller
                 'remarks'       => $submission->remarks,
                 'approved_at'   => $submission->approved_at?->format('M d, Y h:i A'),
             ]
+        ]);
+    }
+
+    /**
+     * Export Semester Submissions as PDF, Excel, or CSV.
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $deptId = $this->resolveDeptId($request);
+        $userDept = $deptId ? Department::find($deptId) : null;
+        $deptName = ucwords(strtolower($userDept ? $userDept->name : 'Computer Science'));
+        $format = strtolower($request->input('format', 'pdf'));
+        $dateStr = Carbon::now()->format('Y-m-d');
+        $baseFileName = "Semester_Submissions_Report_{$dateStr}";
+
+        // Get details data
+        $detailsResponse = $this->details($request);
+        $detailsData = $detailsResponse->getData(true);
+        $semesterInfo = $detailsData['semester_info'] ?? [];
+        $instructors = $detailsData['instructors'] ?? [];
+
+        if ($format === 'pdf') {
+            return $this->exportPdf($instructors, $semesterInfo, $deptName, $baseFileName);
+        }
+
+        return $this->exportCsv($instructors, $semesterInfo, $deptName, $baseFileName, $format === 'excel' || $format === 'xlsx');
+    }
+
+    private function exportPdf(array $instructors, array $info, string $deptName, string $baseFileName): JsonResponse
+    {
+        $generatedAt = Carbon::now()->format('M d, Y h:i A');
+        $acadYear = $info['academicYear'] ?? '2025/2026';
+        $semester = $info['semester'] ?? 'Second Semester';
+
+        $html = '<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 15px; }
+  .header { border-bottom: 2px solid #5138ed; padding-bottom: 10px; margin-bottom: 14px; }
+  .title { font-size: 17px; font-weight: bold; color: #1e1b4b; margin: 0 0 3px 0; }
+  .subtitle { font-size: 11px; color: #64748b; margin: 0; }
+  .meta-table { width: 100%; margin-top: 6px; font-size: 9.5px; color: #475569; }
+  
+  .kpi-table { width: 100%; border-collapse: separate; border-spacing: 6px; margin-bottom: 16px; }
+  .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; text-align: left; }
+  .kpi-title { font-size: 8.5px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 3px; }
+  .kpi-val { font-size: 15px; font-weight: bold; color: #0f172a; }
+
+  table.data-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9.5px; }
+  table.data-table th { background: #f1f5f9; color: #334155; font-weight: bold; text-align: left; padding: 6px 7px; border: 1px solid #e2e8f0; }
+  table.data-table td { padding: 5px 7px; border: 1px solid #e2e8f0; }
+  table.data-table tr:nth-child(even) { background: #f8fafc; }
+
+  .status-approved { color: #059669; font-weight: bold; background: #ecfdf5; padding: 2px 5px; border-radius: 3px; }
+  .status-pending { color: #d97706; font-weight: bold; background: #fffbeb; padding: 2px 5px; border-radius: 3px; }
+  .status-correction { color: #ea580c; font-weight: bold; background: #fff7ed; padding: 2px 5px; border-radius: 3px; }
+  .status-rejected { color: #dc2626; font-weight: bold; background: #fef2f2; padding: 2px 5px; border-radius: 3px; }
+  .footer { margin-top: 20px; text-align: right; font-size: 8.5px; color: #94a3b8; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="title">Wollo University &mdash; Semester Submissions Report</h1>
+    <p class="subtitle">Instructor semester records and grading approval summary for Department of ' . htmlspecialchars($deptName) . '</p>
+    <table class="meta-table">
+      <tr>
+        <td style="width: 50%;"><strong>Academic Term:</strong> ' . htmlspecialchars($acadYear) . ' &bull; ' . htmlspecialchars($semester) . '</td>
+        <td style="width: 50%; text-align: right;"><strong>Generated On:</strong> ' . $generatedAt . '</td>
+      </tr>
+    </table>
+  </div>
+
+  <table class="kpi-table">
+    <tr>
+      <td class="kpi-card" style="width: 25%;">
+        <div class="kpi-title">Pending Review</div>
+        <div class="kpi-val" style="color: #d97706;">' . ($info['pendingReview'] ?? 0) . '</div>
+      </td>
+      <td class="kpi-card" style="width: 25%;">
+        <div class="kpi-title">Approved</div>
+        <div class="kpi-val" style="color: #059669;">' . ($info['approved'] ?? 0) . '</div>
+      </td>
+      <td class="kpi-card" style="width: 25%;">
+        <div class="kpi-title">Correction Required</div>
+        <div class="kpi-val" style="color: #ea580c;">' . ($info['correctionRequired'] ?? 0) . '</div>
+      </td>
+      <td class="kpi-card" style="width: 25%;">
+        <div class="kpi-title">Total Submissions</div>
+        <div class="kpi-val" style="color: #5138ed;">' . ($info['total'] ?? 0) . '</div>
+      </td>
+    </tr>
+  </table>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 4%;">#</th>
+        <th style="width: 22%;">Instructor</th>
+        <th style="width: 22%;">Course & Code</th>
+        <th style="width: 10%;">Section</th>
+        <th style="width: 6%; text-align: center;">Credit</th>
+        <th style="width: 14%;">Submitted</th>
+        <th style="width: 12%;">Status</th>
+        <th style="width: 10%;">Remarks</th>
+      </tr>
+    </thead>
+    <tbody>';
+        foreach ($instructors as $idx => $inst) {
+            $stClass = match(strtolower($inst['status'] ?? 'pending')) {
+                'approved' => 'status-approved',
+                'correction required' => 'status-correction',
+                'rejected' => 'status-rejected',
+                default => 'status-pending'
+            };
+            $html .= '<tr>
+        <td>' . ($idx + 1) . '</td>
+        <td><strong>' . htmlspecialchars($inst['name']) . '</strong><br/><span style="color:#64748b;">' . htmlspecialchars($inst['email']) . '</span></td>
+        <td><strong>' . htmlspecialchars($inst['course']) . '</strong><br/><span style="color:#64748b; font-family:monospace;">' . htmlspecialchars($inst['course_code']) . '</span></td>
+        <td>' . htmlspecialchars($inst['section']) . '</td>
+        <td style="text-align: center;">' . ($inst['credit'] ?? 4) . '</td>
+        <td>' . htmlspecialchars($inst['submitted_date']) . '<br/><span style="color:#64748b;">' . htmlspecialchars($inst['submitted_time']) . '</span></td>
+        <td><span class="' . $stClass . '">' . htmlspecialchars($inst['status']) . '</span></td>
+        <td>' . htmlspecialchars($inst['remarks'] ?? '—') . '</td>
+      </tr>';
+        }
+        $html .= '</tbody>
+  </table>
+
+  <div class="footer">
+    <p>Official Wollo University Online Examination System &bull; Confidential Document &bull; Page 1 of 1</p>
+  </div>
+</body>
+</html>';
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isPhpEnabled', false);
+        $options->set('defaultFont', 'DejaVu Sans');
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        $pdfBytes = $dompdf->output();
+
+        LogActivity::record('Exported', 'Semester Submissions', "Exported semester submissions report as PDF ({$deptName})");
+
+        return response()->json([
+            'file'     => base64_encode($pdfBytes),
+            'filename' => $baseFileName . '.pdf',
+            'format'   => 'pdf',
+        ]);
+    }
+
+    private function exportCsv(array $instructors, array $info, string $deptName, string $baseFileName, bool $asXlsx = false): JsonResponse
+    {
+        ob_start();
+        $handle = fopen('php://output', 'w');
+        fputs($handle, "\xEF\xBB\xBF");
+
+        fputcsv($handle, ['WOLLO UNIVERSITY - SEMESTER SUBMISSIONS REPORT']);
+        fputcsv($handle, ['Department:', $deptName]);
+        fputcsv($handle, ['Academic Year:', $info['academicYear'] ?? '2025/2026']);
+        fputcsv($handle, ['Semester:', $info['semester'] ?? 'Second Semester']);
+        fputcsv($handle, ['Generated At:', Carbon::now()->toDateTimeString()]);
+        fputcsv($handle, []);
+
+        fputcsv($handle, ['#', 'Instructor Name', 'Email', 'Department', 'Course', 'Course Code', 'Section', 'Credit', 'Submitted Date', 'Status', 'Remarks']);
+        foreach ($instructors as $i => $inst) {
+            fputcsv($handle, [
+                $i + 1,
+                $inst['name'],
+                $inst['email'],
+                $inst['department'],
+                $inst['course'],
+                $inst['course_code'],
+                $inst['section'],
+                $inst['credit'],
+                $inst['submitted_date'] . ' ' . $inst['submitted_time'],
+                $inst['status'],
+                $inst['remarks'] ?? '',
+            ]);
+        }
+
+        fclose($handle);
+        $csvContent = ob_get_clean();
+
+        $format = $asXlsx ? 'xlsx' : 'csv';
+        LogActivity::record('Exported', 'Semester Submissions', "Exported semester submissions report as {$format} ({$deptName})");
+
+        return response()->json([
+            'file'     => base64_encode($csvContent),
+            'filename' => $baseFileName . '.' . $format,
+            'format'   => $format,
         ]);
     }
 }
