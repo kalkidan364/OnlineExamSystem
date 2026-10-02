@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import apiClient from '../../../core/api/apiClient'
 
 // ── View State ──
@@ -14,7 +14,7 @@ const createdByFilter = ref('all')
 const yearLevelFilter = ref('all')
 const statusFilter = ref('all')
 const currentPage = ref(1)
-const perPage = 8
+const perPage = 10
 const showDeleteModal = ref(false)
 const selectedCourse = ref<any>(null)
 const isLoading = ref(false)
@@ -274,7 +274,7 @@ const filtered = computed(() => {
 })
 
 // ── Pagination ──
-const totalPages = computed(() => Math.ceil(filtered.value.length / perPage))
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const paginatedCourses = computed(() => {
   const start = (currentPage.value - 1) * perPage
   return filtered.value.slice(start, start + perPage)
@@ -288,8 +288,31 @@ const visiblePages = computed(() => {
   let start = Math.max(1, current - 2)
   let end = Math.min(total, start + 4)
   if (end - start < 4) start = Math.max(1, end - 4)
-  for (let i = start; i <= end; i++) pages.push(i)
+  for (let i = Math.max(1, start); i <= end; i++) pages.push(i)
   return pages
+})
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Reset page to 1 when filters or search change
+watch([search, createdByFilter, yearLevelFilter, statusFilter], () => {
+  currentPage.value = 1
 })
 
 // ── Stats ──
@@ -982,17 +1005,38 @@ const getAvatarColor = (id: number) => {
         </div>
 
         <!-- Pagination -->
-        <div v-if="filtered.length > 0" class="flex items-center justify-between px-6 py-4 border-t border-slate-100">
-          <p class="text-[13px] text-slate-500">Showing {{ paginationStart }} to {{ paginationEnd }} of {{ filtered.length }} courses</p>
-          <div class="flex items-center gap-1">
-            <button @click="currentPage > 1 && currentPage--" :disabled="currentPage === 1" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+        <div v-if="filtered.length > 0" class="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-white">
+          <p class="text-[13px] text-slate-500">
+            Showing <span class="font-bold text-slate-700">{{ paginationStart }}</span> to <span class="font-bold text-slate-700">{{ paginationEnd }}</span> of <span class="font-bold text-slate-700">{{ filtered.length }}</span> courses
+          </p>
+          <div class="flex items-center gap-1.5">
+            <!-- Previous Button -->
+            <button 
+              @click="prevPage" 
+              :disabled="currentPage === 1" 
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Previous 10 courses"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
-            <button v-for="page in visiblePages" :key="page" @click="currentPage = page"
-              :class="[currentPage === page ? 'bg-[#5138ed] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50', 'w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-semibold transition-all']">
+
+            <!-- Page Number Buttons -->
+            <button 
+              v-for="page in visiblePages" 
+              :key="page" 
+              @click="goToPage(page)"
+              :class="[currentPage === page ? 'bg-[#5138ed] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50', 'w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-semibold transition-all']"
+            >
               {{ page }}
             </button>
-            <button @click="currentPage < totalPages && currentPage++" :disabled="currentPage === totalPages" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+
+            <!-- Next Button -->
+            <button 
+              @click="nextPage" 
+              :disabled="currentPage === totalPages" 
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Next 10 courses"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
           </div>

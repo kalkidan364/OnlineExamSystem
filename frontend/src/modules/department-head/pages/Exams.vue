@@ -1,76 +1,220 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import apiClient from '../../../core/api/apiClient'
 
+// ── State ──
 const search = ref('')
 const semesterFilter = ref('all')
 const yearFilter = ref('all')
 const examTypeFilter = ref('all')
 const statusFilter = ref('all')
 const currentPage = ref(1)
-const perPage = 8
+const perPage = 10
+const isLoading = ref(false)
+const isLoadingDetail = ref(false)
 
 const currentView = ref<'list' | 'detail' | 'questions'>('list')
 const selectedExam = ref<any>(null)
 
-const openDetail = (exam: any) => {
+const allExams = ref<any[]>([])
+const availableSemesters = ref<string[]>([])
+const availableYears = ref<string[]>([])
+const availableTypes = ref<string[]>([])
+
+const statsData = ref({
+  total: 0,
+  total_change: '↑ 5 this semester',
+  upcoming: 0,
+  upcoming_change: '↑ 3 this week',
+  completed: 0,
+  completed_change: '↑ 7 this semester',
+  cancelled: 0,
+  cancelled_change: 'No change',
+})
+
+// Today's Date for Header
+const todayFormatted = computed(() => {
+  return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+})
+const dayName = computed(() => {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' })
+})
+
+// ── Fetch Exams ──
+const fetchExams = async () => {
+  isLoading.value = true
+  try {
+    const res = await apiClient.get('/dept-head/exams')
+    allExams.value = res.data?.data || []
+    if (res.data?.stats) {
+      statsData.value = { ...statsData.value, ...res.data.stats }
+    }
+    if (res.data?.semesters) {
+      availableSemesters.value = res.data.semesters
+    }
+    if (res.data?.years) {
+      availableYears.value = res.data.years
+    }
+    if (res.data?.exam_types) {
+      availableTypes.value = res.data.exam_types
+    }
+  } catch (err) {
+    console.error('Failed to fetch department exams:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchExams()
+})
+
+const openDetail = async (exam: any) => {
   selectedExam.value = exam
   currentView.value = 'detail'
+  isLoadingDetail.value = true
+  try {
+    const res = await apiClient.get(`/dept-head/exams/${exam.id}`)
+    if (res.data?.data) {
+      selectedExam.value = res.data.data
+    }
+  } catch (err) {
+    console.error('Failed to load exam details:', err)
+  } finally {
+    isLoadingDetail.value = false
+  }
 }
+
 const backToList = () => {
   currentView.value = 'list'
 }
+
 const backToDetail = () => {
   currentView.value = 'detail'
 }
 
-// ── Dummy Data Matching the Image ──
-const allExams = ref([
-  { id: 1, title: 'Database Systems Midterm', code: 'EXM-2026-001', courseName: 'Database Systems', courseCode: 'CS-301', type: 'Midterm', date: 'Jun 10, 2026', time: '09:00 AM', duration: '1h 30m', questions: 40, marks: 100, status: 'Scheduled' },
-  { id: 2, title: 'Software Engineering Final', code: 'EXM-2026-002', courseName: 'Software Engineering', courseCode: 'SE-201', type: 'Final', date: 'Jun 18, 2026', time: '02:00 PM', duration: '2h 00m', questions: 50, marks: 100, status: 'Scheduled' },
-  { id: 3, title: 'Data Structures Quiz 3', code: 'EXM-2026-003', courseName: 'Data Structures', courseCode: 'CS-202', type: 'Quiz', date: 'May 30, 2026', time: '10:00 AM', duration: '30m', questions: 20, marks: 20, status: 'Published' },
-  { id: 4, title: 'Operating Systems Midterm', code: 'EXM-2026-004', courseName: 'Operating Systems', courseCode: 'CS-401', type: 'Midterm', date: 'May 28, 2026', time: '09:00 AM', duration: '1h 45m', questions: 45, marks: 100, status: 'Completed' },
-  { id: 5, title: 'Web Development Quiz 2', code: 'EXM-2026-005', courseName: 'Web Development', courseCode: 'SE-302', type: 'Quiz', date: 'May 24, 2026', time: '11:00 AM', duration: '20m', questions: 15, marks: 15, status: 'Published' },
-  { id: 6, title: 'Information Systems Final', code: 'EXM-2026-006', courseName: 'Information Systems', courseCode: 'IS-201', type: 'Final', date: 'Jun 05, 2026', time: '09:00 AM', duration: '2h 30m', questions: 60, marks: 100, status: 'Scheduled' },
-  { id: 7, title: 'Artificial Intelligence Exam', code: 'EXM-2026-007', courseName: 'Artificial Intelligence', courseCode: 'AI-301', type: 'Final', date: 'May 29, 2026', time: '01:00 PM', duration: '2h 00m', questions: 70, marks: 100, status: 'Draft' },
-  { id: 8, title: 'Computer Networks Quiz', code: 'EXM-2026-008', courseName: 'Computer Networks', courseCode: 'CS-303', type: 'Quiz', date: 'May 21, 2026', time: '10:00 AM', duration: '25m', questions: 15, marks: 15, status: 'Completed' },
-])
-
+// ── Filtered & Paginated ──
 const filtered = computed(() => {
   return allExams.value.filter(e => {
-    const matchSearch = e.title.toLowerCase().includes(search.value.toLowerCase()) || e.code.toLowerCase().includes(search.value.toLowerCase()) || e.courseName.toLowerCase().includes(search.value.toLowerCase())
-    const matchStatus = statusFilter.value === 'all' || e.status.toLowerCase() === statusFilter.value.toLowerCase()
-    return matchSearch && matchStatus
+    const q = search.value.trim().toLowerCase()
+    const matchSearch = !q ||
+      (e.title && e.title.toLowerCase().includes(q)) ||
+      (e.code && e.code.toLowerCase().includes(q)) ||
+      (e.courseName && e.courseName.toLowerCase().includes(q)) ||
+      (e.courseCode && e.courseCode.toLowerCase().includes(q)) ||
+      (e.instructor_name && e.instructor_name.toLowerCase().includes(q))
+
+    const matchSemester = semesterFilter.value === 'all' || e.semester === semesterFilter.value
+    const matchYear = yearFilter.value === 'all' || e.year === yearFilter.value
+    const matchType = examTypeFilter.value === 'all' || (e.type && e.type.toLowerCase() === examTypeFilter.value.toLowerCase())
+    const matchStatus = statusFilter.value === 'all' ||
+      (e.status && e.status.toLowerCase() === statusFilter.value.toLowerCase()) ||
+      (e.raw_status && e.raw_status.toLowerCase() === statusFilter.value.toLowerCase())
+
+    return matchSearch && matchSemester && matchYear && matchType && matchStatus
   })
 })
 
-const totalPages = computed(() => Math.ceil(filtered.value.length / perPage))
-const paginated = computed(() => filtered.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage))
+watch([search, semesterFilter, yearFilter, examTypeFilter, statusFilter], () => {
+  currentPage.value = 1
+})
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
+const paginated = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return filtered.value.slice(start, start + perPage)
+})
+
+const displayPages = computed(() => {
+  const tp = totalPages.value
+  if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1)
+  if (currentPage.value <= 4) return [1, 2, 3, 4, 5, '...', tp]
+  if (currentPage.value >= tp - 3) return [1, '...', tp - 4, tp - 3, tp - 2, tp - 1, tp]
+  return [1, '...', currentPage.value - 1, currentPage.value, currentPage.value + 1, '...', tp]
+})
+
+// ── Stats Cards ──
 const stats = computed(() => [
-  { label: 'Total Exams', value: '68', change: '↑ 5 this semester', bg: 'bg-indigo-50', ic: 'text-[#5138ed]', color: 'text-emerald-500', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-  { label: 'Upcoming Exams', value: '12', change: '↑ 3 this week', bg: 'bg-emerald-50', ic: 'text-emerald-500', color: 'text-emerald-500', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { label: 'Completed Exams', value: '42', change: '↑ 7 this semester', bg: 'bg-sky-50', ic: 'text-sky-500', color: 'text-emerald-500', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { label: 'Cancelled Exams', value: '1', change: 'No change', bg: 'bg-rose-50', ic: 'text-rose-500', color: 'text-slate-500', icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  {
+    label: 'Total Exams',
+    value: String(statsData.value.total),
+    change: statsData.value.total_change || '↑ 5 this semester',
+    bg: 'bg-indigo-50',
+    ic: 'text-[#5138ed]',
+    color: 'text-emerald-500',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'
+  },
+  {
+    label: 'Upcoming Exams',
+    value: String(statsData.value.upcoming),
+    change: statsData.value.upcoming_change || '↑ 3 this week',
+    bg: 'bg-emerald-50',
+    ic: 'text-emerald-500',
+    color: 'text-emerald-500',
+    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'
+  },
+  {
+    label: 'Completed Exams',
+    value: String(statsData.value.completed),
+    change: statsData.value.completed_change || '↑ 7 this semester',
+    bg: 'bg-sky-50',
+    ic: 'text-sky-500',
+    color: 'text-emerald-500',
+    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+  },
+  {
+    label: 'Cancelled Exams',
+    value: String(statsData.value.cancelled),
+    change: statsData.value.cancelled_change || 'No change',
+    bg: 'bg-rose-50',
+    ic: 'text-rose-500',
+    color: 'text-slate-500',
+    icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'
+  },
 ])
 
+// ── Badges ──
 const typeBadge = (t: string) => {
-  if (t === 'Midterm') return 'bg-indigo-50 text-[#5138ed]'
-  if (t === 'Final') return 'bg-amber-50 text-amber-500'
-  return 'bg-emerald-50 text-emerald-500' // Quiz
+  const type = (t || '').toLowerCase()
+  if (type === 'midterm') return 'bg-indigo-50 text-[#5138ed]'
+  if (type === 'final') return 'bg-amber-50 text-amber-500'
+  if (type === 'quiz') return 'bg-emerald-50 text-emerald-500'
+  return 'bg-purple-50 text-purple-600'
 }
 
 const statusBadge = (s: string) => {
-  if (s === 'Scheduled') return 'bg-sky-50 text-sky-500'
-  if (s === 'Published') return 'bg-emerald-50 text-emerald-500'
-  if (s === 'Completed') return 'bg-slate-100 text-slate-500'
-  return 'bg-amber-50 text-amber-500' // Draft
+  const status = (s || '').toLowerCase()
+  if (status === 'scheduled') return 'bg-sky-50 text-sky-500'
+  if (status === 'published') return 'bg-emerald-50 text-emerald-500'
+  if (status === 'completed') return 'bg-slate-100 text-slate-500'
+  if (status === 'cancelled' || status === 'canceled') return 'bg-rose-50 text-rose-500'
+  if (status === 'draft') return 'bg-amber-50 text-amber-500'
+  return 'bg-sky-50 text-sky-500'
 }
 
-const displayPages = computed(() => {
-  const tp = Math.max(1, totalPages.value)
-  if (tp <= 9) return Array.from({ length: Math.min(tp, 9) }, (_, i) => i + 1)
-  return [1, 2, 3, 4, 5, '...', 9]
-})
+const qTypeBadge = (t: string) => {
+  const type = (t || '').toLowerCase()
+  if (type === 'mcq' || type === 'multiple_choice' || type === 'multiple choice') return 'text-sky-500 bg-sky-50'
+  if (type === 'true/false' || type === 'true_false' || type === 'true false') return 'text-emerald-500 bg-emerald-50'
+  if (type === 'short answer' || type === 'short_answer') return 'text-amber-500 bg-amber-50'
+  if (type === 'matching') return 'text-sky-600 bg-sky-50'
+  if (type === 'fill in the blanks' || type === 'fill_in_the_blank' || type === 'fill_in_blank') return 'text-[#5138ed] bg-indigo-50'
+  return 'text-slate-600 bg-slate-100'
+}
+
+const isOptionCorrect = (opt: any, optIdx: number, q: any) => {
+  if (typeof opt === 'object' && opt && opt.is_correct) return true
+  const letter = String.fromCharCode(65 + optIdx)
+  if (q.correct_answer === letter) return true
+  const text = typeof opt === 'string' ? opt : (opt.text || '')
+  if (q.correct_answer && q.correct_answer === text) return true
+  return false
+}
+
+// ── Export Results / Print ──
+const exportResults = () => {
+  window.print()
+}
 </script>
 
 <template>
@@ -132,7 +276,7 @@ const displayPages = computed(() => {
                 <svg class="w-5 h-5 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                 <div>
                   <p class="text-[11px] font-bold text-slate-500 mb-0.5">Instructor</p>
-                  <p class="text-[13px] font-semibold text-slate-800">Abebe Kebede</p>
+                  <p class="text-[13px] font-semibold text-slate-800">{{ selectedExam?.instructorName || 'Dr. Abebe Kebede' }}</p>
                 </div>
               </div>
               <div class="flex items-start gap-3">
@@ -167,7 +311,7 @@ const displayPages = computed(() => {
                 <svg class="w-5 h-5 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 <div>
                   <p class="text-[11px] font-bold text-slate-500 mb-0.5">End Time</p>
-                  <p class="text-[13px] font-semibold text-slate-800">10:30 AM</p>
+                  <p class="text-[13px] font-semibold text-slate-800">{{ selectedExam?.endTime || 'TBD' }}</p>
                 </div>
               </div>
             </div>
@@ -181,42 +325,54 @@ const displayPages = computed(() => {
             </div>
             <div class="grid grid-cols-2 gap-y-6 gap-x-12">
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.shuffleQuestions ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.shuffleQuestions ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Shuffle Questions</p>
                   <p class="text-[11px] text-slate-500">Randomize the order of questions for each student</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.examReviewGroup ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.examReviewGroup ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Exam Review Group</p>
                   <p class="text-[11px] text-slate-500">Allow students to review answers before submission</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.shuffleAnswers ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.shuffleAnswers ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Shuffle Answer Options</p>
                   <p class="text-[11px] text-slate-500">Randomize the order of answer options</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.allowBacktracking ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.allowBacktracking ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Allow Backtracking</p>
                   <p class="text-[11px] text-slate-500">Students can go back to previous questions</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-slate-200 rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute left-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.showOneQuestionAtATime ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.showOneQuestionAtATime ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Show One Question at a Time</p>
                   <p class="text-[11px] text-slate-500">Students see one question at a time</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.autoSubmit ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.autoSubmit ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Auto Submit on Time Finish</p>
                   <p class="text-[11px] text-slate-500">Automatically submit when time is up</p>
@@ -233,42 +389,54 @@ const displayPages = computed(() => {
             </div>
             <div class="grid grid-cols-2 gap-y-6 gap-x-12">
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.enableFullscreenMode ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.enableFullscreenMode ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Enable Fullscreen Mode</p>
                   <p class="text-[11px] text-slate-500">Prevent students from leaving the exam screen</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.enableBrowserTabMonitoring ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.enableBrowserTabMonitoring ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Enable Browser Tab Monitoring</p>
                   <p class="text-[11px] text-slate-500">Detect if student switches tab or window</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.disableRightClick ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.disableRightClick ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Disable Right Click</p>
                   <p class="text-[11px] text-slate-500">Prevent right click on the exam screen</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-slate-200 rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute left-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.allowCalculator ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.allowCalculator ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Allow Calculator</p>
                   <p class="text-[11px] text-slate-500">Provide an on-screen calculator for students</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-[#5138ed] rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.disableCopyPaste ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.disableCopyPaste ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Disable Copy & Paste</p>
                   <p class="text-[11px] text-slate-500">Prevent copy and paste operations</p>
                 </div>
               </div>
               <div class="flex items-center gap-4">
-                <div class="w-10 h-6 bg-slate-200 rounded-full relative shrink-0"><div class="w-4 h-4 bg-white rounded-full absolute left-1 top-1"></div></div>
+                <div :class="[selectedExam?.settings?.webcamMonitoring ? 'bg-[#5138ed]' : 'bg-slate-200', 'w-10 h-6 rounded-full relative shrink-0 transition-colors']">
+                  <div :class="[selectedExam?.settings?.webcamMonitoring ? 'right-1' : 'left-1', 'w-4 h-4 bg-white rounded-full absolute top-1 transition-all']"></div>
+                </div>
                 <div>
                   <p class="text-[13px] font-bold text-slate-700">Webcam Monitoring</p>
                   <p class="text-[11px] text-slate-500">Record or monitor exam using webcam</p>
@@ -282,7 +450,7 @@ const displayPages = computed(() => {
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h3 class="text-[15px] font-bold text-slate-800">Created Exam (Questions Preview)</h3>
-                <p class="text-[12px] text-slate-500">Total Questions: {{ selectedExam?.questions }} | Total Marks: {{ selectedExam?.marks }}</p>
+                <p class="text-[12px] text-slate-500">Total Questions: {{ selectedExam?.questionsList?.length || selectedExam?.questions || 0 }} | Total Marks: {{ selectedExam?.marks || 0 }}</p>
               </div>
               <button @click="currentView = 'questions'" class="text-[12px] font-bold text-[#5138ed] hover:text-indigo-700">View All Questions</button>
             </div>
@@ -297,34 +465,21 @@ const displayPages = computed(() => {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50">
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600">1</td>
-                  <td class="px-4 py-4"><span class="text-[12px] font-bold text-sky-500 bg-sky-50 px-2 py-1 rounded">MCQ</span></td>
-                  <td class="px-4 py-4 text-[13px] text-slate-700">Which of the following is a characteristic of a relational database?</td>
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600 text-center">1</td>
+                <tr v-if="!selectedExam?.questionsList || selectedExam.questionsList.length === 0">
+                  <td colspan="4" class="px-4 py-8 text-center text-[13px] text-slate-400">
+                    No questions added to this exam yet.
+                  </td>
                 </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600">2</td>
-                  <td class="px-4 py-4"><span class="text-[12px] font-bold text-sky-500 bg-sky-50 px-2 py-1 rounded">MCQ</span></td>
-                  <td class="px-4 py-4 text-[13px] text-slate-700">What is the primary key used for?</td>
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600 text-center">1</td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600">3</td>
-                  <td class="px-4 py-4"><span class="text-[12px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded">True/False</span></td>
-                  <td class="px-4 py-4 text-[13px] text-slate-700">Normalization is the process of organizing data to reduce redundancy.</td>
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600 text-center">2</td>
-                </tr>
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600">4</td>
-                  <td class="px-4 py-4"><span class="text-[12px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded">Short Answer</span></td>
-                  <td class="px-4 py-4 text-[13px] text-slate-700">Explain the difference between DELETE and TRUNCATE statements.</td>
-                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600 text-center">5</td>
+                <tr v-for="(q, idx) in (selectedExam?.questionsList || []).slice(0, 4)" :key="q.id || idx" class="hover:bg-slate-50 transition-colors">
+                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600">{{ idx + 1 }}</td>
+                  <td class="px-4 py-4"><span :class="[qTypeBadge(q.type), 'text-[12px] font-bold px-2 py-1 rounded']">{{ q.type }}</span></td>
+                  <td class="px-4 py-4 text-[13px] text-slate-700">{{ q.text }}</td>
+                  <td class="px-4 py-4 text-[13px] font-bold text-slate-600 text-center">{{ q.marks }}</td>
                 </tr>
               </tbody>
             </table>
-            <div @click="currentView = 'questions'" class="mt-4 border border-slate-100 rounded-xl py-3 flex justify-center hover:bg-slate-50 cursor-pointer transition-colors">
-              <span class="text-[12px] font-bold text-[#5138ed]">Show More (36 Questions)</span>
+            <div v-if="(selectedExam?.questionsList?.length || 0) > 4" @click="currentView = 'questions'" class="mt-4 border border-slate-100 rounded-xl py-3 flex justify-center hover:bg-slate-50 cursor-pointer transition-colors">
+              <span class="text-[12px] font-bold text-[#5138ed]">Show More ({{ (selectedExam?.questionsList?.length || 0) - 4 }} Questions)</span>
             </div>
           </div>
         </div>
@@ -368,7 +523,7 @@ const displayPages = computed(() => {
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                   Created By
                 </div>
-                <span class="text-[12px] font-bold text-slate-700">Super Admin</span>
+                <span class="text-[12px] font-bold text-slate-700">{{ selectedExam?.createdByName || 'Super Admin' }}</span>
               </div>
               
               <div class="flex items-center justify-between">
@@ -376,7 +531,7 @@ const displayPages = computed(() => {
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   Created Date
                 </div>
-                <span class="text-[12px] font-bold text-slate-700">May 10, 2026 10:30 AM</span>
+                <span class="text-[12px] font-bold text-slate-700">{{ selectedExam?.createdAtFormatted || 'May 10, 2026 10:30 AM' }}</span>
               </div>
 
               <div class="flex items-center justify-between">
@@ -384,7 +539,7 @@ const displayPages = computed(() => {
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   Last Updated
                 </div>
-                <span class="text-[12px] font-bold text-slate-700">May 15, 2026 02:15 PM</span>
+                <span class="text-[12px] font-bold text-slate-700">{{ selectedExam?.updatedAtFormatted || 'May 15, 2026 02:15 PM' }}</span>
               </div>
 
               <div class="flex items-center justify-between">
@@ -392,7 +547,7 @@ const displayPages = computed(() => {
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                   Total Attempts
                 </div>
-                <span class="text-[12px] font-bold text-slate-700">256</span>
+                <span class="text-[12px] font-bold text-slate-700">{{ selectedExam?.totalAttempts || 0 }}</span>
               </div>
             </div>
           </div>
@@ -401,11 +556,11 @@ const displayPages = computed(() => {
           <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <h3 class="text-[15px] font-bold text-slate-800 mb-4">Quick Actions</h3>
             <div class="grid grid-cols-2 gap-3">
-              <button class="flex flex-col items-center justify-center gap-2 py-4 rounded-xl border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50 text-slate-600 hover:text-[#5138ed] transition-colors">
+              <button @click="currentView = 'questions'" class="flex flex-col items-center justify-center gap-2 py-4 rounded-xl border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50 text-slate-600 hover:text-[#5138ed] transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 <span class="text-[11px] font-bold">Preview Exam</span>
               </button>
-              <button class="flex flex-col items-center justify-center gap-2 py-4 rounded-xl border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 transition-colors">
+              <button @click="exportResults" class="flex flex-col items-center justify-center gap-2 py-4 rounded-xl border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                 <span class="text-[11px] font-bold">Export Results</span>
               </button>
@@ -434,7 +589,7 @@ const displayPages = computed(() => {
       <!-- Breadcrumb -->
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-2 text-[13px] font-medium text-slate-500">
-          <span class="hover:text-slate-800 cursor-pointer">Exams</span>
+          <span class="hover:text-slate-800 cursor-pointer" @click="currentView = 'list'">Exams</span>
           <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
           <span class="hover:text-slate-800 cursor-pointer" @click="currentView = 'list'">Exam List</span>
           <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -451,196 +606,81 @@ const displayPages = computed(() => {
       <!-- Content Card -->
       <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
         <div class="flex items-center gap-4 text-[15px] font-bold text-slate-800 mb-8 pb-4 border-b border-slate-100">
-          <span>Total Questions: 40</span>
+          <span>Total Questions: {{ selectedExam?.questionsList?.length || selectedExam?.questions || 0 }}</span>
           <div class="w-px h-4 bg-slate-300"></div>
-          <span>Total Marks: 100</span>
+          <span>Total Marks: {{ selectedExam?.marks || 0 }}</span>
         </div>
 
-        <div class="space-y-6">
-          <!-- Question 1 -->
-          <div class="border border-slate-100 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q1</span>
-                <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">Multiple Choice</span>
-              </div>
-              <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">5 Marks</span>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">Which of the following is a characteristic of a relational database?</p>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-3">Options</p>
-            <div class="space-y-3 mb-6">
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border-[5px] border-[#5138ed] bg-white"></div>
-                <span class="text-[13px] font-bold text-slate-600">A. Data is stored in tables with rows and columns</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">B. Data is stored as key-value pairs</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">C. Data is stored in a hierarchical structure</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">D. Data is stored in documents</span>
-              </div>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600">Choose the most appropriate answer from the options given below.</p>
-          </div>
+        <div v-if="!selectedExam?.questionsList || selectedExam.questionsList.length === 0" class="py-12 text-center text-slate-400">
+          No questions available to display for this exam.
+        </div>
 
-          <!-- Question 2 -->
-          <div class="border border-slate-100 rounded-xl p-6">
+        <div v-else class="space-y-6">
+          <div v-for="(q, idx) in selectedExam.questionsList" :key="q.id || idx" class="border border-slate-100 rounded-xl p-6">
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q2</span>
-                <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">Multiple Choice</span>
+                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q{{ idx + 1 }}</span>
+                <span :class="[qTypeBadge(q.full_type || q.type), 'text-[12px] font-bold px-2.5 py-1.5 rounded-lg']">{{ q.full_type || q.type }}</span>
               </div>
-              <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">5 Marks</span>
+              <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">{{ q.marks }} Marks</span>
             </div>
             
             <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">What is the primary key used for?</p>
+            <p class="text-[14px] font-bold text-slate-800 mb-5">{{ q.text }}</p>
             
-            <div class="space-y-3 mb-6">
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border-[5px] border-[#5138ed] bg-white"></div>
-                <span class="text-[13px] font-bold text-slate-600">A. To uniquely identify a record in a table</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">B. To encrypt data in a table</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">C. To define the relationship between tables</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-medium text-slate-600">D. To sort data in ascending order</span>
-              </div>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600">Choose the correct answer.</p>
-          </div>
-
-          <!-- Question 3 -->
-          <div class="border border-slate-100 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q3</span>
-                <span class="text-[12px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg">True/False</span>
-              </div>
-              <span class="text-[12px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg">2 Marks</span>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">Normalization is the process of organizing data to reduce redundancy.</p>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-3">Answer</p>
-            <div class="flex items-center gap-8 mb-6">
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border-[5px] border-[#5138ed] bg-white"></div>
-                <span class="text-[13px] font-bold text-slate-800">True</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="w-4 h-4 rounded-full border border-slate-300"></div>
-                <span class="text-[13px] font-bold text-slate-800">False</span>
-              </div>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600">Determine whether the statement is True or False.</p>
-          </div>
-
-          <!-- Question 4 -->
-          <div class="border border-slate-100 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q4</span>
-                <span class="text-[12px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg">Short Answer</span>
-              </div>
-              <span class="text-[12px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg">5 Marks</span>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">Explain the difference between DELETE and TRUNCATE statements.</p>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600 mb-4">Write your answer in the space provided. Your answer should be clear and concise.</p>
-            
-            <span class="inline-block text-[12px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">Expected Answer Length: 50 - 100 words</span>
-          </div>
-
-          <!-- Question 5 -->
-          <div class="border border-slate-100 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q5</span>
-                <span class="text-[12px] font-bold text-sky-600 bg-sky-50 px-2.5 py-1.5 rounded-lg">Matching</span>
-              </div>
-              <span class="text-[12px] font-bold text-sky-600 bg-sky-50 px-2.5 py-1.5 rounded-lg">5 Marks</span>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">Match the SQL clause with its correct description.</p>
-            
-            <div class="grid grid-cols-2 gap-8 mb-6">
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 mb-3">SQL Clause</p>
-                <div class="space-y-2">
-                  <p class="text-[13px] text-slate-600 font-medium">1.<span class="ml-2">WHERE</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">2.<span class="ml-2">GROUP BY</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">3.<span class="ml-2">HAVING</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">4.<span class="ml-2">ORDER BY</span></p>
+            <!-- Options if MCQ -->
+            <template v-if="q.options && q.options.length">
+              <p class="text-[12px] font-bold text-slate-500 mb-3">Options</p>
+              <div class="space-y-3 mb-6">
+                <div v-for="(opt, optIdx) in q.options" :key="optIdx" class="flex items-center gap-3">
+                  <div :class="[isOptionCorrect(opt, optIdx, q) ? 'border-[5px] border-[#5138ed]' : 'border border-slate-300', 'w-4 h-4 rounded-full bg-white shrink-0']"></div>
+                  <span :class="[isOptionCorrect(opt, optIdx, q) ? 'font-bold text-slate-800' : 'font-medium text-slate-600', 'text-[13px]']">
+                    {{ String.fromCharCode(65 + optIdx) }}. {{ typeof opt === 'string' ? opt : (opt.text || opt.clause || opt.desc || JSON.stringify(opt)) }}
+                  </span>
                 </div>
               </div>
-              <div>
-                <p class="text-[13px] font-bold text-slate-800 mb-3">Description</p>
-                <div class="space-y-2">
-                  <p class="text-[13px] text-slate-600 font-medium">A.<span class="ml-2">Filters groups based on a condition</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">B.<span class="ml-2">Orders the result set</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">C.<span class="ml-2">Groups rows that have the same values</span></p>
-                  <p class="text-[13px] text-slate-600 font-medium">D.<span class="ml-2">Filters rows based on a condition</span></p>
+            </template>
+
+            <!-- True / False -->
+            <template v-else-if="q.raw_type === 'true_false'">
+              <p class="text-[12px] font-bold text-slate-500 mb-3">Answer</p>
+              <div class="flex items-center gap-8 mb-6">
+                <div class="flex items-center gap-3">
+                  <div :class="[String(q.correct_answer).toLowerCase() === 'true' ? 'border-[5px] border-[#5138ed]' : 'border border-slate-300', 'w-4 h-4 rounded-full bg-white shrink-0']"></div>
+                  <span class="text-[13px] font-bold text-slate-800">True</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div :class="[String(q.correct_answer).toLowerCase() === 'false' ? 'border-[5px] border-[#5138ed]' : 'border border-slate-300', 'w-4 h-4 rounded-full bg-white shrink-0']"></div>
+                  <span class="text-[13px] font-bold text-slate-800">False</span>
                 </div>
               </div>
-            </div>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600">Match each item in the first column with the most appropriate item in the second column.</p>
-          </div>
+            </template>
 
-          <!-- Question 6 -->
-          <div class="border border-slate-100 rounded-xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-[#5138ed] font-bold text-[13px] flex items-center justify-center">Q6</span>
-                <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">Fill in the Blanks</span>
+            <!-- Expected answer for short answer / fill in blank -->
+            <template v-else-if="q.raw_type === 'fill_in_the_blank' || q.raw_type === 'fill_in_blank'">
+              <div class="flex items-center gap-2 mb-4">
+                <p class="text-[13px] font-medium text-slate-600">Expected Answer:</p>
+                <span class="inline-block text-[12px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">{{ q.expected_answer || q.correct_answer || 'N/A' }}</span>
               </div>
-              <span class="text-[12px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1.5 rounded-lg">5 Marks</span>
-            </div>
+            </template>
+
+            <template v-else-if="q.raw_type === 'short_answer'">
+              <div v-if="q.correct_answer" class="mb-4">
+                <span class="inline-block text-[12px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">Expected Answer: {{ q.correct_answer }}</span>
+              </div>
+            </template>
             
-            <p class="text-[12px] font-bold text-slate-500 mb-2">Question</p>
-            <p class="text-[14px] font-bold text-slate-800 mb-5">The ________ clause is used to retrieve specific columns from a table.</p>
-            
-            <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
-            <p class="text-[13px] text-slate-600 mb-4">Fill in the blank with the most appropriate term.</p>
-            
-            <div class="flex items-center gap-2">
-              <p class="text-[13px] font-medium text-slate-600">Expected Answer:</p>
-              <span class="inline-block text-[12px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">SELECT</span>
+            <div v-if="q.instruction" class="pt-2">
+              <p class="text-[12px] font-bold text-slate-500 mb-1">Instruction</p>
+              <p class="text-[13px] text-slate-600">{{ q.instruction }}</p>
             </div>
           </div>
         </div>
 
         <div class="text-center mt-10">
-          <p class="text-[13px] text-slate-500 font-medium">Showing 1 to 6 of 40 questions</p>
+          <p class="text-[13px] text-slate-500 font-medium">
+            Showing 1 to {{ selectedExam?.questionsList?.length || 0 }} of {{ selectedExam?.questionsList?.length || selectedExam?.questions || 0 }} questions
+          </p>
         </div>
       </div>
     </template>
@@ -648,161 +688,182 @@ const displayPages = computed(() => {
     <!-- ══════════════════════════ LIST VIEW ══════════════════════════ -->
     <template v-else>
       <!-- Header -->
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="text-[22px] font-bold text-slate-800">Exams</h1>
-        <p class="text-[13px] text-slate-500 mt-1">Manage and monitor department exams.</p>
-      </div>
-      <div class="flex flex-col items-end">
-        <div class="flex items-center gap-2 text-[13px] font-semibold text-slate-700">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-          May 27, 2026
-        </div>
-        <p class="text-[12px] text-slate-500 mt-0.5">Tuesday</p>
-      </div>
-    </div>
-
-    <!-- KPI Cards -->
-    <div class="grid grid-cols-4 gap-6">
-      <div v-for="s in stats" :key="s.label" class="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 flex items-center gap-5 hover:shadow-md transition-shadow">
-        <div :class="[s.bg, 'w-14 h-14 rounded-2xl flex items-center justify-center shrink-0']">
-          <svg class="w-6 h-6" :class="s.ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="s.icon"></path></svg>
-        </div>
+      <div class="flex items-start justify-between">
         <div>
-          <p class="text-[12px] font-semibold text-slate-500">{{ s.label }}</p>
-          <p class="text-[24px] font-bold text-slate-800 leading-tight mt-0.5">{{ s.value }}</p>
-          <p :class="[s.color, 'text-[11px] font-bold mt-1']">{{ s.change }}</p>
+          <h1 class="text-[22px] font-bold text-slate-800">Exams</h1>
+          <p class="text-[13px] text-slate-500 mt-1">Manage and monitor department exams.</p>
+        </div>
+        <div class="flex flex-col items-end">
+          <div class="flex items-center gap-2 text-[13px] font-semibold text-slate-700">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            {{ todayFormatted }}
+          </div>
+          <p class="text-[12px] text-slate-500 mt-0.5">{{ dayName }}</p>
         </div>
       </div>
-    </div>
 
-    <!-- Table Card -->
-    <div class="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-      
-      <!-- Filter Row -->
-      <div class="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
-        <!-- Search -->
-        <div class="relative flex-1 max-w-sm">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-          <input v-model="search" type="text" placeholder="Search exams by title, course or code..." class="w-full pl-9 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400">
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-4 gap-6">
+        <div v-for="s in stats" :key="s.label" class="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 flex items-center gap-5 hover:shadow-md transition-shadow">
+          <div :class="[s.bg, 'w-14 h-14 rounded-2xl flex items-center justify-center shrink-0']">
+            <svg class="w-6 h-6" :class="s.ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="s.icon"></path></svg>
+          </div>
+          <div>
+            <p class="text-[12px] font-semibold text-slate-500">{{ s.label }}</p>
+            <p class="text-[24px] font-bold text-slate-800 leading-tight mt-0.5">{{ s.value }}</p>
+            <p :class="[s.color, 'text-[11px] font-bold mt-1']">{{ s.change }}</p>
+          </div>
         </div>
-
-        <div class="relative">
-          <select v-model="semesterFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
-            <option value="all">All Semesters</option>
-          </select>
-          <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </div>
-
-        <div class="relative">
-          <select v-model="yearFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
-            <option value="all">All Years</option>
-          </select>
-          <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </div>
-
-        <div class="relative">
-          <select v-model="examTypeFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
-            <option value="all">All Exam Types</option>
-          </select>
-          <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </div>
-
-        <div class="relative">
-          <select v-model="statusFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
-            <option value="all">All Status</option>
-          </select>
-          <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </div>
-
-        <!-- Filter Button -->
-        <button class="flex items-center gap-2 text-[13px] font-bold text-[#5138ed] border border-indigo-200 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-          Filter
-        </button>
-
       </div>
 
-      <!-- Table -->
-      <table class="w-full">
-        <thead>
-          <tr class="border-b border-slate-100">
-            <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Title</th>
-            <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course</th>
-            <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Type</th>
-            <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date & Time</th>
-            <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Duration</th>
-            <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Questions</th>
-            <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Marks</th>
-            <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-            <th class="text-center px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-50">
-          <tr v-for="exam in paginated" :key="exam.id" class="hover:bg-slate-50/40 transition-colors group">
-            <td class="px-6 py-4">
-              <span class="block text-[13px] font-bold text-slate-800">{{ exam.title }}</span>
-              <span class="block text-[11px] font-medium text-slate-400 mt-0.5">{{ exam.code }}</span>
-            </td>
-            <td class="px-4 py-4">
-              <span class="block text-[13px] font-semibold text-slate-700">{{ exam.courseName }}</span>
-              <span class="block text-[11px] font-medium text-slate-400 mt-0.5">{{ exam.courseCode }}</span>
-            </td>
-            <td class="px-4 py-4">
-              <span :class="[typeBadge(exam.type), 'text-[11px] font-bold px-2.5 py-1 rounded-md']">{{ exam.type }}</span>
-            </td>
-            <td class="px-4 py-4">
-              <div class="flex items-start gap-2">
-                <svg class="w-4 h-4 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                <div>
-                  <span class="block text-[12px] font-bold text-slate-700">{{ exam.date }}</span>
-                  <span class="block text-[11px] font-medium text-slate-500 mt-0.5">{{ exam.time }}</span>
+      <!-- Table Card -->
+      <div class="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+        
+        <!-- Filter Row -->
+        <div class="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <!-- Search -->
+          <div class="relative flex-1 max-w-sm">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input v-model="search" type="text" placeholder="Search exams by title, course or code..." class="w-full pl-9 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl focus:outline-none focus:border-[#5138ed] focus:ring-1 focus:ring-[#5138ed] placeholder:text-slate-400">
+          </div>
+
+          <div class="relative">
+            <select v-model="semesterFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
+              <option value="all">All Semesters</option>
+              <option v-for="sem in availableSemesters" :key="sem" :value="sem">{{ sem }}</option>
+            </select>
+            <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+
+          <div class="relative">
+            <select v-model="yearFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
+              <option value="all">All Years</option>
+              <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+            </select>
+            <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+
+          <div class="relative">
+            <select v-model="examTypeFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
+              <option value="all">All Exam Types</option>
+              <option v-for="t in (availableTypes.length ? availableTypes : ['Midterm', 'Final', 'Quiz'])" :key="t" :value="t">{{ t }}</option>
+            </select>
+            <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+
+          <div class="relative">
+            <select v-model="statusFilter" class="pl-4 pr-8 py-2.5 text-[13px] font-medium border border-slate-200 rounded-xl text-slate-600 bg-white appearance-none focus:outline-none focus:border-[#5138ed]">
+              <option value="all">All Status</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="published">Published</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="draft">Draft</option>
+            </select>
+            <svg class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+
+          <!-- Filter Button -->
+          <button @click="currentPage = 1" class="flex items-center gap-2 text-[13px] font-bold text-[#5138ed] border border-indigo-200 hover:bg-indigo-50 px-4 py-2.5 rounded-xl transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+            Filter
+          </button>
+
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="isLoading" class="p-12 text-center text-slate-500">
+          <div class="inline-block animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mb-3"></div>
+          <p class="text-[14px] font-medium">Loading department exams...</p>
+        </div>
+
+        <!-- Table -->
+        <table v-else class="w-full">
+          <thead>
+            <tr class="border-b border-slate-100">
+              <th class="text-left px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Title</th>
+              <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course</th>
+              <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Type</th>
+              <th class="text-left px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date & Time</th>
+              <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Duration</th>
+              <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Questions</th>
+              <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Marks</th>
+              <th class="text-center px-4 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-center px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            <tr v-if="filtered.length === 0">
+              <td colspan="9" class="px-6 py-12 text-center text-slate-400">
+                <svg class="w-12 h-12 mx-auto text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <p class="text-[14px] font-semibold text-slate-600">No exams found</p>
+                <p class="text-[12px] text-slate-400 mt-1">Try adjusting your filters or search terms.</p>
+              </td>
+            </tr>
+            <tr v-for="exam in paginated" :key="exam.id" class="hover:bg-slate-50/40 transition-colors group">
+              <td class="px-6 py-4">
+                <span class="block text-[13px] font-bold text-slate-800">{{ exam.title }}</span>
+                <span class="block text-[11px] font-medium text-slate-400 mt-0.5">{{ exam.code }}</span>
+              </td>
+              <td class="px-4 py-4">
+                <span class="block text-[13px] font-semibold text-slate-700">{{ exam.courseName }}</span>
+                <span class="block text-[11px] font-medium text-slate-400 mt-0.5">{{ exam.courseCode }}</span>
+              </td>
+              <td class="px-4 py-4">
+                <span :class="[typeBadge(exam.type), 'text-[11px] font-bold px-2.5 py-1 rounded-md']">{{ exam.type }}</span>
+              </td>
+              <td class="px-4 py-4">
+                <div class="flex items-start gap-2">
+                  <svg class="w-4 h-4 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  <div>
+                    <span class="block text-[12px] font-bold text-slate-700">{{ exam.date }}</span>
+                    <span class="block text-[11px] font-medium text-slate-500 mt-0.5">{{ exam.time }}</span>
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td class="px-4 py-4 text-center">
-              <span class="text-[12px] font-semibold text-slate-700">{{ exam.duration }}</span>
-            </td>
-            <td class="px-4 py-4 text-center">
-              <span class="text-[13px] font-semibold text-slate-700">{{ exam.questions }}</span>
-            </td>
-            <td class="px-4 py-4 text-center">
-              <span class="text-[13px] font-semibold text-slate-700">{{ exam.marks }}</span>
-            </td>
-            <td class="px-4 py-4 text-center">
-              <span :class="[statusBadge(exam.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md capitalize']">{{ exam.status }}</span>
-            </td>
-            <td class="px-6 py-4">
-              <div class="flex items-center justify-center gap-2">
-                <button @click="openDetail(exam)" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 transition-colors" title="View Details">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span class="text-[12px] font-semibold text-slate-700">{{ exam.duration }}</span>
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span class="text-[13px] font-semibold text-slate-700">{{ exam.questions }}</span>
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span class="text-[13px] font-semibold text-slate-700">{{ exam.marks }}</span>
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span :class="[statusBadge(exam.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md capitalize']">{{ exam.status }}</span>
+              </td>
+              <td class="px-6 py-4">
+                <div class="flex items-center justify-center gap-2">
+                  <button @click="openDetail(exam)" class="w-7 h-7 rounded-lg flex items-center justify-center text-[#5138ed] bg-indigo-50 hover:bg-indigo-100 transition-colors" title="View Details">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-      <!-- Pagination -->
-      <div class="flex items-center justify-between px-6 py-5 border-t border-slate-100 bg-white">
-        <p class="text-[13px] text-slate-500 font-medium">
-          Showing 1 to 8 of 68 exams
-        </p>
-        <div class="flex items-center gap-2">
-          <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-          </button>
-          <template v-for="p in displayPages" :key="p">
-            <span v-if="p === '...'" class="w-8 h-8 flex items-center justify-center text-slate-400 text-[13px]">...</span>
-            <button v-else @click="currentPage = (p as number)" :class="[currentPage === p ? 'bg-[#5138ed] text-white border border-[#5138ed]' : 'text-slate-500 border border-slate-200 hover:bg-slate-50', 'w-8 h-8 rounded-lg text-[13px] font-bold transition-colors']">{{ p }}</button>
-          </template>
-          <button @click="currentPage = Math.min(9, currentPage + 1)" :disabled="currentPage === 9" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-          </button>
+        <!-- Pagination -->
+        <div class="flex items-center justify-between px-6 py-5 border-t border-slate-100 bg-white">
+          <p class="text-[13px] text-slate-500 font-medium">
+            Showing {{ filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, filtered.length) }} of {{ filtered.length }} exams
+          </p>
+          <div class="flex items-center gap-2">
+            <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <template v-for="p in displayPages" :key="p">
+              <span v-if="p === '...'" class="w-8 h-8 flex items-center justify-center text-slate-400 text-[13px]">...</span>
+              <button v-else @click="currentPage = (p as number)" :class="[currentPage === p ? 'bg-[#5138ed] text-white border border-[#5138ed]' : 'text-slate-500 border border-slate-200 hover:bg-slate-50', 'w-8 h-8 rounded-lg text-[13px] font-bold transition-colors']">{{ p }}</button>
+            </template>
+            <button @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage === totalPages" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
         </div>
-      </div>
 
-    </div>
+      </div>
 
     </template>
 

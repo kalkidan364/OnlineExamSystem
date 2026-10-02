@@ -67,4 +67,12 @@ class Exam extends Model
     {
         return $this->hasMany(ExamAttempt::class);
     }
+
+    /**
+     * Course associated with this exam.
+     */
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'course_code', 'code');
+    }
 }
