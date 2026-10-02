@@ -137,6 +137,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('exams', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'store']);
         Route::get('exams/{id}', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'show']);
         Route::delete('exams/{id}', [\App\Http\Controllers\Api\V1\DeptHead\ExamController::class, 'destroy']);
+        Route::get('results', [\App\Http\Controllers\Api\V1\DeptHead\ResultController::class, 'index']);
+        Route::get('results/{examId}', [\App\Http\Controllers\Api\V1\DeptHead\ResultController::class, 'showExamResults']);
         Route::get('semester-submissions', [\App\Http\Controllers\Api\V1\DeptHead\SemesterSubmissionController::class, 'index']);
         Route::get('semester-submissions/details', [\App\Http\Controllers\Api\V1\DeptHead\SemesterSubmissionController::class, 'details']);
         Route::get('semester-submissions/{id}', [\App\Http\Controllers\Api\V1\DeptHead\SemesterSubmissionController::class, 'show']);

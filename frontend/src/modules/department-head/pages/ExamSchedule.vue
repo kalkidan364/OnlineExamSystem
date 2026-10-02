@@ -8,52 +8,59 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 
 const currentPage = ref(1)
-const perPage = 8
+const perPage = 10
 const currentView = ref<'list' | 'schedule' | 'review'>('list')
 const showAddCourseModal = ref(false)
+const showSuccessModal = ref(false)
+const successMessage = ref('')
+
+// ── Search & Filter State ──
+const search = ref('')
+const semesterFilter = ref('all')
+const courseFilter = ref('all')
+const statusFilter = ref('all')
 
 const stats = ref([
-  { label: 'Total Exams',     value: '0', change: '↑ 0 this semester', color: 'text-emerald-500', bg: 'bg-indigo-50',  iconColor: 'text-[#5138ed]',    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { label: 'Scheduled Exams', value: '0', change: '↑ 0 this semester', color: 'text-emerald-500', bg: 'bg-emerald-50', iconColor: 'text-emerald-500', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { label: 'Upcoming Exams',  value: '0', change: '↑ 0 this week',     color: 'text-emerald-500', bg: 'bg-amber-50',   iconColor: 'text-amber-500',   icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { label: 'Conflicts',       value: '0', change: '↓ 0 this semester', color: 'text-rose-500',    bg: 'bg-rose-50',    iconColor: 'text-rose-500',    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { label: 'Total Exams',     value: '0', change: '↑ 5 this semester', color: 'text-emerald-500', bg: 'bg-indigo-50',  iconColor: 'text-[#5138ed]',    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { label: 'Scheduled Exams', value: '0', change: '↑ 3 this semester', color: 'text-emerald-500', bg: 'bg-emerald-50', iconColor: 'text-emerald-500', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { label: 'Upcoming Exams',  value: '0', change: '↑ 2 this week',     color: 'text-emerald-500', bg: 'bg-amber-50',   iconColor: 'text-amber-500',   icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { label: 'Conflicts',       value: '0', change: 'None detected',     color: 'text-slate-500',   bg: 'bg-rose-50',    iconColor: 'text-rose-500',    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
 ])
 
 const exams = ref<any[]>([])
+const availableCourses = ref<any[]>([])
+const availableInstructors = ref<any[]>([])
 
 // ── Real computed values from stores ──────────────────────────────
-// Academic Year: e.g. "2025" → formatted as "2025/2026"
 const academicYear = computed(() => {
   const yr = settingsStore.academicYear
-  if (!yr) return ''
-  // If super admin stored just "2025", display as "2025/2026"
+  if (!yr) return '2026/2027'
   if (/^\d{4}$/.test(yr)) return `${yr}/${parseInt(yr) + 1}`
-  return yr // already formatted like "2025/2026"
+  return yr
 })
 
-// Semester from settings store (e.g. "1st Semester" / "2nd Semester")
-const currentSemester = computed(() => settingsStore.semester)
+const currentSemester = computed(() => settingsStore.semester || 'First Semester')
 
-// Department name from logged-in dept head's department relation
 const departmentName = computed(() => {
   const dept = authStore.user?.department
-  if (!dept) return ''
-  return dept.name || dept.code || ''
+  if (!dept) return 'computer scince'
+  return dept.name || dept.code || 'computer scince'
 })
 
-// Faculty is always "College of Informatics" (static per requirements, matches IS dept)
 const facultyName = 'College of Informatics'
 
 const fetchExams = async () => {
   try {
     const response = await apiClient.get('/dept-head/exams')
-    exams.value = response.data.data
+    exams.value = response.data.data || []
     
-    // Update basic stats
+    // Update stats from backend data
     const total = exams.value.length
-    const scheduled = exams.value.filter((e: any) => e.status === 'Scheduled').length
+    const scheduled = exams.value.filter((e: any) => ['Scheduled', 'Published'].includes(e.status)).length
+    const upcoming = exams.value.filter((e: any) => e.status === 'Scheduled').length
     stats.value[0].value = total.toString()
     stats.value[1].value = scheduled.toString()
+    stats.value[2].value = upcoming.toString()
   } catch (error) {
     console.error('Failed to fetch exams:', error)
   }
@@ -62,50 +69,70 @@ const fetchExams = async () => {
 const fetchCourses = async () => {
   try {
     const response = await apiClient.get('/dept-head/courses')
-    availableCourses.value = response.data.data
+    availableCourses.value = response.data?.data || []
   } catch (error) {
     console.error('Failed to fetch courses:', error)
+  }
+}
+
+const fetchInstructors = async () => {
+  try {
+    const response = await apiClient.get('/dept-head/instructors')
+    availableInstructors.value = response.data?.data || []
+  } catch (error) {
+    console.error('Failed to fetch instructors:', error)
   }
 }
 
 onMounted(async () => {
   fetchExams()
   fetchCourses()
-  // Ensure settings are loaded (they may already be from login)
-  if (!settingsStore.academicYear || settingsStore.academicYear === '2025') {
+  fetchInstructors()
+  if (!settingsStore.academicYear) {
     await settingsStore.fetchSettings()
   }
-  // Sync addForm fields from stores after data is ready
   syncFormFromStores()
 })
 
+// ── Form State ──
 const addForm = ref({
   title: 'Semester I Mid Examination Schedule',
-  academic_year: '',
-  semester: '',
+  academic_year: '2026/2027',
+  semester: 'First Semester',
   exam_type: 'Mid Examination',
   department: '',
   faculty: facultyName,
   start_date: '2026-06-02',
   end_date: '2026-06-10',
-  description: '',
+  description: 'Semester I Mid Examination Schedule for all undergraduate programs in the Department of Computer Science.',
   year_level: '1st Year',
   courses: [] as any[]
 })
 
-// Sync addForm from store values whenever they change
+// Validation Errors
+const formErrors = ref({
+  academic_year: '',
+  semester: '',
+  exam_type: '',
+  year_level: '',
+  title: '',
+  start_date: '',
+  end_date: '',
+  courses: '',
+})
+
 function syncFormFromStores() {
-  addForm.value.academic_year = academicYear.value
-  addForm.value.semester = currentSemester.value
-  addForm.value.department = departmentName.value
+  addForm.value.academic_year = academicYear.value || '2026/2027'
+  addForm.value.semester = currentSemester.value || 'First Semester'
+  addForm.value.department = departmentName.value || 'computer scince'
   addForm.value.faculty = facultyName
 }
 
-// Watch for reactive updates (in case stores update async after mount)
 watch([academicYear, currentSemester, departmentName], () => {
   syncFormFromStores()
 }, { immediate: true })
 
+// ── Course Modal State & Validation ──
 const newCourse = ref({
   name: '',
   code: '',
@@ -116,33 +143,150 @@ const newCourse = ref({
   notes: ''
 })
 
-const availableCourses = ref<any[]>([])
+const courseModalErrors = ref({
+  name: '',
+  code: '',
+  date: '',
+  time: '',
+  room: '',
+  inv: '',
+})
 
 const filteredCourses = computed(() => {
-  return availableCourses.value.filter(c => c.level === addForm.value.year_level)
+  if (!availableCourses.value.length) return []
+  if (!addForm.value.year_level) return availableCourses.value
+  
+  const targetYear = addForm.value.year_level.replace(/[^0-9]/g, '')
+  const matched = availableCourses.value.filter(c => {
+    const lvl = (c.year_level || c.level || '').replace(/[^0-9]/g, '')
+    return !lvl || lvl === targetYear
+  })
+  return matched.length ? matched : availableCourses.value
 })
 
 const selectedCourseId = ref('')
 
 watch(selectedCourseId, (newId) => {
-  const course = availableCourses.value.find(c => c.id === newId)
+  const course = availableCourses.value.find(c => c.id == newId)
   if (course) {
     newCourse.value.name = course.title
     newCourse.value.code = course.code
-  } else {
-    newCourse.value.name = ''
-    newCourse.value.code = ''
+    courseModalErrors.value.name = ''
+    courseModalErrors.value.code = ''
+    if (course.instructor?.name) {
+      newCourse.value.inv = course.instructor.name
+      courseModalErrors.value.inv = ''
+    }
   }
 })
 
+const validateCourseModal = (): boolean => {
+  let isValid = true
+  courseModalErrors.value = { name: '', code: '', date: '', time: '', room: '', inv: '' }
+
+  if (!newCourse.value.name.trim()) {
+    courseModalErrors.value.name = 'Please select or enter course name'
+    isValid = false
+  }
+  if (!newCourse.value.code.trim()) {
+    courseModalErrors.value.code = 'Course code is required'
+    isValid = false
+  }
+  if (!newCourse.value.date) {
+    courseModalErrors.value.date = 'Exam date is required'
+    isValid = false
+  }
+  if (!newCourse.value.time.trim()) {
+    courseModalErrors.value.time = 'Exam time is required'
+    isValid = false
+  }
+  if (!newCourse.value.room.trim()) {
+    courseModalErrors.value.room = 'Room is required'
+    isValid = false
+  }
+  if (!newCourse.value.inv.trim()) {
+    courseModalErrors.value.inv = 'Invigilator is required'
+    isValid = false
+  }
+
+  return isValid
+}
+
 const addCourse = () => {
-  if (!newCourse.value.name || !newCourse.value.date) return
+  if (!validateCourseModal()) return
   addForm.value.courses.push({ ...newCourse.value })
   newCourse.value = { name: '', code: '', date: '', time: '', room: '', inv: '', notes: '' }
   selectedCourseId.value = ''
+  formErrors.value.courses = ''
   showAddCourseModal.value = false
 }
 
+const removeCourse = (index: number) => {
+  addForm.value.courses.splice(index, 1)
+}
+
+// ── Schedule Form Validation ──
+const validateScheduleForm = (): boolean => {
+  let isValid = true
+  formErrors.value = {
+    academic_year: '',
+    semester: '',
+    exam_type: '',
+    year_level: '',
+    title: '',
+    start_date: '',
+    end_date: '',
+    courses: '',
+  }
+
+  if (!addForm.value.academic_year.trim()) {
+    formErrors.value.academic_year = 'Academic Year is required'
+    isValid = false
+  }
+  if (!addForm.value.semester.trim()) {
+    formErrors.value.semester = 'Semester is required'
+    isValid = false
+  }
+  if (!addForm.value.exam_type.trim()) {
+    formErrors.value.exam_type = 'Exam Type is required'
+    isValid = false
+  }
+  if (!addForm.value.year_level.trim()) {
+    formErrors.value.year_level = 'Year Level is required'
+    isValid = false
+  }
+  if (!addForm.value.title.trim()) {
+    formErrors.value.title = 'Schedule Title is required'
+    isValid = false
+  }
+  if (!addForm.value.start_date) {
+    formErrors.value.start_date = 'Start Date is required'
+    isValid = false
+  }
+  if (!addForm.value.end_date) {
+    formErrors.value.end_date = 'End Date is required'
+    isValid = false
+  }
+  if (addForm.value.start_date && addForm.value.end_date && addForm.value.end_date < addForm.value.start_date) {
+    formErrors.value.end_date = 'End Date must be on or after Start Date'
+    isValid = false
+  }
+  if (addForm.value.courses.length === 0) {
+    formErrors.value.courses = 'Please add at least one course to the examination schedule before proceeding.'
+    isValid = false
+  }
+
+  return isValid
+}
+
+const goToReview = () => {
+  if (!validateScheduleForm()) {
+    return
+  }
+  currentView.value = 'review'
+}
+
+// ── Submit & Review ──
 const isSubmitting = ref(false)
 const submitError = ref('')
 
@@ -162,7 +306,7 @@ const allConfirmed = computed(() =>
 
 const submitSchedule = async () => {
   if (!allConfirmed.value) {
-    submitError.value = 'Please confirm all checkboxes before publishing.'
+    submitError.value = 'Please confirm all 4 checkboxes before publishing.'
     return
   }
   isSubmitting.value = true
@@ -170,18 +314,27 @@ const submitSchedule = async () => {
   try {
     await apiClient.post('/dept-head/exams', addForm.value)
     await fetchExams()
-    // Reset form for next use
+    
+    // Show success popup
+    successMessage.value = `The examination schedule "${addForm.value.title}" with ${addForm.value.courses.length} courses has been successfully published!`
+    showSuccessModal.value = true
+    
+    // Reset form
     addForm.value.courses = []
     addForm.value.title = 'Semester I Mid Examination Schedule'
     addForm.value.description = ''
     confirmChecks.value = { dates: false, rooms: false, invigilators: false, notify: false }
-    currentView.value = 'list'
   } catch (error: any) {
-    submitError.value = error?.response?.data?.message || 'Failed to publish schedule. Please try again.'
+    submitError.value = error?.response?.data?.message || 'Failed to publish schedule. Please check all fields and try again.'
     console.error('Failed to create schedule:', error)
   } finally {
     isSubmitting.value = false
   }
+}
+
+const closeSuccessModal = () => {
+  showSuccessModal.value = false
+  currentView.value = 'list'
 }
 
 const deleteExam = async (id: number) => {
@@ -195,17 +348,45 @@ const deleteExam = async (id: number) => {
   }
 }
 
-const totalItems = computed(() => exams.value.length)
-const totalPages = computed(() => Math.ceil(totalItems.value / perPage))
+// ── Filtered & Paginated Exams for List View ──
+const filteredExams = computed(() => {
+  return exams.value.filter(exam => {
+    const q = search.value.trim().toLowerCase()
+    const matchSearch = !q ||
+      (exam.title && exam.title.toLowerCase().includes(q)) ||
+      (exam.code && exam.code.toLowerCase().includes(q)) ||
+      (exam.course && exam.course.toLowerCase().includes(q)) ||
+      (exam.courseName && exam.courseName.toLowerCase().includes(q))
+
+    const matchSemester = semesterFilter.value === 'all' || exam.semester === semesterFilter.value
+    const matchCourse = courseFilter.value === 'all' || (exam.courseCode === courseFilter.value || exam.code === courseFilter.value)
+    const matchStatus = statusFilter.value === 'all' || (exam.status && exam.status.toLowerCase() === statusFilter.value.toLowerCase())
+
+    return matchSearch && matchSemester && matchCourse && matchStatus
+  })
+})
+
+const totalItems = computed(() => filteredExams.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / perPage)))
+const paginatedExams = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return filteredExams.value.slice(start, start + perPage)
+})
+
+watch([search, semesterFilter, courseFilter, statusFilter], () => {
+  currentPage.value = 1
+})
 
 const statusBadge = (status: string) => {
-  if (status === 'Scheduled') return 'text-emerald-600 bg-emerald-50'
-  if (status === 'Conflict')  return 'text-rose-600 bg-rose-50'
-  return 'text-slate-600 bg-slate-50'
+  const s = (status || '').toLowerCase()
+  if (s === 'scheduled' || s === 'published') return 'text-emerald-600 bg-emerald-50'
+  if (s === 'conflict')  return 'text-rose-600 bg-rose-50'
+  if (s === 'completed') return 'text-sky-600 bg-sky-50'
+  if (s === 'cancelled') return 'text-rose-600 bg-rose-50'
+  return 'text-amber-600 bg-amber-50'
 }
 
 const calIcon  = 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'
-const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'
 </script>
 
 <template>
@@ -249,29 +430,36 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
             <!-- Search -->
             <div class="relative w-full md:w-80">
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-              <input type="text" placeholder="Search exams by title, course or code..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-600 placeholder:text-slate-400" />
+              <input v-model="search" type="text" placeholder="Search exams by title, course or code..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-600 placeholder:text-slate-400" />
             </div>
             <!-- Dropdowns -->
             <div class="relative w-40 shrink-0">
-              <select class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
-                <option>All Semesters</option>
+              <select v-model="semesterFilter" class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
+                <option value="all">All Semesters</option>
+                <option value="Semester 1">Semester 1</option>
+                <option value="Semester 2">Semester 2</option>
               </select>
               <svg class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </div>
             <div class="relative w-40 shrink-0">
-              <select class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
-                <option>All Courses</option>
+              <select v-model="courseFilter" class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
+                <option value="all">All Courses</option>
+                <option v-for="c in availableCourses" :key="c.id" :value="c.code">{{ c.title }}</option>
               </select>
               <svg class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </div>
             <div class="relative w-36 shrink-0">
-              <select class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
-                <option>All Status</option>
+              <select v-model="statusFilter" class="w-full appearance-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer">
+                <option value="all">All Status</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="published">Published</option>
+                <option value="completed">Completed</option>
+                <option value="draft">Draft</option>
               </select>
               <svg class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </div>
             <!-- Filter btn -->
-            <button class="flex items-center gap-2 px-4 py-2.5 border border-[#5138ed] text-[#5138ed] rounded-xl text-[13px] font-bold hover:bg-indigo-50 transition-colors shrink-0">
+            <button @click="currentPage = 1" class="flex items-center gap-2 px-4 py-2.5 border border-[#5138ed] text-[#5138ed] rounded-xl text-[13px] font-bold hover:bg-indigo-50 transition-colors shrink-0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
               Filter
             </button>
@@ -298,31 +486,31 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-50">
-              <tr v-for="exam in exams" :key="exam.id" class="hover:bg-slate-50/80 transition-colors">
+              <tr v-if="paginatedExams.length === 0">
+                <td colspan="7" class="px-6 py-12 text-center text-slate-400">
+                  <p class="text-[14px] font-semibold text-slate-600">No scheduled exams found</p>
+                  <p class="text-[12px] text-slate-400 mt-1">Click "Schedule Exam" to create a new department schedule.</p>
+                </td>
+              </tr>
+              <tr v-for="exam in paginatedExams" :key="exam.id" class="hover:bg-slate-50/80 transition-colors">
                 <td class="px-6 py-4">
                   <span class="text-[13px] font-bold text-slate-700">{{ exam.title }}</span>
                 </td>
-                <td class="px-6 py-4 text-[13px] font-bold text-slate-600">{{ exam.code }}</td>
-                <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.course }}</td>
+                <td class="px-6 py-4 text-[13px] font-bold text-slate-600">{{ exam.code || exam.courseCode }}</td>
+                <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.course || exam.courseName }}</td>
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-1.5 mb-0.5">
                     <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="calIcon"></path></svg>
                     <span class="text-[13px] font-bold text-slate-700">{{ exam.date }}</span>
                   </div>
                 </td>
-                <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.room }}</td>
+                <td class="px-6 py-4 text-[13px] text-slate-600 font-medium">{{ exam.room || 'Room 101' }}</td>
                 <td class="px-6 py-4">
-                  <span :class="[statusBadge(exam.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md']">{{ exam.status }}</span>
+                  <span :class="[statusBadge(exam.status), 'text-[11px] font-bold px-2.5 py-1 rounded-md capitalize']">{{ exam.status }}</span>
                 </td>
                 <td class="px-6 py-4">
                   <div class="flex items-center justify-center gap-2">
-                    <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#5138ed] hover:bg-indigo-50 transition-colors">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                    </button>
-                    <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-colors">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                    </button>
-                    <button @click="deleteExam(exam.id)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                    <button @click="deleteExam(exam.id)" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Delete Schedule">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
@@ -334,9 +522,11 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
 
         <!-- Pagination -->
         <div class="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <p class="text-[13px] font-medium text-slate-500">Showing 1 to {{ perPage }} of {{ totalItems }} exams</p>
+          <p class="text-[13px] font-medium text-slate-500">
+            Showing {{ filteredExams.length === 0 ? 0 : (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, filteredExams.length) }} of {{ filteredExams.length }} exams
+          </p>
           <div class="flex items-center gap-1">
-            <button :disabled="currentPage === 1" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm transition-all border border-transparent hover:border-slate-200 disabled:opacity-40">
+            <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm transition-all border border-transparent hover:border-slate-200 disabled:opacity-40">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
             <button
@@ -344,9 +534,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               @click="currentPage = page"
               :class="['w-8 h-8 flex items-center justify-center rounded-lg text-[13px] font-bold transition-all', currentPage === page ? 'bg-[#5138ed] text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200']"
             >{{ page }}</button>
-            <span class="w-8 h-8 flex items-center justify-center text-[13px] font-bold text-slate-400">...</span>
-            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-600 text-[13px] font-bold hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all">9</button>
-            <button :disabled="currentPage === totalPages" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm transition-all border border-transparent hover:border-slate-200 disabled:opacity-40">
+            <button @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage === totalPages" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm transition-all border border-transparent hover:border-slate-200 disabled:opacity-40">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
           </div>
@@ -358,7 +546,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
 
 
     <!-- ══════════════════════════════════════════════════
-         SCHEDULE EXAM VIEW
+         SCHEDULE EXAM VIEW (STEP 1)
     ══════════════════════════════════════════════════ -->
     <div v-else-if="currentView === 'schedule'" class="space-y-6">
 
@@ -413,38 +601,81 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Academic Year <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input type="text" v-model="addForm.academic_year" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-500 focus:outline-none cursor-not-allowed font-medium" />
+                  <input
+                    type="text"
+                    v-model="addForm.academic_year"
+                    @input="formErrors.academic_year = ''"
+                    placeholder="e.g. 2026/2027"
+                    :class="[
+                      'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors font-medium',
+                      formErrors.academic_year ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  />
                 </div>
+                <p v-if="formErrors.academic_year" class="text-[11px] text-rose-500 font-medium">{{ formErrors.academic_year }}</p>
               </div>
+
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Semester <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input type="text" v-model="addForm.semester" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-500 focus:outline-none cursor-not-allowed font-medium" />
+                  <select
+                    v-model="addForm.semester"
+                    @change="formErrors.semester = ''"
+                    :class="[
+                      'w-full appearance-none px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors cursor-pointer',
+                      formErrors.semester ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  >
+                    <option value="First Semester">First Semester</option>
+                    <option value="Second Semester">Second Semester</option>
+                    <option value="Summer Semester">Summer Semester</option>
+                  </select>
+                  <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
+                <p v-if="formErrors.semester" class="text-[11px] text-rose-500 font-medium">{{ formErrors.semester }}</p>
               </div>
+
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Exam Type <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <select v-model="addForm.exam_type" class="w-full appearance-none px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer">
-                    <option>Mid Examination</option>
-                    <option>Final Examination</option>
-                    <option>Quiz</option>
+                  <select
+                    v-model="addForm.exam_type"
+                    @change="formErrors.exam_type = ''"
+                    :class="[
+                      'w-full appearance-none px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors cursor-pointer',
+                      formErrors.exam_type ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  >
+                    <option value="Mid Examination">Mid Examination</option>
+                    <option value="Final Examination">Final Examination</option>
+                    <option value="Quiz">Quiz</option>
+                    <option value="Supplementary Examination">Supplementary Examination</option>
                   </select>
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
+                <p v-if="formErrors.exam_type" class="text-[11px] text-rose-500 font-medium">{{ formErrors.exam_type }}</p>
               </div>
+
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Year Level <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <select v-model="addForm.year_level" class="w-full appearance-none px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer">
-                    <option>1st Year</option>
-                    <option>2nd Year</option>
-                    <option>3rd Year</option>
-                    <option>4th Year</option>
-                    <option>5th Year</option>
+                  <select
+                    v-model="addForm.year_level"
+                    @change="formErrors.year_level = ''"
+                    :class="[
+                      'w-full appearance-none px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors cursor-pointer',
+                      formErrors.year_level ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  >
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                    <option value="5th Year">5th Year</option>
                   </select>
                   <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
+                <p v-if="formErrors.year_level" class="text-[11px] text-rose-500 font-medium">{{ formErrors.year_level }}</p>
               </div>
             </div>
 
@@ -452,18 +683,28 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
             <div class="grid grid-cols-2 gap-4 mb-4">
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Department</label>
-                <input type="text" v-model="addForm.department" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-500 focus:outline-none cursor-not-allowed font-medium" />
+                <input type="text" v-model="addForm.department" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-600 focus:outline-none cursor-not-allowed font-medium capitalize" />
               </div>
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Faculty</label>
-                <input type="text" v-model="addForm.faculty" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-500 focus:outline-none cursor-not-allowed font-medium" />
+                <input type="text" v-model="addForm.faculty" disabled class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] text-slate-600 focus:outline-none cursor-not-allowed font-medium" />
               </div>
             </div>
 
             <!-- Row 3: Schedule Title -->
             <div class="space-y-1.5 mb-4">
               <label class="text-[12px] font-bold text-slate-700">Schedule Title <span class="text-rose-500">*</span></label>
-              <input type="text" v-model="addForm.title" class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+              <input
+                type="text"
+                v-model="addForm.title"
+                @input="formErrors.title = ''"
+                placeholder="e.g. Semester I Mid Examination Schedule"
+                :class="[
+                  'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors font-medium',
+                  formErrors.title ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                ]"
+              />
+              <p v-if="formErrors.title" class="text-[11px] text-rose-500 font-medium">{{ formErrors.title }}</p>
             </div>
 
             <!-- Row 4: Start Date / End Date -->
@@ -471,21 +712,45 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">Start Date <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input type="date" v-model="addForm.start_date" class="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                  <input
+                    type="date"
+                    v-model="addForm.start_date"
+                    @change="formErrors.start_date = ''"
+                    :class="[
+                      'w-full pl-3 pr-10 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors',
+                      formErrors.start_date ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  />
                 </div>
+                <p v-if="formErrors.start_date" class="text-[11px] text-rose-500 font-medium">{{ formErrors.start_date }}</p>
               </div>
+
               <div class="space-y-1.5">
                 <label class="text-[12px] font-bold text-slate-700">End Date <span class="text-rose-500">*</span></label>
                 <div class="relative">
-                  <input type="date" v-model="addForm.end_date" class="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                  <input
+                    type="date"
+                    v-model="addForm.end_date"
+                    @change="formErrors.end_date = ''"
+                    :class="[
+                      'w-full pl-3 pr-10 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors',
+                      formErrors.end_date ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                    ]"
+                  />
                 </div>
+                <p v-if="formErrors.end_date" class="text-[11px] text-rose-500 font-medium">{{ formErrors.end_date }}</p>
               </div>
             </div>
 
             <!-- Row 5: Description -->
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Description <span class="text-slate-400 font-normal">(optional)</span></label>
-              <textarea rows="3" class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors resize-none">Semester I Mid Examination Schedule for all undergraduate programs in the Department of Computer Science.</textarea>
+              <textarea
+                v-model="addForm.description"
+                rows="3"
+                placeholder="Enter description or remarks for this examination schedule..."
+                class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors resize-none placeholder:text-slate-400"
+              ></textarea>
             </div>
           </div>
 
@@ -503,12 +768,24 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                 </div>
               </div>
               <div class="flex items-center gap-3">
-                <span class="px-3 py-1 bg-indigo-600 text-white text-[11px] font-bold rounded-full">● MID EXAM</span>
-                <button @click="showAddCourseModal = true" class="flex items-center gap-1.5 bg-[#5138ed] text-white px-4 py-2 rounded-lg text-[12px] font-bold hover:bg-indigo-600 transition-colors shadow-sm">
+                <span class="px-3 py-1 bg-[#5138ed] text-white text-[11px] font-bold rounded-full uppercase tracking-wider">
+                  ● {{ addForm.exam_type }}
+                </span>
+                <button
+                  type="button"
+                  @click="showAddCourseModal = true"
+                  class="flex items-center gap-1.5 bg-[#5138ed] text-white px-4 py-2 rounded-lg text-[12px] font-bold hover:bg-indigo-600 transition-colors shadow-sm cursor-pointer"
+                >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                   Add Course
                 </button>
               </div>
+            </div>
+
+            <!-- Error banner if courses empty upon proceeding -->
+            <div v-if="formErrors.courses" class="mb-4 flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-rose-700">
+              <svg class="w-5 h-5 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span class="text-[13px] font-bold">{{ formErrors.courses }}</span>
             </div>
 
             <!-- Courses table -->
@@ -521,13 +798,18 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                   <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Time</th>
                   <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Invigilator</th>
                   <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Room</th>
-                  <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Action</th>
+                  <th class="text-center pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-50">
+                <tr v-if="addForm.courses.length === 0">
+                  <td colspan="7" class="py-8 text-center text-[13px] text-slate-400">
+                    No courses added yet. Click "+ Add Course" to add courses to this schedule.
+                  </td>
+                </tr>
                 <tr v-for="(course, index) in addForm.courses" :key="index" class="hover:bg-slate-50/60 transition-colors">
                   <td class="py-3 text-[13px] font-semibold text-slate-700">{{ course.name }}</td>
-                  <td class="py-3 text-[13px] text-slate-600">{{ course.code }}</td>
+                  <td class="py-3 text-[13px] text-slate-600 font-medium">{{ course.code }}</td>
                   <td class="py-3">
                     <div class="flex items-center gap-1.5 text-[12px] text-slate-600">
                       <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="calIcon"></path></svg>
@@ -540,10 +822,15 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                       {{ course.time }}
                     </div>
                   </td>
-                  <td class="py-3 text-[12px] text-slate-600">{{ course.inv ?? 'TBD' }}</td>
-                  <td class="py-3 text-[12px] text-slate-600">{{ course.room }}</td>
-                  <td class="py-3">
-                    <button class="w-7 h-7 flex items-center justify-center rounded-lg text-rose-400 hover:bg-rose-50 transition-colors">
+                  <td class="py-3 text-[12px] text-slate-600 font-medium">{{ course.inv ?? 'TBD' }}</td>
+                  <td class="py-3 text-[12px] text-slate-600 font-medium">{{ course.room }}</td>
+                  <td class="py-3 text-center">
+                    <button
+                      type="button"
+                      @click="removeCourse(index)"
+                      class="w-7 h-7 inline-flex items-center justify-center rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Remove course"
+                    >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </td>
@@ -552,29 +839,25 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
             </table>
 
             <!-- Add more link -->
-            <button @click="showAddCourseModal = true" class="mt-3 flex items-center gap-1.5 text-[#5138ed] text-[12px] font-bold hover:underline">
+            <button type="button" @click="showAddCourseModal = true" class="mt-3 flex items-center gap-1.5 text-[#5138ed] text-[12px] font-bold hover:underline cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
               Add Course to schedule more
             </button>
 
-            <!-- No conflicts bar -->
-            <div class="mt-4 flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
+            <!-- Status bar -->
+            <div v-if="addForm.courses.length > 0" class="mt-4 flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
               <svg class="w-5 h-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              <span class="text-[13px] font-bold text-emerald-700">No scheduling conflicts detected. All good!</span>
+              <span class="text-[13px] font-bold text-emerald-700">No scheduling conflicts detected. All {{ addForm.courses.length }} courses ready!</span>
             </div>
           </div>
 
           <!-- Bottom action bar -->
           <div class="flex items-center justify-between pb-6">
-            <button @click="currentView = 'list'" class="px-6 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors">
+            <button type="button" @click="currentView = 'list'" class="px-6 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors">
               Cancel
             </button>
             <div class="flex items-center gap-3">
-              <button class="flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-                Save Draft
-              </button>
-              <button @click="currentView = 'review'" class="flex items-center gap-2 px-6 py-2.5 bg-[#5138ed] text-white rounded-xl text-[13px] font-bold hover:bg-indigo-600 transition-colors shadow-sm">
+              <button type="button" @click="goToReview" class="flex items-center gap-2 px-6 py-2.5 bg-[#5138ed] text-white rounded-xl text-[13px] font-bold hover:bg-indigo-600 transition-colors shadow-sm cursor-pointer">
                 Next
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
               </button>
@@ -596,7 +879,9 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                   </div>
                   <span class="text-[12px] text-slate-500 font-medium">Exam Type</span>
                 </div>
-                <span class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1 rounded-lg">MID EXAM</span>
+                <span class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1 rounded-lg uppercase">
+                  {{ addForm.exam_type }}
+                </span>
               </div>
               <!-- Semester -->
               <div class="flex items-center justify-between">
@@ -662,7 +947,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
     </div><!-- end SCHEDULE EXAM VIEW -->
 
     <!-- ══════════════════════════════════════════════════
-         REVIEW & CONFIRM VIEW
+         REVIEW & CONFIRM VIEW (STEP 2)
     ══════════════════════════════════════════════════ -->
     <div v-else-if="currentView === 'review'" class="space-y-6">
       
@@ -726,7 +1011,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               </div>
               <div class="space-y-1">
                 <p class="text-[12px] font-bold text-slate-500">Exam Type</p>
-                <p class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1 rounded-lg inline-block">{{ addForm.exam_type.toUpperCase() }}</p>
+                <p class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2.5 py-1 rounded-lg inline-block uppercase">{{ addForm.exam_type }}</p>
               </div>
               <div class="space-y-1">
                 <p class="text-[12px] font-bold text-slate-500">Year Level</p>
@@ -734,7 +1019,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               </div>
               <div class="space-y-1">
                 <p class="text-[12px] font-bold text-slate-500">Department</p>
-                <p class="text-[13px] font-bold text-slate-800">{{ addForm.department }}</p>
+                <p class="text-[13px] font-bold text-slate-800 capitalize">{{ addForm.department }}</p>
               </div>
               
               <div class="space-y-1">
@@ -749,19 +1034,15 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                 <p class="text-[12px] font-bold text-slate-500">Total Courses</p>
                 <p class="text-[13px] font-bold text-slate-800">{{ addForm.courses.length }}</p>
               </div>
-              <div class="space-y-1">
-                <p class="text-[12px] font-bold text-slate-500">Total Students</p>
-                <p class="text-[13px] font-bold text-slate-800">TBD</p>
-              </div>
               
-              <div class="space-y-1 col-span-2 mt-2">
+              <div class="space-y-1 col-span-2">
                 <p class="text-[12px] font-bold text-slate-500">Schedule Period</p>
                 <div class="flex items-center gap-1.5 mt-0.5 text-slate-800">
                   <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="calIcon"></path></svg>
-                  <p class="text-[13px] font-bold">Jun 02, 2026 – Jun 10, 2026</p>
+                  <p class="text-[13px] font-bold">{{ addForm.start_date }} – {{ addForm.end_date }}</p>
                 </div>
               </div>
-              <div class="space-y-1 col-span-2 mt-2">
+              <div class="space-y-1">
                 <p class="text-[12px] font-bold text-slate-500">Status</p>
                 <div class="flex items-center gap-2 mt-0.5">
                   <p class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg inline-block">DRAFT</p>
@@ -787,12 +1068,9 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Course Code</th>
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Exam Date</th>
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Time</th>
-                    <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Duration</th>
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Room</th>
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Invigilator</th>
-                    <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Students</th>
                     <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                    <th class="text-left pb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
@@ -802,17 +1080,10 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                     <td class="py-3 pr-2 text-[12px] font-bold text-slate-600">{{ row.code }}</td>
                     <td class="py-3 pr-2 text-[12px] text-slate-600 whitespace-nowrap">{{ row.date }}</td>
                     <td class="py-3 pr-2 text-[12px] text-[#5138ed] font-medium whitespace-nowrap">{{ row.time }}</td>
-                    <td class="py-3 pr-2 text-[12px] text-slate-600 whitespace-nowrap">2 hrs</td>
                     <td class="py-3 pr-2 text-[12px] text-slate-600 whitespace-nowrap">{{ row.room }}</td>
                     <td class="py-3 pr-2 text-[12px] text-slate-600 whitespace-nowrap">{{ row.inv ?? 'TBD' }}</td>
-                    <td class="py-3 pr-2 text-[12px] font-bold text-slate-600">TBD</td>
                     <td class="py-3 pr-2">
                       <span class="text-[10px] font-bold text-emerald-600 border border-emerald-100 bg-emerald-50 px-2.5 py-1 rounded-lg inline-block">Ready</span>
-                    </td>
-                    <td class="py-3">
-                      <button class="w-7 h-7 flex items-center justify-center rounded-lg text-[#5138ed] hover:bg-indigo-50 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                      </button>
                     </td>
                   </tr>
                 </tbody>
@@ -893,22 +1164,11 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                     <p class="text-[11px] font-bold text-slate-800">Recipients</p>
                     <div class="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
                       <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                      TBD Students
+                      All Enrolled Students
                     </div>
                     <div class="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
                       <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                      18 Instructors
-                    </div>
-                  </div>
-                  <div class="space-y-1.5">
-                    <p class="text-[11px] font-bold text-slate-800">Delivery</p>
-                    <div class="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
-                      <svg class="w-3.5 h-3.5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                      Email
-                    </div>
-                    <div class="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
-                      <svg class="w-3.5 h-3.5 text-[#5138ed]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                      Portal Notification
+                      Department Instructors
                     </div>
                   </div>
                 </div>
@@ -956,7 +1216,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
               >
                 <span v-if="isSubmitting" class="flex items-center justify-center gap-2">
                   <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                  Publishing...
+                  Publishing Schedule...
                 </span>
                 <span v-else>Publish Schedule</span>
               </button>
@@ -965,14 +1225,10 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
           </div>
 
           <!-- Bottom Action Bar -->
-          <div class="flex items-center justify-end gap-3 pb-6 mt-6 border-t border-slate-100 pt-6">
-            <button @click="currentView = 'schedule'" class="flex items-center gap-2 px-6 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors mr-auto">
+          <div class="flex items-center justify-between pb-6 mt-6 border-t border-slate-100 pt-6">
+            <button @click="currentView = 'schedule'" class="flex items-center gap-2 px-6 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-              Back
-            </button>
-            <button class="flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-[13px] font-bold hover:bg-slate-50 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-              Save Draft
+              Back to Form
             </button>
             <button
               @click="submitSchedule"
@@ -1002,7 +1258,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                   <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                   <span class="text-[12px] text-slate-600 font-medium">Exam Type</span>
                 </div>
-                <span class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2 py-0.5 rounded-lg">{{ addForm.exam_type.toUpperCase() }}</span>
+                <span class="text-[11px] font-bold text-[#5138ed] bg-indigo-50 px-2 py-0.5 rounded-lg uppercase">{{ addForm.exam_type }}</span>
               </div>
               <!-- Year Level -->
               <div class="flex items-center justify-between">
@@ -1040,68 +1296,11 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
                 </div>
                 <span class="text-[12px] font-bold text-slate-700">{{ addForm.courses.length }}</span>
               </div>
-              <!-- Students -->
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Students</span>
-                </div>
-                <span class="text-[12px] font-bold text-slate-700">TBD</span>
-              </div>
-              <!-- Invigilators -->
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Invigilators</span>
-                </div>
-                <span class="text-[12px] font-bold text-slate-700">18</span>
-              </div>
-              <!-- Rooms -->
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Rooms</span>
-                </div>
-                <span class="text-[12px] font-bold text-slate-700">{{ addForm.courses.length }}</span>
-              </div>
               
-              <!-- Divider -->
-              <div class="border-t border-slate-100 pt-2"></div>
-              
-              <!-- Schedule Duration -->
-              <div class="space-y-2 mt-2">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="calIcon"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Schedule Duration</span>
-                </div>
-                <div class="pl-6.5 text-[12px] font-bold text-slate-700">
-                  Jun 02 - Jun 10, 2026<br/>
-                  <span class="text-[11px] font-medium text-slate-500 font-normal">(9 Days)</span>
-                </div>
-              </div>
-              
-              <!-- Divider -->
-              <div class="border-t border-slate-100 pt-2"></div>
-
-              <!-- Conflict Status -->
-              <div class="flex items-center justify-between mt-2">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Conflict Status</span>
-                </div>
-                <div class="flex items-center gap-1.5 text-emerald-600">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                  <span class="text-[12px] font-bold">None</span>
-                </div>
-              </div>
-              
-              <!-- Publish Status -->
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                  <span class="text-[12px] text-slate-600 font-medium">Publish Status</span>
-                </div>
-                <span class="text-[10px] font-bold text-amber-600">DRAFT</span>
+              <!-- Duration -->
+              <div class="space-y-1 mt-2">
+                <span class="text-[11px] font-medium text-slate-400 block">Schedule Period</span>
+                <span class="text-[12px] font-bold text-slate-700 block">{{ addForm.start_date }} - {{ addForm.end_date }}</span>
               </div>
             </div>
           </div>
@@ -1119,7 +1318,7 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
       <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" @click="showAddCourseModal = false"></div>
       
       <!-- Modal Content -->
-      <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-[520px] overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-[560px] overflow-hidden flex flex-col max-h-[90vh]">
         
         <!-- Header -->
         <div class="px-6 py-5 border-b border-slate-100 flex items-start justify-between">
@@ -1133,24 +1332,42 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
         </div>
 
         <!-- Body -->
-        <div class="p-6 overflow-y-auto space-y-5">
-          <!-- Course -->
+        <div class="p-6 overflow-y-auto space-y-4">
+          <!-- Course Name & Code -->
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Course Name <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <select v-model="selectedCourseId" class="w-full appearance-none px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+                <select
+                  v-model="selectedCourseId"
+                  :class="[
+                    'w-full appearance-none px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors cursor-pointer',
+                    courseModalErrors.name ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                  ]"
+                >
                   <option value="" disabled>Select a course</option>
                   <option v-for="course in filteredCourses" :key="course.id" :value="course.id">
-                    {{ course.title }}
+                    {{ course.title }} ({{ course.code }})
                   </option>
                 </select>
                 <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
+              <p v-if="courseModalErrors.name" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.name }}</p>
             </div>
+
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Course Code <span class="text-rose-500">*</span></label>
-              <input type="text" v-model="newCourse.code" placeholder="e.g. CS401" class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400" />
+              <input
+                type="text"
+                v-model="newCourse.code"
+                @input="courseModalErrors.code = ''"
+                placeholder="e.g. CS-301"
+                :class="[
+                  'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors placeholder:text-slate-400 font-medium',
+                  courseModalErrors.code ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                ]"
+              />
+              <p v-if="courseModalErrors.code" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.code }}</p>
             </div>
           </div>
 
@@ -1159,14 +1376,34 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Exam Date <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <input type="date" v-model="newCourse.date" class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400" />
+                <input
+                  type="date"
+                  v-model="newCourse.date"
+                  @change="courseModalErrors.date = ''"
+                  :class="[
+                    'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors',
+                    courseModalErrors.date ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                  ]"
+                />
               </div>
+              <p v-if="courseModalErrors.date" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.date }}</p>
             </div>
+
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Time <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <input type="text" v-model="newCourse.time" placeholder="e.g. 09:00 AM - 11:00 AM" class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400" />
+                <input
+                  type="text"
+                  v-model="newCourse.time"
+                  @input="courseModalErrors.time = ''"
+                  placeholder="e.g. 09:00 AM - 11:00 AM"
+                  :class="[
+                    'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors placeholder:text-slate-400',
+                    courseModalErrors.time ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                  ]"
+                />
               </div>
+              <p v-if="courseModalErrors.time" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.time }}</p>
             </div>
           </div>
 
@@ -1175,14 +1412,39 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Invigilator <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <input type="text" v-model="newCourse.inv" placeholder="Search or select invigilator..." class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400" />
+                <input
+                  type="text"
+                  v-model="newCourse.inv"
+                  @input="courseModalErrors.inv = ''"
+                  list="instructors-list"
+                  placeholder="e.g. Dr. Abebe Kebede"
+                  :class="[
+                    'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors placeholder:text-slate-400',
+                    courseModalErrors.inv ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                  ]"
+                />
+                <datalist id="instructors-list">
+                  <option v-for="inst in availableInstructors" :key="inst.id" :value="inst.name">{{ inst.name }} ({{ inst.email }})</option>
+                </datalist>
               </div>
+              <p v-if="courseModalErrors.inv" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.inv }}</p>
             </div>
+
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-slate-700">Room <span class="text-rose-500">*</span></label>
               <div class="relative">
-                <input type="text" v-model="newCourse.room" placeholder="Search or select room..." class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400" />
+                <input
+                  type="text"
+                  v-model="newCourse.room"
+                  @input="courseModalErrors.room = ''"
+                  placeholder="e.g. Room 101 / LH-02"
+                  :class="[
+                    'w-full px-3 py-2.5 bg-white border rounded-lg text-[13px] text-slate-700 focus:outline-none transition-colors placeholder:text-slate-400',
+                    courseModalErrors.room ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20' : 'border-slate-200 focus:border-indigo-500'
+                  ]"
+                />
               </div>
+              <p v-if="courseModalErrors.room" class="text-[11px] text-rose-500 font-medium">{{ courseModalErrors.room }}</p>
             </div>
           </div>
 
@@ -1190,22 +1452,40 @@ const bellIcon = 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002
           <div class="space-y-1.5">
             <label class="text-[12px] font-bold text-slate-700">Notes <span class="text-slate-400 font-normal">(optional)</span></label>
             <div class="relative">
-              <textarea v-model="newCourse.notes" rows="3" placeholder="Add any additional notes..." class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400 resize-none"></textarea>
-              <span class="absolute bottom-2 right-3 text-[10px] font-medium text-slate-400">{{ newCourse.notes.length }} / 200</span>
+              <textarea v-model="newCourse.notes" rows="3" placeholder="Add any additional notes for this examination session..." class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-400 resize-none"></textarea>
+              <span class="absolute bottom-2 right-3 text-[10px] font-medium text-slate-400">{{ (newCourse.notes || '').length }} / 200</span>
             </div>
           </div>
         </div>
 
         <!-- Footer -->
-        <div class="px-6 py-5 border-t border-slate-100 flex items-center justify-between bg-white">
-          <button @click="showAddCourseModal = false" class="px-10 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold text-[13px] rounded-xl hover:bg-slate-50 transition-colors">
+        <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <button @click="showAddCourseModal = false" class="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold text-[13px] rounded-xl hover:bg-slate-100 transition-colors">
             Cancel
           </button>
-          <button @click="addCourse" class="px-10 py-2.5 bg-[#5138ed] text-white font-bold text-[13px] rounded-xl hover:bg-indigo-600 transition-colors shadow-sm w-36 text-center flex justify-center">
+          <button @click="addCourse" class="px-6 py-2.5 bg-[#5138ed] text-white font-bold text-[13px] rounded-xl hover:bg-indigo-600 transition-colors shadow-sm">
             Add Course
           </button>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SUCCESS POPUP MODAL
+    ══════════════════════════════════════════════════ -->
+    <div v-if="showSuccessModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 text-center space-y-4">
+        <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto border-4 border-emerald-100">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        <h3 class="text-[18px] font-bold text-slate-800">Examination Schedule Published!</h3>
+        <p class="text-[13px] text-slate-500 leading-relaxed">{{ successMessage }}</p>
+        <div class="pt-2">
+          <button @click="closeSuccessModal" class="w-full py-2.5 bg-[#5138ed] hover:bg-indigo-600 text-white font-bold text-[13px] rounded-xl transition-all shadow-sm">
+            View Schedules
+          </button>
+        </div>
       </div>
     </div>
 

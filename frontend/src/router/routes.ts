@@ -269,6 +269,11 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import('../modules/department-head/pages/Exams.vue')
       },
       {
+        path: 'results',
+        name: 'DeptHeadResults',
+        component: () => import('../modules/department-head/pages/Results.vue')
+      },
+      {
         path: 'schedule',
         name: 'DeptHeadScheduleExams',
         component: () => import('../modules/department-head/pages/ExamSchedule.vue')
