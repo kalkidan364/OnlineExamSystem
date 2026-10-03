@@ -35,6 +35,8 @@ class User extends Authenticatable
         'profile_picture',
         'created_by',
         'employment_type',
+        'office',
+        'notification_preferences',
     ];
 
     protected $hidden = [
@@ -61,6 +63,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'notification_preferences' => 'array',
         ];
     }
 

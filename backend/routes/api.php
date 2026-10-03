@@ -47,15 +47,18 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         $user = $request->user()->load('department');
         return response()->json([
             'data' => [
-                'id'                  => $user->id,
-                'name'                => $user->name,
-                'email'               => $user->email,
-                'username'            => $user->username,
-                'role'                => $user->role,
-                'department_id'       => $user->department_id,
-                'department'          => $user->department,
-                'profile_picture'     => $user->profile_picture,
-                'profile_picture_url' => $user->profile_picture_url,
+                'id'                       => $user->id,
+                'name'                     => $user->name,
+                'email'                    => $user->email,
+                'username'                 => $user->username,
+                'phone'                    => $user->phone,
+                'office'                   => $user->office,
+                'notification_preferences' => $user->notification_preferences,
+                'role'                     => $user->role,
+                'department_id'            => $user->department_id,
+                'department'               => $user->department,
+                'profile_picture'          => $user->profile_picture,
+                'profile_picture_url'      => $user->profile_picture_url,
             ]
         ]);
     });
@@ -150,6 +153,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('activity-logs/clear', [\App\Http\Controllers\Api\V1\DeptHead\ActivityLogController::class, 'clearOldLogs']);
         Route::get('activity-logs', [\App\Http\Controllers\Api\V1\DeptHead\ActivityLogController::class, 'index']);
         Route::get('activity-logs/{id}', [\App\Http\Controllers\Api\V1\DeptHead\ActivityLogController::class, 'show']);
+        Route::get('settings', [\App\Http\Controllers\Api\V1\DeptHead\SettingController::class, 'getSettings']);
+        Route::put('settings', [\App\Http\Controllers\Api\V1\DeptHead\SettingController::class, 'updateSettings']);
     });
 
     // ------------------------------------------------------------------
